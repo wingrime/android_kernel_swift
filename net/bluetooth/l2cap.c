@@ -1446,10 +1446,15 @@ static void l2cap_retransmit_one_frame(struct sock *sk, u8 tx_seq)
 	tx_skb = skb_clone(skb, GFP_ATOMIC);
 	bt_cb(skb)->retries++;
 	control = get_unaligned_le16(tx_skb->data + L2CAP_HDR_SIZE);
-	control &= L2CAP_CTRL_SAR;
+
+	if (pi->conn_state & L2CAP_CONN_SEND_FBIT) {
+		control |= L2CAP_CTRL_FINAL;
+		pi->conn_state &= ~L2CAP_CONN_SEND_FBIT;
+	}
 
 	control |= (pi->buffer_seq << L2CAP_CTRL_REQSEQ_SHIFT)
 			| (tx_seq << L2CAP_CTRL_TXSEQ_SHIFT);
+
 	put_unaligned_le16(control, tx_skb->data + L2CAP_HDR_SIZE);
 
 	if (pi->fcs == L2CAP_FCS_CRC16) {
@@ -3405,7 +3410,6 @@ static inline void l2cap_send_i_or_rr_or_rnr(struct sock *sk)
 	u16 control = 0;
 
 	pi->frames_sent = 0;
-	pi->conn_state |= L2CAP_CONN_SEND_FBIT;
 
 	control |= pi->buffer_seq << L2CAP_CTRL_REQSEQ_SHIFT;
 
@@ -3983,6 +3987,7 @@ static inline void l2cap_data_channel_rrframe(struct sock *sk, u16 rx_control)
 	l2cap_drop_acked_frames(sk);
 
 	if (rx_control & L2CAP_CTRL_POLL) {
+		pi->conn_state |= L2CAP_CONN_SEND_FBIT;
 		if (pi->conn_state & L2CAP_CONN_SREJ_SENT) {
 			if ((pi->conn_state & L2CAP_CONN_REMOTE_BUSY) &&
 					(pi->unacked_frames > 0))
@@ -4050,6 +4055,8 @@ static inline void l2cap_data_channel_srejframe(struct sock *sk, u16 rx_control)
 	if (rx_control & L2CAP_CTRL_POLL) {
 		pi->expected_ack_seq = tx_seq;
 		l2cap_drop_acked_frames(sk);
+
+		pi->conn_state |= L2CAP_CONN_SEND_FBIT;
 		l2cap_retransmit_one_frame(sk, tx_seq);
 
 		spin_lock_bh(&pi->send_lock);
@@ -4083,6 +4090,9 @@ static inline void l2cap_data_channel_rnrframe(struct sock *sk, u16 rx_control)
 	pi->conn_state |= L2CAP_CONN_REMOTE_BUSY;
 	pi->expected_ack_seq = tx_seq;
 	l2cap_drop_acked_frames(sk);
+
+	if (rx_control & L2CAP_CTRL_POLL)
+		pi->conn_state |= L2CAP_CONN_SEND_FBIT;
 
 	if (!(pi->conn_state & L2CAP_CONN_SREJ_SENT)) {
 		del_timer(&pi->retrans_timer);

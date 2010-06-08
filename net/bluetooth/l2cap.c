@@ -2767,7 +2767,6 @@ static int l2cap_parse_conf_rsp(struct sock *sk, void *rsp, int len, void *data,
 							rfc.mode != pi->mode)
 				return -ECONNREFUSED;
 
-			pi->mode = rfc.mode;
 			pi->fcs = 0;
 
 			l2cap_add_conf_opt(&ptr, L2CAP_CONF_RFC,
@@ -2775,6 +2774,11 @@ static int l2cap_parse_conf_rsp(struct sock *sk, void *rsp, int len, void *data,
 			break;
 		}
 	}
+
+	if (pi->mode == L2CAP_MODE_BASIC && pi->mode != rfc.mode)
+		return -ECONNREFUSED;
+
+	pi->mode = rfc.mode;
 
 	if (*result == L2CAP_CONF_SUCCESS) {
 		switch (rfc.mode) {

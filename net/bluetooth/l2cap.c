@@ -1167,6 +1167,7 @@ static int l2cap_sock_connect(struct socket *sock, struct sockaddr *addr, int al
 
 	case BT_CONNECTED:
 		/* Already connected */
+		err = -EISCONN;
 		goto done;
 
 	case BT_OPEN:

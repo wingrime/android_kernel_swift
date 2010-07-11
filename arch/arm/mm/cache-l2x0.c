@@ -30,6 +30,7 @@ static void __iomem *l2x0_base;
 static uint32_t aux_ctrl_save;
 static DEFINE_SPINLOCK(l2x0_lock);
 static uint32_t l2x0_way_mask;	/* Bitmask of active ways */
+static uint32_t l2x0_size;
 
 static inline void cache_wait_way(void __iomem *reg, unsigned long mask)
 {
@@ -283,6 +284,7 @@ void __init l2x0_init(void __iomem *base, __u32 aux_val, __u32 aux_mask)
 {
 	__u32 aux, bits;
 	__u32 cache_id;
+	__u32 way_size = 0;
 	int ways;
 	const char *type;
 
@@ -319,6 +321,14 @@ void __init l2x0_init(void __iomem *base, __u32 aux_val, __u32 aux_mask)
 	}
 	writel_relaxed(aux, l2x0_base + L2X0_AUX_CTRL);
 	l2x0_way_mask = (1 << ways) - 1;
+
+	/*
+	 * L2 cache Size =  Way size * Number of ways
+	 */
+	way_size = (aux & L2X0_AUX_CTRL_WAY_SIZE_MASK) >> 17;
+	way_size = 1 << (way_size + 3);
+	l2x0_size = ways * way_size * SZ_1K;
+
 	l2x0_inv_all();
 
 	/* enable L2X0 */
@@ -355,6 +365,9 @@ void __init l2x0_init(void __iomem *base, __u32 aux_val, __u32 aux_mask)
 	outer_cache.disable = l2x0_disable;
 
 	mb();
+	printk(KERN_INFO "%s cache controller enabled\n", type);
+	printk(KERN_INFO "l2x0: %d ways, CACHE_ID 0x%08x, AUX_CTRL 0x%08x, Cache size: %d B\n",
+			ways, cache_id, aux, l2x0_size);
 }
 
 void l2x0_suspend(void)

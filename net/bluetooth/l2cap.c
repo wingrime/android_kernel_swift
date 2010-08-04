@@ -2547,6 +2547,10 @@ done:
 		if (pi->imtu != L2CAP_DEFAULT_MTU)
 			l2cap_add_conf_opt(&ptr, L2CAP_CONF_MTU, 2, pi->imtu);
 
+		if (!(pi->conn->feat_mask & L2CAP_FEAT_ERTM) &&
+				!(pi->conn->feat_mask & L2CAP_FEAT_STREAMING))
+			break;
+
 		rfc.mode            = L2CAP_MODE_BASIC;
 		rfc.txwin_size      = 0;
 		rfc.max_transmit    = 0;
@@ -2554,6 +2558,8 @@ done:
 		rfc.monitor_timeout = 0;
 		rfc.max_pdu_size    = 0;
 
+		l2cap_add_conf_opt(&ptr, L2CAP_CONF_RFC, sizeof(rfc),
+							(unsigned long) &rfc);
 		break;
 
 	case L2CAP_MODE_ERTM:
@@ -2565,6 +2571,9 @@ done:
 		rfc.max_pdu_size    = cpu_to_le16(L2CAP_DEFAULT_MAX_PDU_SIZE);
 		if (L2CAP_DEFAULT_MAX_PDU_SIZE > pi->conn->mtu - 10)
 			rfc.max_pdu_size = cpu_to_le16(pi->conn->mtu - 10);
+
+		l2cap_add_conf_opt(&ptr, L2CAP_CONF_RFC, sizeof(rfc),
+							(unsigned long) &rfc);
 
 		if (!(pi->conn->feat_mask & L2CAP_FEAT_FCS))
 			break;
@@ -2586,6 +2595,9 @@ done:
 		if (L2CAP_DEFAULT_MAX_PDU_SIZE > pi->conn->mtu - 10)
 			rfc.max_pdu_size = cpu_to_le16(pi->conn->mtu - 10);
 
+		l2cap_add_conf_opt(&ptr, L2CAP_CONF_RFC, sizeof(rfc),
+							(unsigned long) &rfc);
+
 		if (!(pi->conn->feat_mask & L2CAP_FEAT_FCS))
 			break;
 
@@ -2596,9 +2608,6 @@ done:
 		}
 		break;
 	}
-
-	l2cap_add_conf_opt(&ptr, L2CAP_CONF_RFC, sizeof(rfc),
-						(unsigned long) &rfc);
 
 	/* FIXME: Need actual value of the flush timeout */
 	//if (flush_to != L2CAP_DEFAULT_FLUSH_TO)

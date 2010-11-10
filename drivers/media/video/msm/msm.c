@@ -127,12 +127,15 @@ static int msm_camera_v4l2_g_ctrl(struct file *f, void *pctx,
 }
 
 static int msm_camera_v4l2_s_ctrl(struct file *f, void *pctx,
-					struct v4l2_control *c)
+					struct v4l2_control *ctrl)
 {
 	int rc = 0;
+	struct msm_cam_v4l2_device *pcam  = video_drvdata(f);
 
 	D("%s\n", __func__);
 	WARN_ON(pctx != f->private_data);
+
+	rc = msm_isp_s_ctrl(pcam, ctrl);
 
 	return rc;
 }

@@ -1813,6 +1813,24 @@ int msm_isp_streamoff(struct msm_cam_v4l2_device *pcam)
 	return rc;
 }
 
+int msm_isp_s_ctrl(struct msm_cam_v4l2_device *pcam, struct v4l2_control *ctrl)
+{
+	int rc = 0;
+	struct msm_isp_ctrl_cmd ctrlcmd;
+
+	WARN_ON(ctrl == NULL);
+
+	ctrlcmd.type = MSM_V4L2_SET_CTRL;
+	ctrlcmd.length = sizeof(struct v4l2_control);
+	memcpy(ctrlcmd.value, ctrl, ctrlcmd.length);
+	ctrlcmd.timeout_ms = 1000;
+
+	/* send command to config thread in usersspace, and get return value */
+	rc = msm_isp_control(pcam, &ctrlcmd);
+
+	return rc;
+}
+
 /* Init a msm device for ISP control,
    which will create a video device (/dev/video0/ and plug in
    ISP's operation "v4l2_ioctl_ops*"

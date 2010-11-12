@@ -45,7 +45,7 @@
 #include <media/videobuf-pmem.h>
 #include <mach/camera.h>
 
-#define MSM_V4L2_DIMENSION_SIZE 84
+#define MSM_V4L2_DIMENSION_SIZE 24
 enum isp_vfe_cmd_id {
 	/*
 	*Important! Command_ID are arranged in order.

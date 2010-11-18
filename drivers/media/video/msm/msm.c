@@ -73,13 +73,15 @@ static void msm_enqueue(struct msm_device_queue *queue,
 static int msm_ctrl_cmd_done(struct msm_cam_v4l2_device *ctrl_pmsm,
 						void __user *arg)
 {
-	struct msm_ctrl_cmd command;
 	struct msm_queue_cmd *qcmd;
-	if (copy_from_user(&command, arg, sizeof(command)))
+
+	if (copy_from_user(&ctrl_pmsm->ctrl_cmd_returned, arg,
+			sizeof(struct msm_isp_ctrl_cmd)))
 		return -EINVAL;
 
 	qcmd = kzalloc(sizeof(struct msm_queue_cmd), GFP_KERNEL);
 	atomic_set(&qcmd->on_heap, 0);
+	qcmd->command = &ctrl_pmsm->ctrl_cmd_returned;
 	msm_enqueue(&ctrl_pmsm->ctrl_q, &qcmd->list_control);
 	return 0;
 }
@@ -119,9 +121,12 @@ static int msm_camera_v4l2_g_ctrl(struct file *f, void *pctx,
 					struct v4l2_control *c)
 {
 	int rc = 0;
+	struct msm_cam_v4l2_device *pcam  = video_drvdata(f);
 
 	D("%s\n", __func__);
 	WARN_ON(pctx != f->private_data);
+
+	rc = msm_isp_g_ctrl(pcam, c);
 
 	return rc;
 }

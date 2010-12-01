@@ -56,3 +56,6 @@ obj-$(CONFIG_MSM_8x60_VOIP) += snd-soc-mvs8x60.o
 
 snd-soc-msm-voip-objs := msm-voip.o
 obj-$(CONFIG_SND_VOIP_PCM) += snd-soc-msm-voip.o
+
+snd-soc-msm8660-qrdc-objs := msm8660-qrdc.o
+obj-$(CONFIG_SND_SOC_MSM8660_QRDC) += snd-soc-msm8660-qrdc.o

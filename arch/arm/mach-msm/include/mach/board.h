@@ -334,6 +334,7 @@ void __init msm_add_devices(void);
 void __init msm_map_common_io(void);
 void __init msm_map_qsd8x50_io(void);
 void __init msm_map_msm8x60_io(void);
+void __init msm_map_msm8960_io(void);
 void __init msm_map_msm7x30_io(void);
 void __init msm_map_comet_io(void);
 void __init msm_init_irq(void);

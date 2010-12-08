@@ -249,6 +249,17 @@ config MFD_WM831X
 config MFD_WM8350
 	tristate
 
+config MFD_WM8994
+       tristate "Support Wolfson Microelectronics WM8994"
+       select MFD_CORE
+       depends on I2C
+       help
+         Support for the Wolfson Microelecronics WM8994 PMIC and audio
+         CODEC.  This driver provides common support for accessing
+         the device, additional drivers must be enabled in order to use
+         the functionality of the device.
+
+
 config MFD_WM8350_CONFIG_MODE_0
 	bool
 	depends on MFD_WM8350

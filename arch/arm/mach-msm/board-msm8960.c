@@ -46,6 +46,9 @@ static void __init msm8960_init_irq(void)
 	/* Edge trigger PPIs except AVS_SVICINT and AVS_SVICINTSWDONE */
 	writel(0xFFFFD7FF, MSM_QGIC_DIST_BASE + GIC_DIST_CONFIG + 4);
 
+	if (machine_is_msm8960_rumi3())
+		writel(0x0000FFFF, MSM_QGIC_DIST_BASE + GIC_DIST_ENABLE_SET);
+
 	/* FIXME: Not installing AVS_SVICINT and AVS_SVICINTSWDONE yet
 	 * as they are configured as level, which does not play nice with
 	 * handle_percpu_irq.
@@ -61,9 +64,21 @@ static void __init msm8960_sim_init(void)
 	msm_clock_init(msm_clocks_8960, msm_num_clocks_8960);
 }
 
+static void __init msm8960_rumi3_init(void)
+{
+	msm_clock_init(msm_clocks_8960, msm_num_clocks_8960);
+}
+
 MACHINE_START(MSM8960_SIM, "QCT MSM8960 SIMULATOR")
 	.map_io = msm8960_map_io,
 	.init_irq = msm8960_init_irq,
 	.timer = &msm_timer,
 	.init_machine = msm8960_sim_init,
+MACHINE_END
+
+MACHINE_START(MSM8960_RUMI3, "QCT MSM8960 RUMI3")
+	.map_io = msm8960_map_io,
+	.init_irq = msm8960_init_irq,
+	.timer = &msm_timer,
+	.init_machine = msm8960_rumi3_init,
 MACHINE_END

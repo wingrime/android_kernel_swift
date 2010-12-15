@@ -1,4 +1,4 @@
-/* Copyright (c) 2010, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2010-2011, Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -66,7 +66,7 @@ static int msm_pcm_hw_params(struct snd_pcm_substream *substream,
 				struct snd_pcm_hw_params *params)
 {
 
-	pr_err("%s\n", __func__);
+	pr_debug("%s\n", __func__);
 	snd_pcm_set_runtime_buffer(substream, &substream->dma_buffer);
 	return 0;
 }
@@ -85,7 +85,7 @@ static irqreturn_t msm_pcm_irq(int intrsrc, void *data)
 	else
 		return ret;
 
-	pr_err("msm8660-pcm: msm_pcm_irq called\n");
+	pr_debug("msm8660-pcm: msm_pcm_irq called\n");
 	pending = (intrsrc
 		& (UNDER_CH(dma_ch) | PER_CH(dma_ch) | ERR_CH(dma_ch)));
 	has_xrun = (pending & UNDER_CH(dma_ch));
@@ -108,7 +108,7 @@ static irqreturn_t msm_pcm_irq(int intrsrc, void *data)
 			if (++prtd->period_index >= runtime->periods)
 				prtd->period_index = 0;
 				snd_pcm_period_elapsed(substream);
-			pr_err("period elapsed\n");
+			pr_debug("period elapsed\n");
 		}
 		pending &= ~PER_CH(dma_ch);
 	}
@@ -140,8 +140,8 @@ static int msm_pcm_prepare(struct snd_pcm_substream *substream)
 
 	prtd->pcm_size = snd_pcm_lib_buffer_bytes(substream);
 	prtd->pcm_count = snd_pcm_lib_period_bytes(substream);
-	pr_err("%s:prtd->pcm_size = %d\n", __func__, prtd->pcm_size);
-	pr_err("%s:prtd->pcm_count = %d\n", __func__, prtd->pcm_count);
+	pr_debug("%s:prtd->pcm_size = %d\n", __func__, prtd->pcm_size);
+	pr_debug("%s:prtd->pcm_count = %d\n", __func__, prtd->pcm_count);
 
 	if (prtd->enabled)
 		return 0;
@@ -165,7 +165,7 @@ static int msm_pcm_trigger(struct snd_pcm_substream *substream, int cmd)
 	struct msm_audio *prtd = (struct msm_audio *)runtime->private_data;
 	int ret = 0;
 
-	pr_err("%s\n", __func__);
+	pr_debug("%s\n", __func__);
 	switch (cmd) {
 	case SNDRV_PCM_TRIGGER_START:
 	case SNDRV_PCM_TRIGGER_RESUME:
@@ -189,7 +189,7 @@ static snd_pcm_uframes_t msm_pcm_pointer(struct snd_pcm_substream *substream)
 	struct msm_audio *prtd = (struct msm_audio *)runtime->private_data;
 	snd_pcm_uframes_t offset = 0;
 
-	pr_err("%s: period_index =%d\n", __func__, prtd->period_index);
+	pr_debug("%s: period_index =%d\n", __func__, prtd->period_index);
 	offset = prtd->period_index * runtime->period_size;
 	if (offset >= runtime->buffer_size)
 		offset = 0;
@@ -205,7 +205,7 @@ static int msm_pcm_open(struct snd_pcm_substream *substream)
 	struct msm_audio *prtd = NULL;
 	int ret = 0;
 
-	pr_err("%s\n", __func__);
+	pr_debug("%s\n", __func__);
 	snd_soc_set_runtime_hwparams(substream, &msm_pcm_hardware);
 
 	ret = snd_pcm_hw_constraint_integer(runtime,
@@ -247,7 +247,7 @@ static int msm_pcm_close(struct snd_pcm_substream *substream)
 	else
 		return 0;
 
-	pr_err("%s\n", __func__);
+	pr_debug("%s\n", __func__);
 	unregister_dma_irq_handler(dma_ch);
 	kfree(runtime->private_data);
 	return 0;
@@ -258,13 +258,13 @@ static int msm_pcm_mmap(struct snd_pcm_substream *substream,
 {
 	struct snd_pcm_runtime *runtime = substream->runtime;
 
-	pr_err("%s\n", __func__);
+	pr_debug("%s\n", __func__);
 	snd_pcm_set_runtime_buffer(substream, &substream->dma_buffer);
-	pr_err("%s: snd_msm_audio_hw_params runtime->dma_addr 0x(%x)\n",
+	pr_debug("%s: snd_msm_audio_hw_params runtime->dma_addr 0x(%x)\n",
 		__func__, (unsigned int)runtime->dma_addr);
-	pr_err("%s: snd_msm_audio_hw_params runtime->dma_area 0x(%x)\n",
+	pr_debug("%s: snd_msm_audio_hw_params runtime->dma_area 0x(%x)\n",
 		__func__, (unsigned int)runtime->dma_area);
-	pr_err("%s: snd_msm_audio_hw_params runtime->dma_bytes 0x(%x)\n",
+	pr_debug("%s: snd_msm_audio_hw_params runtime->dma_bytes 0x(%x)\n",
 		__func__, (unsigned int)runtime->dma_bytes);
 
 	return dma_mmap_coherent(substream->pcm->card->dev, vms,

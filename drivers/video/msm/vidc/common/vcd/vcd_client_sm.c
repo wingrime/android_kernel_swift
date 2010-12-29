@@ -1,4 +1,4 @@
-/* Copyright (c) 2010, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2010-2011, Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -1373,6 +1373,15 @@ static void  vcd_clnt_cb_in_invalid(
 		}
 	case VCD_EVT_RESP_EOS_DONE:
 		{
+			vcd_mark_frame_channel(cctxt->dev_ctxt);
+			break;
+		}
+	case VCD_EVT_IND_OUTPUT_RECONFIG:
+		{
+			if (cctxt->status.frame_submitted > 0)
+				cctxt->status.frame_submitted--;
+			else
+				cctxt->status.frame_delayed--;
 			vcd_mark_frame_channel(cctxt->dev_ctxt);
 			break;
 		}

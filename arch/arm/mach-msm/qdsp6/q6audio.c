@@ -41,11 +41,7 @@
 #include "q6audio_devices.h"
 #include <mach/debug_mm.h>
 
-#if 0
-#define TRACE(x...) pr_info("Q6: "x)
-#else
-#define TRACE(x...) do{}while(0)
-#endif
+
 struct q6_hw_info {
 	int min_gain;
 	int max_gain;
@@ -128,6 +124,8 @@ static struct q6_device_info *q6_lookup_device(uint32_t device_id,
 {
 	struct q6_device_info *di = q6_audio_devices;
 
+	pr_debug("[%s:%s] device_id = 0x%x, acdb_id = %d\n", __MM_FILE__,
+		__func__, device_id, acdb_id);
 	if (acdb_id) {
 		for (;;) {
 			if (di->cad_id == acdb_id && di->id == device_id)
@@ -195,23 +193,29 @@ int q6_device_volume(uint32_t device_id, int level)
 
 static inline int adie_open(struct dal_client *client) 
 {
+	pr_debug("[%s:%s]\n", __MM_FILE__, __func__);
 	return dal_call_f0(client, DAL_OP_OPEN, 0);
 }
 
 static inline int adie_close(struct dal_client *client) 
 {
+	pr_debug("[%s:%s]\n", __MM_FILE__, __func__);
 	return dal_call_f0(client, DAL_OP_CLOSE, 0);
 }
 
 static inline int adie_set_path(struct dal_client *client,
 				uint32_t id, uint32_t path_type)
 {
+	pr_debug("[%s:%s] id = 0x%x, path_type = %d\n", __MM_FILE__,
+		__func__, id, path_type);
 	return dal_call_f1(client, ADIE_OP_SET_PATH, id, path_type);
 }
 
 static inline int adie_set_path_freq_plan(struct dal_client *client,
 					  uint32_t path_type, uint32_t plan) 
 {
+	pr_debug("[%s:%s] path_type = %d, plan = %d\n",	__MM_FILE__,
+		__func__, path_type, plan);
 	return dal_call_f1(client, ADIE_OP_SET_PATH_FREQUENCY_PLAN,
 			   path_type, plan);
 }
@@ -219,6 +223,8 @@ static inline int adie_set_path_freq_plan(struct dal_client *client,
 static inline int adie_proceed_to_stage(struct dal_client *client,
 					uint32_t path_type, uint32_t stage)
 {
+	pr_debug("[%s:%s] path_type = %d, stage = 0x%x\n", __MM_FILE__,
+		__func__, path_type, stage);
 	return dal_call_f1(client, ADIE_OP_PROCEED_TO_STAGE,
 			   path_type, stage);
 }
@@ -226,6 +232,8 @@ static inline int adie_proceed_to_stage(struct dal_client *client,
 static inline int adie_mute_path(struct dal_client *client,
 				 uint32_t path_type, uint32_t mute_state)
 {
+	pr_debug("[%s:%s] path_type = %d, mute = %d\n",	__MM_FILE__, __func__,
+		 path_type, mute_state);
 	return dal_call_f1(client, ADIE_OP_MUTE_PATH, path_type, mute_state);
 }
 
@@ -274,6 +282,8 @@ static int session_alloc(struct audio_client *ac)
 		if (!session[n]) {
 			session[n] = ac;
 			mutex_unlock(&session_lock);
+			pr_debug("[%s:%s] session = %d\n", __MM_FILE__,
+				__func__, n);
 			return n;
 		}
 	}
@@ -284,13 +294,16 @@ static int session_alloc(struct audio_client *ac)
 static void session_free(int n, struct audio_client *ac)
 {
 	mutex_lock(&session_lock);
-	if (session[n] == ac)
+	if (session[n] == ac) {
 		session[n] = 0;
+		pr_debug("[%s:%s] session = %d\n", __MM_FILE__, __func__, n);
+	}
 	mutex_unlock(&session_lock);
 }
 
 static void audio_client_free(struct audio_client *ac)
 {
+	pr_debug("[%s:%s] ac = %p\n", __MM_FILE__, __func__, ac);
 	session_free(ac->session, ac);
 
 	if (ac->buf[0].data) {
@@ -309,6 +322,7 @@ static struct audio_client *audio_client_alloc(unsigned bufsz)
 	struct audio_client *ac;
 	int n;
 
+	pr_debug("[%s:%s] bufsz = %d\n", __MM_FILE__, __func__, bufsz);
 	ac = kzalloc(sizeof(*ac), GFP_KERNEL);
 	if (!ac)
 		return 0;
@@ -385,6 +399,7 @@ static int audio_open_control(struct audio_client *ac)
 {
 	struct adsp_open_command rpc;
 
+	pr_debug("[%s:%s] ac = %p\n", __MM_FILE__, __func__, ac);
 	memset(&rpc, 0, sizeof(rpc));
 	rpc.hdr.opcode = ADSP_AUDIO_IOCTL_CMD_OPEN_DEVICE;
 	return audio_ioctl(ac, &rpc, sizeof(rpc));
@@ -409,7 +424,7 @@ static int audio_out_open(struct audio_client *ac, uint32_t bufsz,
 	rpc.stream_context = ADSP_AUDIO_DEVICE_CONTEXT_PLAYBACK;
 	rpc.buf_max_size = bufsz;
 
-	TRACE("open out %p\n", ac);
+	pr_debug("[%s:%s]ac = %p\n", __MM_FILE__, __func__, ac);
 	return audio_ioctl(ac, &rpc, sizeof(rpc));
 }
 
@@ -436,7 +451,7 @@ static int audio_in_open(struct audio_client *ac, uint32_t bufsz,
 
 	rpc.buf_max_size = bufsz;
 
-	TRACE("%p: open in\n", ac);
+	pr_debug("[%s:%s] ac = %p\n", __MM_FILE__, __func__, ac);
 	return audio_ioctl(ac, &rpc, sizeof(rpc));
 }
 
@@ -459,7 +474,7 @@ static int audio_auxpcm_out_open(struct audio_client *ac,
 	rpc.mode =  ADSP_AUDIO_OPEN_STREAM_MODE_AUX_PCM;
 	rpc.stream_context = ADSP_AUDIO_DEVICE_CONTEXT_RECORD;
 
-	TRACE("open out %p\n", ac);
+	pr_debug("[%s:%s] ac = %p\n", __MM_FILE__, __func__, ac);
 	return audio_ioctl(ac, &rpc, sizeof(rpc));
 }
 
@@ -482,7 +497,7 @@ static int audio_auxpcm_in_open(struct audio_client *ac, uint32_t rate,
 	rpc.mode =  ADSP_AUDIO_OPEN_STREAM_MODE_AUX_PCM;
 	rpc.stream_context = ADSP_AUDIO_DEVICE_CONTEXT_PLAYBACK;
 
-	TRACE("%p: open in\n", ac);
+	pr_debug("[%s:%s] ac = %p\n", __MM_FILE__, __func__, ac);
 	return audio_ioctl(ac, &rpc, sizeof(rpc));
 }
 
@@ -505,6 +520,7 @@ static int audio_mp3_open(struct audio_client *ac, uint32_t bufsz,
 	rpc.stream_context = ADSP_AUDIO_DEVICE_CONTEXT_PLAYBACK;
 	rpc.buf_max_size = bufsz;
 
+	pr_debug("[%s:%s] ac = %p\n", __MM_FILE__, __func__, ac);
 	return audio_ioctl(ac, &rpc, sizeof(rpc));
 }
 
@@ -526,6 +542,7 @@ static int audio_dtmf_open(struct audio_client *ac,
 	rpc.device = ADSP_AUDIO_DEVICE_ID_DEFAULT;
 	rpc.stream_context = ADSP_AUDIO_DEVICE_CONTEXT_PLAYBACK;
 
+	pr_debug("[%s:%s] ac = %p\n", __MM_FILE__, __func__, ac);
 	return audio_ioctl(ac, &rpc, sizeof(rpc));
 }
 
@@ -577,6 +594,7 @@ static int audio_aac_open(struct audio_client *ac, uint32_t bufsz,
 	rpc.buf_max_size = bufsz;
 	rpc.config.aac.bit_rate = bit_rate;
 	rpc.config.aac.encoder_mode = ADSP_AUDIO_ENC_AAC_LC_ONLY_MODE;
+	pr_debug("[%s:%s] ac = %p\n", __MM_FILE__, __func__, ac);
 	return audio_ioctl(ac, &rpc, sizeof(rpc));
 }
 
@@ -606,6 +624,7 @@ static int audio_qcp_open(struct audio_client *ac, uint32_t bufsz,
 	rpc.config.evrc.min_rate = min_rate;
 	rpc.config.evrc.max_rate = max_rate;
 
+	pr_debug("[%s:%s] ac = %p\n", __MM_FILE__, __func__, ac);
 	return audio_ioctl(ac, &rpc, sizeof(rpc));
 }
 
@@ -637,6 +656,7 @@ static int audio_amrnb_open(struct audio_client *ac, uint32_t bufsz,
 	rpc.config.amr.dtx_mode = dtx_enable;
 	rpc.config.amr.enable = 1;
 
+	pr_debug("[%s:%s] ac = %p\n", __MM_FILE__, __func__, ac);
 	return audio_ioctl(ac, &rpc, sizeof(rpc));
 }
 
@@ -644,7 +664,7 @@ static int audio_amrnb_open(struct audio_client *ac, uint32_t bufsz,
 
 static int audio_close(struct audio_client *ac)
 {
-	TRACE("%p: close\n", ac);
+	pr_debug("[%s:%s] ac = %p\n", __MM_FILE__, __func__, ac);
 	audio_command(ac, ADSP_AUDIO_IOCTL_CMD_STREAM_STOP);
 	audio_command(ac, ADSP_AUDIO_IOCTL_CMD_CLOSE);
 	return 0;
@@ -670,7 +690,8 @@ static int audio_set_table(struct audio_client *ac,
 	rpc.phys_size = size;
 	rpc.phys_used = size;
 
-	TRACE("control: set table %x\n", device_id);
+	pr_debug("[%s:%s] ac = %p, device_id = 0x%x, size = %d\n", __MM_FILE__,
+		__func__, ac, device_id, size);
 	return audio_ioctl(ac, &rpc, sizeof(rpc));
 }
 
@@ -690,7 +711,7 @@ int q6audio_read(struct audio_client *ac, struct audio_buffer *ab)
 	rpc.buffer.max_size = ab->size;
 	rpc.buffer.actual_size = ab->actual_size;
 
-	TRACE("%p: read\n", ac);
+	pr_debug("[%s:%s] ac = %p\n", __MM_FILE__, __func__, ac);
 	r = dal_call(ac->client, AUDIO_OP_DATA, 5, &rpc, sizeof(rpc),
 		     &res, sizeof(res));
 	return 0;
@@ -712,7 +733,7 @@ int q6audio_write(struct audio_client *ac, struct audio_buffer *ab)
 	rpc.buffer.max_size = ab->size;
 	rpc.buffer.actual_size = ab->actual_size;
 
-	TRACE("%p: write\n", ac);
+	pr_debug("[%s:%s] ac = %p\n", __MM_FILE__, __func__, ac);
 	r = dal_call(ac->client, AUDIO_OP_DATA, 5, &rpc, sizeof(rpc),
 		     &res, sizeof(res));
 	return 0;
@@ -722,6 +743,7 @@ static int audio_rx_volume(struct audio_client *ac, uint32_t dev_id, int32_t vol
 {
 	struct adsp_set_dev_volume_command rpc;
 
+	pr_debug("[%s:%s] volume = %d\n", __MM_FILE__, __func__, volume);
 	memset(&rpc, 0, sizeof(rpc));
 	rpc.hdr.opcode = ADSP_AUDIO_IOCTL_CMD_SET_DEVICE_VOL;
 	rpc.device_id = dev_id;
@@ -734,6 +756,8 @@ static int audio_rx_mute(struct audio_client *ac, uint32_t dev_id, int mute)
 {
 	struct adsp_set_dev_mute_command rpc;
 
+	pr_debug("[%s:%s] mute = %d, dev_id = 0x%x\n", __MM_FILE__,
+			__func__, mute, dev_id);
 	memset(&rpc, 0, sizeof(rpc));
 	rpc.hdr.opcode = ADSP_AUDIO_IOCTL_CMD_SET_DEVICE_MUTE;
 	rpc.device_id = dev_id;
@@ -746,6 +770,7 @@ static int audio_tx_mute(struct audio_client *ac, uint32_t dev_id, int mute)
 {
 	struct adsp_set_dev_mute_command rpc;
 
+	pr_debug("[%s:%s] mute = %d\n", __MM_FILE__, __func__, mute);
 	if (mute < 0  ||  mute > 3) {
 		pr_err("[%s:%s] invalid mute status %d\n", __MM_FILE__,
 				__func__, mute);
@@ -771,6 +796,7 @@ static int audio_stream_volume(struct audio_client *ac, int volume)
 	struct adsp_set_volume_command rpc;
 	int rc;
 
+	pr_debug("[%s:%s] volume = %d\n", __MM_FILE__, __func__, volume);
 	memset(&rpc, 0, sizeof(rpc));
 	rpc.hdr.opcode = ADSP_AUDIO_IOCTL_CMD_SET_STREAM_VOL;
 	rpc.volume = volume;
@@ -783,6 +809,7 @@ static int audio_stream_mute(struct audio_client *ac, int mute)
 	struct adsp_set_mute_command rpc;
 	int rc;
 
+	pr_debug("[%s:%s] mute = %d\n", __MM_FILE__, __func__, mute);
 	memset(&rpc, 0, sizeof(rpc));
 	rpc.hdr.opcode = ADSP_AUDIO_IOCTL_CMD_SET_STREAM_MUTE;
 	rpc.mute = mute;
@@ -809,7 +836,8 @@ static void callback(void *data, int len, void *cookie)
 	}
 
 	if (e->event_id == ADSP_AUDIO_IOCTL_CMD_STREAM_EOS) {
-		TRACE("%p: CB stream eos\n", ac);
+		pr_debug("[%s:%s] CB Stream eos, ac = %p\n",
+			__MM_FILE__, __func__, ac);
 		if (e->status)
 			pr_err("[%s:%s] playback status %d\n", __MM_FILE__,
 					__func__, e->status);
@@ -821,7 +849,8 @@ static void callback(void *data, int len, void *cookie)
 	}
 
 	if (e->event_id == ADSP_AUDIO_EVT_STATUS_BUF_DONE) {
-		TRACE("%p: CB done (%d)\n", ac, e->status);
+		pr_debug("[%s:%s] CB done, ac = %p, status = %d\n",
+				__MM_FILE__, __func__, ac, e->status);
 		if (e->status)
 			pr_err("[%s:%s] buffer status %d\n", __MM_FILE__,
 					__func__, e->status);
@@ -833,7 +862,8 @@ static void callback(void *data, int len, void *cookie)
 		return;
 	}
 
-	TRACE("%p: CB %08x status %d\n", ac, e->event_id, e->status);
+	pr_debug("[%s:%s] ac = %p, event_id = 0x%x, status = %d\n",
+			__MM_FILE__, __func__, ac, e->event_id, e->status);
 	if (e->status)
 		pr_warning("audio_cb: s=%d e=%08x status=%d\n",
 			   e->context, e->event_id, e->status);
@@ -847,6 +877,7 @@ static void audio_init(struct dal_client *client)
 {
 	u32 tmp[3];
 
+	pr_debug("[%s:%s]\n", __MM_FILE__, __func__);
 	tmp[0] = 2 * sizeof(u32);
 	tmp[1] = 0;
 	tmp[2] = 0;
@@ -861,6 +892,7 @@ static int q6audio_init(void)
 	struct audio_client *ac = 0;
 	int res;
 
+	pr_debug("[%s:%s]\n", __MM_FILE__, __func__);
 	mutex_lock(&audio_lock);
 	if (ac_control) {
 		res = 0;
@@ -875,6 +907,7 @@ static int q6audio_init(void)
 	audio_phys = pmem_kalloc(4096, PMEM_MEMTYPE_EBI1|PMEM_ALIGNMENT_4K);
 	audio_data = ioremap(audio_phys, 4096);
 
+	pr_info("[%s:%s] attach ADSP\n", __MM_FILE__, __func__);
 	adsp = dal_attach(AUDIO_DAL_DEVICE, AUDIO_DAL_PORT, 1,
 			  callback, 0);
 	if (!adsp) {
@@ -933,6 +966,7 @@ done:
 		audio_client_free(ac);
 	mutex_unlock(&audio_lock);
 
+	pr_debug("[%s:%s] res = %d\n", __MM_FILE__, __func__, res);
 	return res;
 }
 
@@ -960,6 +994,8 @@ static int acdb_get_config_table(uint32_t device_id, uint32_t sample_rate)
 	struct acdb_result res;
 	int r;
 
+	pr_debug("[%s:%s] device_id = 0x%x, samplerate = %d\n", __MM_FILE__,
+		__func__, device_id, sample_rate);
 	if (q6audio_init())
 		return 0;
 
@@ -1010,21 +1046,26 @@ static int qdsp6_devchg_notify(struct audio_client *ac,
 	}
 	rpc.device_class = 0;
 	rpc.device_type = dev_type;
+	pr_debug("[%s:%s] dev_id = 0x%x\n", __MM_FILE__, __func__, dev_id);
 	return audio_ioctl(ac, &rpc, sizeof(rpc));
 }
 
 static int qdsp6_standby(struct audio_client *ac)
 {
+	pr_debug("[%s:%s]\n", __MM_FILE__, __func__);
 	return audio_command(ac, ADSP_AUDIO_IOCTL_CMD_DEVICE_SWITCH_STANDBY);
 }
 
 static int qdsp6_start(struct audio_client *ac)
 {
+	pr_debug("[%s:%s]\n", __MM_FILE__, __func__);
 	return audio_command(ac, ADSP_AUDIO_IOCTL_CMD_DEVICE_SWITCH_COMMIT);
 }
 
 static void audio_rx_analog_enable(int en)
 {
+	pr_debug("[%s:%s] audio_rx_device_id = 0x%x, en = %d\n", __MM_FILE__,
+		__func__, audio_rx_device_id, en);
 	switch (audio_rx_device_id) {
 	case ADSP_AUDIO_DEVICE_ID_HEADSET_SPKR_MONO:
 	case ADSP_AUDIO_DEVICE_ID_HEADSET_SPKR_STEREO:
@@ -1059,6 +1100,8 @@ static void audio_rx_analog_enable(int en)
 
 static void audio_tx_analog_enable(int en)
 {
+	pr_debug("[%s:%s] audio_tx_device_id = 0x%x, en = %d\n", __MM_FILE__,
+		__func__, audio_tx_device_id, en);
 	switch (audio_tx_device_id) {
 	case ADSP_AUDIO_DEVICE_ID_HANDSET_MIC:
 	case ADSP_AUDIO_DEVICE_ID_SPKR_PHONE_MIC:
@@ -1084,6 +1127,8 @@ static int audio_update_acdb(uint32_t adev, uint32_t acdb_id)
 	uint32_t sample_rate;
 	int sz;
 
+	pr_debug("[%s:%s] adev = 0x%x, acdb_id = 0x%x\n", __MM_FILE__,
+		__func__, adev, acdb_id);
 	if (q6_device_to_dir(adev) == Q6_RX) {
 		rx_acdb = acdb_id;
 		sample_rate = q6_device_to_rate(adev);
@@ -1109,6 +1154,7 @@ static int audio_update_acdb(uint32_t adev, uint32_t acdb_id)
 
 static void adie_rx_path_enable(uint32_t acdb_id)
 {
+	pr_debug("[%s:%s]\n", __MM_FILE__, __func__);
 	if (audio_rx_path_id) {
 		adie_enable();
 		adie_set_path(adie, audio_rx_path_id, ADIE_PATH_RX);
@@ -1123,6 +1169,7 @@ static void adie_rx_path_enable(uint32_t acdb_id)
 
 static void q6_rx_path_enable(int reconf, uint32_t acdb_id)
 {
+	pr_debug("[%s:%s]\n", __MM_FILE__, __func__);
 	if (!reconf)
 		qdsp6_devchg_notify(ac_control, ADSP_AUDIO_RX_DEVICE, audio_rx_device_id);
 	audio_update_acdb(audio_rx_device_id, acdb_id);
@@ -1132,6 +1179,7 @@ static void q6_rx_path_enable(int reconf, uint32_t acdb_id)
 
 static void _audio_rx_path_enable(int reconf, uint32_t acdb_id)
 {
+	pr_debug("[%s:%s] reconf = %d\n", __MM_FILE__, __func__, reconf);
 	q6_rx_path_enable(reconf, acdb_id);
 	if (audio_rx_path_id)
 		adie_rx_path_enable(acdb_id);
@@ -1140,6 +1188,8 @@ static void _audio_rx_path_enable(int reconf, uint32_t acdb_id)
 
 static void _audio_tx_path_enable(int reconf, uint32_t acdb_id)
 {
+	pr_debug("[%s:%s] reconf = %d, tx_clk_freq = %d\n", __MM_FILE__,
+			__func__, reconf, tx_clk_freq);
 	audio_tx_analog_enable(1);
 
 	if (audio_tx_path_id) {
@@ -1172,6 +1222,7 @@ static void _audio_tx_path_enable(int reconf, uint32_t acdb_id)
 
 static void _audio_rx_path_disable(void)
 {
+	pr_debug("[%s:%s]\n", __MM_FILE__, __func__);
 	audio_rx_analog_enable(0);
 
 	if (audio_rx_path_id) {
@@ -1185,6 +1236,7 @@ static void _audio_rx_path_disable(void)
 
 static void _audio_tx_path_disable(void)
 {
+	pr_debug("[%s:%s]\n", __MM_FILE__, __func__);
 	audio_tx_analog_enable(0);
 
 	if (audio_tx_path_id) {
@@ -1226,6 +1278,8 @@ static void _audio_rx_clk_enable(void)
 {
 	uint32_t device_group = q6_device_to_codec(audio_rx_device_id);
 
+	pr_debug("[%s:%s] rx_clk_refcount = %d\n", __MM_FILE__, __func__,
+		icodec_rx_clk_refcount);
 	switch(device_group) {
 	case Q6_ICODEC_RX:
 		icodec_rx_clk_refcount++;
@@ -1255,6 +1309,8 @@ static void _audio_tx_clk_enable(void)
 	uint32_t device_group = q6_device_to_codec(audio_tx_device_id);
 	uint32_t icodec_tx_clk_rate;
 
+	pr_debug("[%s:%s] tx_clk_refcount = %d\n", __MM_FILE__, __func__,
+		icodec_tx_clk_refcount);
 	switch (device_group) {
 	case Q6_ICODEC_TX:
 		icodec_tx_clk_refcount++;
@@ -1289,6 +1345,8 @@ static void _audio_tx_clk_enable(void)
 
 static void _audio_rx_clk_disable(void)
 {
+	pr_debug("[%s:%s] rx_clk_refcount = %d\n", __MM_FILE__, __func__,
+		icodec_rx_clk_refcount);
 	switch (audio_rx_device_group) {
 	case Q6_ICODEC_RX:
 		icodec_rx_clk_refcount--;
@@ -1316,6 +1374,8 @@ static void _audio_rx_clk_disable(void)
 
 static void _audio_tx_clk_disable(void)
 {
+	pr_debug("[%s:%s] tx_clk_refcount = %d\n", __MM_FILE__, __func__,
+		icodec_tx_clk_refcount);
 	switch (audio_tx_device_group) {
 	case Q6_ICODEC_TX:
 		icodec_tx_clk_refcount--;
@@ -1345,6 +1405,8 @@ static void _audio_rx_clk_reinit(uint32_t rx_device, uint32_t acdb_id)
 {
 	uint32_t device_group = q6_device_to_codec(rx_device);
 
+	pr_debug("[%s:%s] rx_device = 0x%x\n", __MM_FILE__, __func__,
+		rx_device);
 	if (device_group != audio_rx_device_group)
 		_audio_rx_clk_disable();
 
@@ -1360,6 +1422,8 @@ static void _audio_tx_clk_reinit(uint32_t tx_device, uint32_t acdb_id)
 {
 	uint32_t device_group = q6_device_to_codec(tx_device);
 
+	pr_debug("[%s:%s] tx_device = 0x%x\n", __MM_FILE__, __func__,
+		tx_device);
 	if (device_group != audio_tx_device_group)
 		_audio_tx_clk_disable();
 
@@ -1376,6 +1440,7 @@ static int audio_tx_path_refcount;
 
 static int audio_rx_path_enable(int en, uint32_t acdb_id)
 {
+	pr_debug("[%s:%s] en = %d\n", __MM_FILE__, __func__, en);
 	mutex_lock(&audio_path_lock);
 	if (en) {
 		audio_rx_path_refcount++;
@@ -1396,6 +1461,7 @@ static int audio_rx_path_enable(int en, uint32_t acdb_id)
 
 static int audio_tx_path_enable(int en, uint32_t acdb_id)
 {
+	pr_debug("[%s:%s] en = %d\n", __MM_FILE__, __func__, en);
 	mutex_lock(&audio_path_lock);
 	if (en) {
 		audio_tx_path_refcount++;
@@ -1418,6 +1484,8 @@ int q6audio_update_acdb(uint32_t id_src, uint32_t id_dst)
 {
 	int res;
 
+	pr_debug("[%s:%s] id_src = 0x%x\n, id_dst = 0x%x\n", __MM_FILE__,
+		__func__, id_src, id_dst);
 	if (q6audio_init())
 		return 0;
 
@@ -1460,8 +1528,11 @@ int q6audio_set_tx_mute(int mute)
 	  immediately. In that case, it returns EUNSUPPORTED and applies the
 	  cached state later */
 	if ((rc == ADSP_AUDIO_STATUS_SUCCESS) ||
-			(rc == ADSP_AUDIO_STATUS_EUNSUPPORTED))
+			(rc == ADSP_AUDIO_STATUS_EUNSUPPORTED)) {
+		pr_debug("[%s:%s] return status = %d\n",
+			__MM_FILE__, __func__, rc);
 		tx_mute_status = mute;
+	}
 	mutex_unlock(&audio_path_lock);
 	return 0;
 }
@@ -1485,6 +1556,7 @@ int q6audio_set_rx_volume(int level)
 	uint32_t adev;
 	int vol;
 
+	pr_debug("[%s:%s] level = %d\n", __MM_FILE__, __func__, level);
 	if (q6audio_init())
 		return 0;
 
@@ -1508,6 +1580,8 @@ int q6audio_set_rx_volume(int level)
 
 static void do_rx_routing(uint32_t device_id, uint32_t acdb_id)
 {
+	pr_debug("[%s:%s] device_id = 0x%x, acdb_id = 0x%x\n", __MM_FILE__,
+		__func__, device_id, acdb_id);
 	if (device_id == audio_rx_device_id &&
 		audio_rx_path_id == q6_device_to_path(device_id, acdb_id)) {
 		if (acdb_id != rx_acdb) {
@@ -1537,6 +1611,8 @@ static void do_rx_routing(uint32_t device_id, uint32_t acdb_id)
 
 static void do_tx_routing(uint32_t device_id, uint32_t acdb_id)
 {
+	pr_debug("[%s:%s] device_id = 0x%x, acdb_id = 0x%x\n", __MM_FILE__,
+		__func__, device_id, acdb_id);
 	if (device_id == audio_tx_device_id &&
 		audio_tx_path_id == q6_device_to_path(device_id, acdb_id)) {
 		if (acdb_id != tx_acdb) {
@@ -1656,6 +1732,8 @@ struct audio_client *q6audio_open_auxpcm(uint32_t rate,
 	int rc, retry = 5;
 	struct audio_client *ac;
 
+	pr_debug("[%s:%s] rate = %d, channels = %d\n", __MM_FILE__, __func__,
+		rate, channels);
 	if (q6audio_init())
 		return NULL;
 	ac = audio_client_alloc(0);
@@ -1721,6 +1799,8 @@ struct audio_client *q6audio_open_pcm(uint32_t bufsz, uint32_t rate,
 	int rc, retry = 5;
 	struct audio_client *ac;
 
+	pr_debug("[%s:%s] bufsz = %d, rate = %d, channels = %d\n", __MM_FILE__,
+		__func__, bufsz, rate, channels);
 	if (q6audio_init())
 		return 0;
 
@@ -1801,6 +1881,7 @@ int q6audio_close(struct audio_client *ac)
 		audio_tx_path_enable(0, 0);
 	audio_client_free(ac);
 	audio_allow_sleep();
+	pr_debug("[%s:%s] ac = %p\n", __MM_FILE__, __func__, ac);
 	return 0;
 }
 
@@ -1817,12 +1898,14 @@ int q6audio_auxpcm_close(struct audio_client *ac)
 
 	audio_client_free(ac);
 	audio_allow_sleep();
+	pr_debug("[%s:%s] ac = %p\n", __MM_FILE__, __func__, ac);
 	return 0;
 }
 struct audio_client *q6voice_open(uint32_t flags)
 {
 	struct audio_client *ac;
 
+	pr_debug("[%s:%s] flags = %d\n", __MM_FILE__, __func__, flags);
 	if (q6audio_init())
 		return 0;
 
@@ -1851,6 +1934,7 @@ int q6voice_close(struct audio_client *ac)
 
 	tx_mute_status = 0;
 	audio_client_free(ac);
+	pr_debug("[%s:%s]\n", __MM_FILE__, __func__);
 	return 0;
 }
 
@@ -1859,7 +1943,8 @@ struct audio_client *q6audio_open_mp3(uint32_t bufsz, uint32_t rate,
 {
 	struct audio_client *ac;
 
-	TRACE("q6audio_open_mp3()\n");
+	pr_debug("[%s:%s] bufsz = %d, rate = %d\n, channels = %d",
+		__MM_FILE__, __func__, bufsz, rate, channels);
 
 	if (q6audio_init())
 		return 0;
@@ -1887,6 +1972,8 @@ struct audio_client *q6audio_open_dtmf(uint32_t rate,
 {
 	struct audio_client *ac;
 
+	pr_debug("[%s:%s] rate = %d\n, channels = %d", __MM_FILE__, __func__,
+		 rate, channels);
 	if (q6audio_init())
 		return 0;
 
@@ -1914,6 +2001,9 @@ int q6audio_play_dtmf(struct audio_client *ac, uint16_t dtmf_hi,
 {
 	struct adsp_audio_dtmf_start_command dtmf_cmd;
 
+	pr_debug("[%s:%s] high = %d, low = %d\n", __MM_FILE__, __func__,
+		dtmf_hi, dtmf_low);
+
 	dtmf_cmd.hdr.opcode = ADSP_AUDIO_IOCTL_CMD_SESSION_DTMF_START;
 	dtmf_cmd.hdr.response_type = ADSP_AUDIO_RESPONSE_COMMAND;
 	dtmf_cmd.tone1_hz = dtmf_hi;
@@ -1928,6 +2018,7 @@ int q6audio_play_dtmf(struct audio_client *ac, uint16_t dtmf_hi,
 
 int q6audio_mp3_close(struct audio_client *ac)
 {
+	pr_debug("[%s:%s]\n", __MM_FILE__, __func__);
 	audio_close(ac);
 	audio_rx_path_enable(0, 0);
 	audio_client_free(ac);
@@ -1942,7 +2033,8 @@ struct audio_client *q6audio_open_aac(uint32_t bufsz, uint32_t samplerate,
 {
 	struct audio_client *ac;
 
-	TRACE("q6audio_open_aac()\n");
+	pr_debug("[%s:%s] bufsz = %d, samplerate = %d, channels = %d\n",
+		__MM_FILE__, __func__, bufsz, samplerate, channels);
 
 	if (q6audio_init())
 		return 0;
@@ -1982,7 +2074,7 @@ struct audio_client *q6audio_open_qcp(uint32_t bufsz, uint32_t min_rate,
 {
 	struct audio_client *ac;
 
-	TRACE("q6audio_open_evrc()\n");
+	pr_debug("[%s:%s] bufsz = %d\n", __MM_FILE__, __func__, bufsz);
 
 	if (q6audio_init())
 		return 0;
@@ -2020,7 +2112,8 @@ struct audio_client *q6audio_open_amrnb(uint32_t bufsz, uint32_t enc_mode,
 {
 	struct audio_client *ac;
 
-	TRACE("q6audio_open_amrnb()\n");
+	pr_debug("[%s:%s] bufsz = %d, dtx_mode = %d\n", __MM_FILE__,
+			__func__, bufsz, dtx_mode_enable);
 
 	if (q6audio_init())
 		return 0;
@@ -2054,6 +2147,7 @@ struct audio_client *q6audio_open_amrnb(uint32_t bufsz, uint32_t enc_mode,
 int q6audio_async(struct audio_client *ac)
 {
 	struct adsp_command_hdr rpc;
+	pr_debug("[%s:%s] ac = %p\n", __MM_FILE__, __func__, ac);
 	memset(&rpc, 0, sizeof(rpc));
 	rpc.opcode = ADSP_AUDIO_IOCTL_CMD_STREAM_EOS;
 	rpc.response_type = ADSP_AUDIO_RESPONSE_ASYNC;

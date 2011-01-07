@@ -79,6 +79,8 @@ static int q6_evrc_flowcontrol(void *data)
 		ab = ac->buf + ac->cpu_buf;
 		if (ab->used)
 			wait_event(ac->wait, (ab->used == 0));
+		pr_debug("[%s:%s] ab->data = %p, cpu_buf = %d\n", __MM_FILE__,
+			__func__, ab->data, ac->cpu_buf);
 		xfer = ab->actual_size;
 
 
@@ -129,10 +131,12 @@ static long q6_evrc_in_ioctl(struct file *file, unsigned int cmd,
 	mutex_lock(&evrc->lock);
 	switch (cmd) {
 	case AUDIO_SET_VOLUME:
+		pr_debug("[%s:%s] SET_VOLUME\n", __MM_FILE__, __func__);
 		break;
 	case AUDIO_GET_STATS:
 	{
 		struct msm_audio_stats stats;
+		pr_debug("[%s:%s] GET_STATS\n", __MM_FILE__, __func__);
 		memset(&stats, 0, sizeof(stats));
 		if (copy_to_user((void *) arg, &stats, sizeof(stats)))
 			return -EFAULT;
@@ -141,6 +145,7 @@ static long q6_evrc_in_ioctl(struct file *file, unsigned int cmd,
 	case AUDIO_START:
 	{
 		uint32_t acdb_id;
+		pr_debug("[%s:%s] AUDIO_START\n", __MM_FILE__, __func__);
 		if (arg == 0) {
 			acdb_id = 0;
 		} else {
@@ -152,6 +157,8 @@ static long q6_evrc_in_ioctl(struct file *file, unsigned int cmd,
 		}
 		if (evrc->audio_client) {
 			rc = -EBUSY;
+			pr_err("[%s:%s] active session already existing\n",
+				__MM_FILE__, __func__);
 			break;
 		} else {
 			evrc->audio_client = q6audio_open_qcp(
@@ -163,6 +170,8 @@ static long q6_evrc_in_ioctl(struct file *file, unsigned int cmd,
 					acdb_id);
 
 			if (!evrc->audio_client) {
+				pr_err("[%s:%s] evrc open session failed\n",
+					__MM_FILE__, __func__);
 				kfree(evrc);
 				rc = -ENOMEM;
 				break;
@@ -206,10 +215,12 @@ fc_fail:
 		break;
 	}
 	case AUDIO_STOP:
+		pr_debug("[%s:%s] AUDIO_STOP\n", __MM_FILE__, __func__);
 		break;
 	case AUDIO_FLUSH:
 		break;
 	case AUDIO_SET_INCALL: {
+		pr_debug("[%s:%s] SET_INCALL\n", __MM_FILE__, __func__);
 		if (copy_from_user(&evrc->voicerec_mode,
 			(void *)arg, sizeof(struct msm_voicerec_mode)))
 			rc = -EFAULT;
@@ -228,6 +239,10 @@ fc_fail:
 		if (copy_to_user((void *)arg, &evrc->str_cfg,
 				sizeof(struct msm_audio_stream_config)))
 			rc = -EFAULT;
+
+		pr_debug("[%s:%s] GET_STREAM_CONFIG: buffsz=%d, buffcnt=%d\n",
+			 __MM_FILE__, __func__, evrc->str_cfg.buffer_size,
+			evrc->str_cfg.buffer_count);
 		break;
 	case AUDIO_SET_STREAM_CONFIG:
 		if (copy_from_user(&evrc->str_cfg, (void *)arg,
@@ -235,6 +250,10 @@ fc_fail:
 			rc = -EFAULT;
 			break;
 		}
+
+		pr_debug("[%s:%s] SET_STREAM_CONFIG: buffsz=%d, buffcnt=%d\n",
+			 __MM_FILE__, __func__, evrc->str_cfg.buffer_size,
+			evrc->str_cfg.buffer_count);
 
 		if (evrc->str_cfg.buffer_size < 23) {
 			pr_err("[%s:%s] Buffer size too small\n", __MM_FILE__,
@@ -251,6 +270,8 @@ fc_fail:
 		if (copy_from_user(&evrc->cfg, (void *) arg,
 				 sizeof(struct msm_audio_evrc_enc_config)))
 			rc = -EFAULT;
+		pr_debug("[%s:%s] SET_EVRC_ENC_CONFIG\n", __MM_FILE__,
+				__func__);
 
 		if (evrc->cfg.min_bit_rate > 4 || evrc->cfg.min_bit_rate < 1) {
 			pr_err("[%s:%s] invalid min bitrate\n", __MM_FILE__,
@@ -267,6 +288,8 @@ fc_fail:
 		if (copy_to_user((void *) arg, &evrc->cfg,
 				 sizeof(struct msm_audio_evrc_enc_config)))
 			rc = -EFAULT;
+		pr_debug("[%s:%s] GET_EVRC_ENC_CONFIG\n", __MM_FILE__,
+			__func__);
 		break;
 
 	default:
@@ -274,6 +297,7 @@ fc_fail:
 	}
 
 	mutex_unlock(&evrc->lock);
+	pr_debug("[%s:%s] rc = %d\n", __MM_FILE__, __func__, rc);
 	return rc;
 }
 
@@ -282,6 +306,8 @@ static int q6_evrc_in_open(struct inode *inode, struct file *file)
 	struct evrc *evrc;
 	struct evrc_fc *fc;
 	int i;
+
+	pr_info("[%s:%s] open\n", __MM_FILE__, __func__);
 	evrc = kmalloc(sizeof(struct evrc), GFP_KERNEL);
 	if (evrc == NULL) {
 		pr_err("[%s:%s] Could not allocate memory for evrc driver\n",
@@ -329,6 +355,7 @@ static ssize_t q6_evrc_in_read(struct file *file, char __user *buf,
 	int xfer = 0;
 	int res = 0;
 
+	pr_debug("[%s:%s] count = %d\n", __MM_FILE__, __func__, count);
 	mutex_lock(&evrc->lock);
 	ac = evrc->audio_client;
 	if (!ac) {
@@ -343,6 +370,8 @@ static ssize_t q6_evrc_in_read(struct file *file, char __user *buf,
 				(fc->fc_buff[fc->buff_index].empty == 0),
 				msecs_to_jiffies(EVRC_READ_TIMEOUT));
 
+			pr_debug("[%s:%s] buff_index = %d\n", __MM_FILE__,
+				__func__, fc->buff_index);
 			if (res == 0) {
 				pr_err("[%s:%s] Timeout!\n", __MM_FILE__,
 						__func__);
@@ -413,6 +442,7 @@ static int q6_evrc_in_release(struct inode *inode, struct file *file)
 		rc = q6audio_close(evrc->audio_client);
 	mutex_unlock(&evrc->lock);
 	kfree(evrc);
+	pr_info("[%s:%s] release\n", __MM_FILE__, __func__);
 	return rc;
 }
 

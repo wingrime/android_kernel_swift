@@ -67,11 +67,14 @@ static long pcm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 			rc = -EFAULT;
 			break;
 		}
+		pr_debug("[%s:%s] SET_VOLUME: vol = %d\n", __MM_FILE__,
+			__func__, vol);
 		rc = q6audio_set_stream_volume(pcm->ac, vol);
 		break;
 	}
 	case AUDIO_START: {
 		uint32_t acdb_id;
+		pr_debug("[%s:%s] AUDIO_START\n", __MM_FILE__, __func__);
 		if (arg == 0) {
 			acdb_id = 0;
 		} else if (copy_from_user(&acdb_id, (void*) arg, sizeof(acdb_id))) {
@@ -81,18 +84,24 @@ static long pcm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 			break;
 		}
 		if (pcm->ac) {
+			pr_err("[%s:%s] active session already existing\n",
+				__MM_FILE__, __func__);
 			rc = -EBUSY;
 		} else {
 			pcm->ac = q6audio_open_pcm(pcm->buffer_size,
 						pcm->sample_rate,
 						pcm->channel_count,
 						AUDIO_FLAG_WRITE, acdb_id);
-			if (!pcm->ac)
+			if (!pcm->ac) {
+				pr_err("[%s:%s] pcm open session failed\n",
+					__MM_FILE__, __func__);
 				rc = -ENOMEM;
+			}
 		}
 		break;
 	}
 	case AUDIO_STOP:
+		pr_debug("[%s:%s] AUDIO_STOP\n", __MM_FILE__, __func__);
 		break;
 	case AUDIO_FLUSH:
 		break;
@@ -100,22 +109,33 @@ static long pcm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		struct msm_audio_config config;
 		if (pcm->ac) {
 			rc = -EBUSY;
+			pr_err("[%s:%s] active session already existing\n",
+				__MM_FILE__, __func__);
 			break;
 		}
 		if (copy_from_user(&config, (void*) arg, sizeof(config))) {
 			rc = -EFAULT;
 			break;
 		}
+		pr_debug("[%s:%s] SET_CONFIG: samplerate = %d, channels = %d\n",
+			__MM_FILE__, __func__, config.sample_rate,
+			config.channel_count);
 		if (config.channel_count < 1 || config.channel_count > 2) {
 			rc = -EINVAL;
+			pr_err("[%s:%s] invalid channelcount %d\n",
+			__MM_FILE__, __func__, config.channel_count);
 			break;
 		}
 		if (config.sample_rate < 8000 || config.sample_rate > 48000) {
 			rc = -EINVAL;
+			pr_err("[%s:%s] invalid samplerate %d\n", __MM_FILE__,
+				__func__, config.sample_rate);
 			break;
 		}
 		if (config.buffer_size < 128 || config.buffer_size > 8192) {
 			rc = -EINVAL;
+			pr_err("[%s:%s] invalid buffsize %d\n", __MM_FILE__,
+				__func__, config.buffer_size);
 			break;
 		}
 		pcm->sample_rate = config.sample_rate;
@@ -135,10 +155,14 @@ static long pcm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		if (copy_to_user((void*) arg, &config, sizeof(config))) {
 			rc = -EFAULT;
 		}
+		pr_debug("[%s:%s] GET_CONFIG: samplerate = %d, channels = %d\n",
+			__MM_FILE__, __func__, config.sample_rate,
+			config.channel_count);
 		break;
 	}
 	case AUDIO_SET_EQ: {
 		struct msm_audio_eq_stream_config eq_config;
+		pr_debug("[%s:%s] SET_EQ\n", __MM_FILE__, __func__);
 		if (copy_from_user(&eq_config, (void *) arg,
 						sizeof(eq_config))) {
 			rc = -EFAULT;
@@ -151,6 +175,7 @@ static long pcm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		rc = -EINVAL;
 	}
 	mutex_unlock(&pcm->lock);
+	pr_debug("[%s:%s] rc = %d\n", __MM_FILE__, __func__, rc);
 	return rc;
 }
 
@@ -181,6 +206,7 @@ static ssize_t pcm_write(struct file *file, const char __user *buf,
 	const char __user *start = buf;
 	int xfer;
 
+	pr_debug("[%s:%s] count = %d\n", __MM_FILE__, __func__, count);
 	if (!pcm->ac)
 		pcm_ioctl(file, AUDIO_START, 0);
 
@@ -198,7 +224,8 @@ static ssize_t pcm_write(struct file *file, const char __user *buf,
 						__MM_FILE__, __func__);
 				q6audio_dsp_not_responding();
 			}
-
+		pr_debug("[%s:%s] ab->data = %p, cpu_buf = %d", __MM_FILE__,
+			__func__, ab->data, ac->cpu_buf);
 		xfer = count;
 		if (xfer > ab->size)
 			xfer = ab->size;

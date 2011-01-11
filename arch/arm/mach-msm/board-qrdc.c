@@ -3926,15 +3926,15 @@ static struct msm_bus_vectors mdp_init_vectors[] = {
 	 * Please leave 0 as is and don't use it
 	 */
 	{
-		.src = MSM_BUS_MMSS_MASTER_MDP_PORT0,
-		.dst = MSM_BUS_MMSS_SLAVE_SMI,
+		.src = MSM_BUS_MASTER_MDP_PORT0,
+		.dst = MSM_BUS_SLAVE_SMI,
 		.ab = 0,
 		.ib = 0,
 	},
 	/* Master and slaves can be from different fabrics */
 	{
-		.src = MSM_BUS_MMSS_MASTER_MDP_PORT0,
-		.dst = MSM_BUS_APPSS_SLAVE_EBI_CH0,
+		.src = MSM_BUS_MASTER_MDP_PORT0,
+		.dst = MSM_BUS_SLAVE_EBI_CH0,
 		.ab = 0,
 		.ib = 0,
 	},
@@ -3943,15 +3943,15 @@ static struct msm_bus_vectors mdp_init_vectors[] = {
 static struct msm_bus_vectors mdp_sd_smi_vectors[] = {
 	/* Default case static display/UI/2d/3d if FB SMI */
 	{
-		.src = MSM_BUS_MMSS_MASTER_MDP_PORT0,
-		.dst = MSM_BUS_MMSS_SLAVE_SMI,
+		.src = MSM_BUS_MASTER_MDP_PORT0,
+		.dst = MSM_BUS_SLAVE_SMI,
 		.ab = 147460000,
 		.ib = 184325000,
 	},
 	/* Master and slaves can be from different fabrics */
 	{
-		.src = MSM_BUS_MMSS_MASTER_MDP_PORT0,
-		.dst = MSM_BUS_APPSS_SLAVE_EBI_CH0,
+		.src = MSM_BUS_MASTER_MDP_PORT0,
+		.dst = MSM_BUS_SLAVE_EBI_CH0,
 		.ab = 0,
 		.ib = 0,
 	},
@@ -3960,15 +3960,15 @@ static struct msm_bus_vectors mdp_sd_smi_vectors[] = {
 static struct msm_bus_vectors mdp_sd_ebi_vectors[] = {
 	/* Default case static display/UI/2d/3d if FB SMI */
 	{
-		.src = MSM_BUS_MMSS_MASTER_MDP_PORT0,
-		.dst = MSM_BUS_MMSS_SLAVE_SMI,
+		.src = MSM_BUS_MASTER_MDP_PORT0,
+		.dst = MSM_BUS_SLAVE_SMI,
 		.ab = 0,
 		.ib = 0,
 	},
 	/* Master and slaves can be from different fabrics */
 	{
-		.src = MSM_BUS_MMSS_MASTER_MDP_PORT0,
-		.dst = MSM_BUS_APPSS_SLAVE_EBI_CH0,
+		.src = MSM_BUS_MASTER_MDP_PORT0,
+		.dst = MSM_BUS_SLAVE_EBI_CH0,
 		.ab = 334080000,
 		.ib = 417600000,
 	},
@@ -3976,14 +3976,14 @@ static struct msm_bus_vectors mdp_sd_ebi_vectors[] = {
 static struct msm_bus_vectors mdp_vga_vectors[] = {
 	/* VGA and less video */
 	{
-		.src = MSM_BUS_MMSS_MASTER_MDP_PORT0,
-		.dst = MSM_BUS_MMSS_SLAVE_SMI,
+		.src = MSM_BUS_MASTER_MDP_PORT0,
+		.dst = MSM_BUS_SLAVE_SMI,
 		.ab = 175110000,
 		.ib = 218887500,
 	},
 	{
-		.src = MSM_BUS_MMSS_MASTER_MDP_PORT0,
-		.dst = MSM_BUS_APPSS_SLAVE_EBI_CH0,
+		.src = MSM_BUS_MASTER_MDP_PORT0,
+		.dst = MSM_BUS_SLAVE_EBI_CH0,
 		.ab = 175110000,
 		.ib = 218887500,
 	},
@@ -3992,15 +3992,15 @@ static struct msm_bus_vectors mdp_vga_vectors[] = {
 static struct msm_bus_vectors mdp_720p_vectors[] = {
 	/* 720p and less video */
 	{
-		.src = MSM_BUS_MMSS_MASTER_MDP_PORT0,
-		.dst = MSM_BUS_MMSS_SLAVE_SMI,
+		.src = MSM_BUS_MASTER_MDP_PORT0,
+		.dst = MSM_BUS_SLAVE_SMI,
 		.ab = 230400000,
 		.ib = 288000000,
 	},
 	/* Master and slaves can be from different fabrics */
 	{
-		.src = MSM_BUS_MMSS_MASTER_MDP_PORT0,
-		.dst = MSM_BUS_APPSS_SLAVE_EBI_CH0,
+		.src = MSM_BUS_MASTER_MDP_PORT0,
+		.dst = MSM_BUS_SLAVE_EBI_CH0,
 		.ab = 230400000,
 		.ib = 288000000,
 	},
@@ -4009,15 +4009,15 @@ static struct msm_bus_vectors mdp_720p_vectors[] = {
 static struct msm_bus_vectors mdp_1080p_vectors[] = {
 	/* 1080p and less video */
 	{
-		.src = MSM_BUS_MMSS_MASTER_MDP_PORT0,
-		.dst = MSM_BUS_MMSS_SLAVE_SMI,
+		.src = MSM_BUS_MASTER_MDP_PORT0,
+		.dst = MSM_BUS_SLAVE_SMI,
 		.ab = 334080000,
 		.ib = 417600000,
 	},
 	/* Master and slaves can be from different fabrics */
 	{
-		.src = MSM_BUS_MMSS_MASTER_MDP_PORT0,
-		.dst = MSM_BUS_APPSS_SLAVE_EBI_CH0,
+		.src = MSM_BUS_MASTER_MDP_PORT0,
+		.dst = MSM_BUS_SLAVE_EBI_CH0,
 		.ab = 334080000,
 		.ib = 417600000,
 	},
@@ -4060,15 +4060,15 @@ static struct msm_bus_vectors dtv_bus_init_vectors[] = {
 	 * Please leave 0 as is and don't use it
 	 */
 	{
-		.src = MSM_BUS_MMSS_MASTER_MDP_PORT0,
-		.dst = MSM_BUS_MMSS_SLAVE_SMI,
+		.src = MSM_BUS_MASTER_MDP_PORT0,
+		.dst = MSM_BUS_SLAVE_SMI,
 		.ab = 0,
 		.ib = 0,
 	},
 	/* Master and slaves can be from different fabrics */
 	{
-		.src = MSM_BUS_MMSS_MASTER_MDP_PORT0,
-		.dst = MSM_BUS_APPSS_SLAVE_EBI_CH0,
+		.src = MSM_BUS_MASTER_MDP_PORT0,
+		.dst = MSM_BUS_SLAVE_EBI_CH0,
 		.ab = 0,
 		.ib = 0,
 	},
@@ -4078,15 +4078,15 @@ static struct msm_bus_vectors dtv_bus_def_vectors[] = {
 	 * Please leave 0 as is and don't use it
 	 */
 	{
-		.src = MSM_BUS_MMSS_MASTER_MDP_PORT0,
-		.dst = MSM_BUS_MMSS_SLAVE_SMI,
+		.src = MSM_BUS_MASTER_MDP_PORT0,
+		.dst = MSM_BUS_SLAVE_SMI,
 		.ab = 435456000,
 		.ib = 544320000,
 	},
 	/* Master and slaves can be from different fabrics */
 	{
-		.src = MSM_BUS_MMSS_MASTER_MDP_PORT0,
-		.dst = MSM_BUS_APPSS_SLAVE_EBI_CH0,
+		.src = MSM_BUS_MASTER_MDP_PORT0,
+		.dst = MSM_BUS_SLAVE_EBI_CH0,
 		.ab = 435456000,
 		.ib = 544320000,
 	},

@@ -899,38 +899,17 @@ void wait_for_xmitr(struct uart_port *port, int bits)
 }
 
 #ifdef CONFIG_SERIAL_MSM_HSL_CONSOLE
-static void msm_hsl_console_putchars(struct uart_port *port,
-				     int num, const char *s)
+static void msm_hsl_console_putchar(struct uart_port *port, int ch)
 {
-	int word;
-	int i;
-
-	if (num == 0)
-		return;
-
 	wait_for_xmitr(port, UARTDM_ISR_TX_READY_BMSK);
-	msm_hsl_write(port, num, UARTDM_NCF_TX_ADDR);
+	msm_hsl_write(port, 1, UARTDM_NCF_TX_ADDR);
 
-	for (i = 0; i < num; i += 4)  {
-		word = 0;
-		switch (num - i) {
-		default:
-			word |= s[i + 3] << 24;
-			/* deliberate fall-through */
-		case 3:
-			word |= s[i + 2] << 16;
-		case 2:
-			word |= s[i + 1] << 8;
-		case 1:
-			word |= s[i];
-		}
-		while (!(msm_hsl_read(port, UARTDM_SR_ADDR) &
-			UARTDM_SR_TXRDY_BMSK)) {
-			udelay(1);
-			touch_nmi_watchdog();
-		}
-		msm_hsl_write(port, word, UARTDM_TF_ADDR);
+	while (!(msm_hsl_read(port, UARTDM_SR_ADDR) & UARTDM_SR_TXRDY_BMSK)) {
+		udelay(1);
+		touch_nmi_watchdog();
 	}
+
+	msm_hsl_write(port, ch, UARTDM_TF_ADDR);
 }
 
 static void msm_hsl_console_write(struct console *co, const char *s,
@@ -939,8 +918,6 @@ static void msm_hsl_console_write(struct console *co, const char *s,
 	struct uart_port *port;
 	struct msm_hsl_port *msm_hsl_port;
 	int locked;
-	int num = 0 , i;
-	const char *last_break;
 
 	BUG_ON(co->index < 0 || co->index >= UART_NR);
 
@@ -954,26 +931,9 @@ static void msm_hsl_console_write(struct console *co, const char *s,
 		locked = 1;
 		spin_lock(&port->lock);
 	}
-
-	/* need to replace LFs by CRLFs */
-	last_break = s;
-	for (i = 0; i < count; i++, s++) {
-		if (*s == '\n')	{
-			if (num > 0)
-				msm_hsl_console_putchars(port, num, last_break);
-			last_break += num + 1;
-			num = 0;
-			msm_hsl_console_putchars(port, 2, "\r\n");
-		} else {
-			num++;
-			if (num > port->fifosize) {
-				msm_hsl_console_putchars(port, 256, last_break);
-				last_break += port->fifosize;
-			}
-		}
-	}
-	msm_hsl_console_putchars(port, num, last_break);
-
+	msm_hsl_write(port, 0, UARTDM_IMR_ADDR);
+	uart_console_write(port, s, count, msm_hsl_console_putchar);
+	msm_hsl_write(port, msm_hsl_port->imr, UARTDM_IMR_ADDR);
 	if (locked == 1)
 		spin_unlock(&port->lock);
 }

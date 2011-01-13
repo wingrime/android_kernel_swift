@@ -483,6 +483,7 @@ static void msm_hsl_set_baud_rate(struct uart_port *port, unsigned int baud)
 		break;
 	}
 
+	msm_hsl_write(port, RESET_RX, UARTDM_CR_ADDR);
 	msm_hsl_write(port, baud_code, UARTDM_CSR_ADDR);
 
 	/* RX stale watermark */
@@ -496,6 +497,10 @@ static void msm_hsl_set_baud_rate(struct uart_port *port, unsigned int baud)
 
 	/* set TX watermark */
 	msm_hsl_write(port, 0, UARTDM_TFWR_ADDR);
+
+	msm_hsl_write(port, RESET_STALE_INT, UARTDM_CR_ADDR);
+	msm_hsl_write(port, 6500, UARTDM_DMRX_ADDR);
+	msm_hsl_write(port, STALE_EVENT_ENABLE, UARTDM_CR_ADDR);
 }
 
 static void msm_hsl_init_clock(struct uart_port *port)
@@ -622,13 +627,6 @@ static void msm_hsl_set_termios(struct uart_port *port,
 
 	/* calculate and set baud rate */
 	baud = uart_get_baud_rate(port, termios, old, 300, 115200);
-
-	/* Workaround required for UART download feature.
-	   set_termios is getting called while opening port and while
-	   setting required baud rate using Ioctl. Adding delay allows
-	   this feature to work. Reason is still unknown.
-	*/
-	udelay(1000);
 
 	msm_hsl_set_baud_rate(port, baud);
 

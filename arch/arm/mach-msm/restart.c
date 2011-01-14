@@ -1,4 +1,4 @@
-/* Copyright (c) 2010, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2010-2011, Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -27,6 +27,7 @@
 #include <linux/mfd/pmic8901.h>
 
 #include <mach/msm_iomap.h>
+#include <mach/restart.h>
 
 #define TCSR_BASE 0x16B00000
 #define TCSR_WDT_CFG 0x30
@@ -40,6 +41,7 @@
 
 #define RESTART_REASON_ADDR 0x2A05F010
 
+static int restart_mode;
 static void *tcsr_base;
 
 #ifdef CONFIG_MSM_DLOAD_MODE
@@ -72,6 +74,12 @@ static void set_dload_mode(int on)
 #define set_dload_mode(x) do {} while (0)
 #endif
 
+void msm_set_restart_mode(int mode)
+{
+	restart_mode = mode;
+}
+EXPORT_SYMBOL(msm_set_restart_mode);
+
 static void msm_power_off(void)
 {
 	printk(KERN_NOTICE "Powering off the SoC\n");
@@ -88,7 +96,7 @@ void arch_reset(char mode, const char *cmd)
 	void *restart_reason;
 
 #ifdef CONFIG_MSM_DLOAD_MODE
-	if (in_panic)
+	if (in_panic || restart_mode == RESTART_DLOAD)
 		set_dload_mode(1);
 #endif
 

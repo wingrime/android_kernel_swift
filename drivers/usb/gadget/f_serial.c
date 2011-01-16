@@ -14,6 +14,7 @@
 #include <linux/kernel.h>
 #include <linux/device.h>
 #include <linux/usb/android_composite.h>
+#include <mach/usb_gadget_fserial.h>
 
 #include "u_serial.h"
 #include "gadget_chips.h"
@@ -758,12 +759,36 @@ static struct android_usb_function modem_function = {
 	.bind_config = fserial_modem_bind_config,
 };
 
-static int __init init(void)
+static int fserial_remove(struct platform_device *dev)
 {
-	android_register_function(&modem_function);
-	android_register_function(&nmea_function);
+	gserial_cleanup();
+
 	return 0;
 }
-module_init(init);
+
+static struct platform_driver usb_fserial = {
+	.remove		= fserial_remove,
+	.driver = {
+		.name = "usb_fserial",
+		.owner = THIS_MODULE,
+	},
+
+};
+
+static int __init fserial_probe(struct platform_device *pdev)
+{
+	dev_dbg(&pdev->dev, "%s: probe\n", __func__);
+
+	android_register_function(&modem_function);
+	android_register_function(&nmea_function);
+
+	return 0;
+}
+
+static int __init fserial_init(void)
+{
+	return platform_driver_probe(&usb_fserial, fserial_probe);
+}
+module_init(fserial_init);
 
 #endif /* CONFIG_USB_ANDROID_ACM */

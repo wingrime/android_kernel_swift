@@ -1467,6 +1467,9 @@ static struct platform_device *devices[] __initdata = {
 #ifdef CONFIG_USB_ANDROID_DIAG
 	&usb_diag_device,
 #endif
+#ifdef CONFIG_USB_F_SERIAL
+	&usb_gadget_fserial_device,
+#endif
 	&android_usb_device,
 #endif
 	&msm_device_i2c,

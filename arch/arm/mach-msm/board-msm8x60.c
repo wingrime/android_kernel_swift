@@ -83,6 +83,7 @@
 #ifdef CONFIG_USB_ANDROID
 #include <linux/usb/android_composite.h>
 #endif
+#include <mach/usb_gadget_fserial.h>
 #include <linux/regulator/consumer.h>
 #include <linux/regulator/machine.h>
 #include <mach/sdio_al.h>
@@ -3253,6 +3254,9 @@ static struct platform_device *surf_devices[] __initdata = {
 	&rndis_device,
 #ifdef CONFIG_USB_ANDROID_DIAG
 	&usb_diag_device,
+#endif
+#ifdef CONFIG_USB_F_SERIAL
+	&usb_gadget_fserial_device,
 #endif
 	&android_usb_device,
 #endif

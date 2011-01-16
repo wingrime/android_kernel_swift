@@ -31,6 +31,7 @@
 #include <asm/mach/mmc.h>
 #include <mach/msm_hsusb.h>
 #include <mach/usbdiag.h>
+#include <mach/usb_gadget_fserial.h>
 #include <mach/rpc_hsusb.h>
 
 #include "clock-pcom.h"
@@ -329,6 +330,20 @@ struct platform_device usb_diag_device = {
 	.id	= -1,
 	.dev	= {
 		.platform_data = &usb_diag_pdata,
+	},
+};
+#endif
+
+#ifdef CONFIG_USB_F_SERIAL
+static struct usb_gadget_fserial_platform_data fserial_pdata = {
+	.no_ports	= 2,
+};
+
+struct platform_device usb_gadget_fserial_device = {
+	.name	= "usb_fserial",
+	.id	= -1,
+	.dev	= {
+		.platform_data = &fserial_pdata,
 	},
 };
 #endif

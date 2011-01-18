@@ -20,11 +20,13 @@ config ARCH_MSM7X25
 
 config ARCH_MSM7X27
 	bool "MSM7x27"
-	select ARCH_MSM_ARM11
+	select ARCH_MSM_ARM11 if MSM_SOC_REV_NONE
+	select ARCH_MSM_CORTEX_A5 if MSM_SOC_REV_A
 	select MSM_VIC
-	select CPU_V6
-	select MSM_REMOTE_SPINLOCK_SWP
-	select MSM_GPIOMUX
+	select CPU_V6 if MSM_SOC_REV_NONE
+	select CPU_V7 if MSM_SOC_REV_A
+	select MSM_REMOTE_SPINLOCK_SWP if MSM_SOC_REV_NONE
+	select MSM_GPIOMUX if !MSM_SOC_REV_A
 
 config ARCH_MSM7X30
 	bool "MSM7x30"
@@ -92,10 +94,10 @@ config MSM_SOC_REV_NONE
 	bool "N/A"
 	select EMULATE_DOMAIN_MANAGER_V7 if ARCH_QSD8X50
 	select VERIFY_PERMISSION_FAULT if ARCH_QSD8X50
-if ARCH_QSD8X50
 config MSM_SOC_REV_A
 	bool "Rev. A"
-endif
+	select ARCH_QSD8X50A if ARCH_QSD8X50
+	select ARCH_MSM7X27A if ARCH_MSM7X27
 endchoice
 
 config  ARCH_MSM_ARM11
@@ -103,6 +105,13 @@ config  ARCH_MSM_ARM11
 config  ARCH_MSM_SCORPION
 	bool
 config  ARCH_MSM_SCORPIONMP
+	bool
+config  ARCH_MSM_CORTEX_A5
+	bool
+
+config ARCH_QSD8X50A
+	bool
+config ARCH_MSM7X27A
 	bool
 
 config  MSM_VIC
@@ -170,6 +179,14 @@ config MACH_MSM7X27_FFA
 	bool "MSM7x27 FFA"
 	help
 	  Support for the Qualcomm MSM7x27 FFA eval board.
+
+config MACH_MSM7X27A_RUMI3
+        depends on ARCH_MSM7X27A
+        depends on !MSM_STACKED_MEMORY
+        default y
+        bool "MSM7x27A RUMI3"
+        help
+          Support for the Qualcomm MSM7x27A RUMI3 Emulation Platform.
 
 config MACH_MSM7X30_SURF
        depends on ARCH_MSM7X30

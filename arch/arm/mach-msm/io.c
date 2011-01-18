@@ -85,11 +85,16 @@ static struct map_desc msm_io_desc[] __initdata = {
 
 void __init msm_map_common_io(void)
 {
+	/*Peripheral port memory remap, nothing looks to be there for
+	 * cortex a5.
+	 */
+#ifndef CONFIG_ARCH_MSM_CORTEX_A5
 	/* Make sure the peripheral register window is closed, since
 	 * we will use PTE flags (TEX[1]=1,B=0,C=1) to determine which
 	 * pages are peripheral interface or not.
 	 */
 	asm("mcr p15, 0, %0, c15, c2, 4" : : "r" (0));
+#endif
 	msm_map_io(msm_io_desc, ARRAY_SIZE(msm_io_desc));
 }
 #endif

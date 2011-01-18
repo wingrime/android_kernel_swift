@@ -1,7 +1,7 @@
 /* arch/arm/mach-msm/include/mach/memory.h
  *
  * Copyright (C) 2007 Google, Inc.
- * Copyright (c) 2009-2010, Code Aurora Forum. All rights reserved.
+ * Copyright (c) 2009-2011, Code Aurora Forum. All rights reserved.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -65,7 +65,7 @@ int platform_physical_remove_pages(unsigned long, unsigned long);
 int platform_physical_active_pages(unsigned long, unsigned long);
 int platform_physical_low_power_pages(unsigned long, unsigned long);
 
-#ifdef CONFIG_ARCH_MSM_ARM11
+#if defined(CONFIG_ARCH_MSM_ARM11) || defined(CONFIG_ARCH_MSM_CORTEX_A5)
 void write_to_strongly_ordered_memory(void);
 void map_page_strongly_ordered(void);
 

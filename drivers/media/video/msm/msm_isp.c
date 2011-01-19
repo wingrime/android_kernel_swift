@@ -1877,6 +1877,32 @@ int msm_isp_g_ctrl(struct msm_cam_v4l2_device *pcam, struct v4l2_control *ctrl)
 	return rc;
 }
 
+int msm_isp_q_ctrl(struct msm_cam_v4l2_device *pcam,
+			struct v4l2_queryctrl *queryctrl)
+{
+	int rc = 0;
+	struct msm_ctrl_cmd ctrlcmd;
+	uint8_t ctrl_data[max_control_command_size];
+
+	WARN_ON(queryctrl == NULL);
+	memset(ctrl_data, 0, sizeof(ctrl_data));
+
+	ctrlcmd.type = MSM_V4L2_QUERY_CTRL;
+	ctrlcmd.length = sizeof(struct v4l2_queryctrl);
+	ctrlcmd.value = (void *)ctrl_data;
+	memcpy(ctrlcmd.value, queryctrl, ctrlcmd.length);
+	ctrlcmd.timeout_ms = 1000;
+
+	/* send command to config thread in userspace, and get return value */
+	rc = msm_isp_control(pcam, &ctrlcmd);
+	D("%s: rc = %d\n", __func__, rc);
+
+	if (rc >= 0)
+		memcpy(queryctrl, ctrlcmd.value, sizeof(struct v4l2_queryctrl));
+
+       return rc;
+}
+
 /* Init a msm device for ISP control,
    which will create a video device (/dev/video0/ and plug in
    ISP's operation "v4l2_ioctl_ops*"

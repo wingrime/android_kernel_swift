@@ -126,10 +126,12 @@ static int msm_camera_v4l2_queryctrl(struct file *f, void *pctx,
 				struct v4l2_queryctrl *pqctrl)
 {
 	int rc = 0;
+	struct msm_cam_v4l2_device *pcam  = video_drvdata(f);
 
 	D("%s\n", __func__);
 	WARN_ON(pctx != f->private_data);
 
+	rc = msm_isp_q_ctrl(pcam, pqctrl);
 	return rc;
 }
 

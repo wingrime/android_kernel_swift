@@ -1021,6 +1021,8 @@ static int action_open(struct msm_tsif_device *tsif_device)
 	int rc = -EINVAL;
 	int result;
 
+	struct msm_tsif_platform_data *pdata =
+		tsif_device->pdev->dev.platform_data;
 	dev_info(&tsif_device->pdev->dev, "%s\n", __func__);
 	if (tsif_device->state != tsif_state_stopped)
 		return -EAGAIN;
@@ -1037,6 +1039,11 @@ static int action_open(struct msm_tsif_device *tsif_device)
 	enable_irq(tsif_device->irq);
 	tsif_clock(tsif_device, 1);
 	tsif_dma_schedule(tsif_device);
+	/*
+	 * init the device if required
+	 */
+	if (pdata->init)
+		pdata->init(pdata);
 	rc = tsif_start_hw(tsif_device);
 	if (rc) {
 		dev_err(&tsif_device->pdev->dev, "Unable to start HW\n");

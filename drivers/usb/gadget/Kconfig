@@ -981,6 +981,18 @@ config MODEM_SUPPORT
 	  adds CDC class requests to configure MODEM line settings.
 	  Say "y" to enable MODEM support in the generic serial driver.
 
+config USB_F_SERIAL_SDIO
+	boolean "generic serial function driver over SDIO"
+	depends on USB_ANDROID && MSM_SDIO_CMUX && MSM_SDIO_AL
+	default n
+	help
+          Gadget serial driver is one way to communicate with modem
+          device. This option enables serial driver to communicate
+          to modem device using sdio. It makes very minimal changes
+          to Gadget usb serial interface(f_serial.c) and adds
+          separate transport layer u_sdio(very similar to u_serial.c)
+          Say "y" to link the driver staticall
+
 config USB_CDC_COMPOSITE
 	tristate "CDC Composite Device (Ethernet and ACM)"
 	depends on NET

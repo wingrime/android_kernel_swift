@@ -14,6 +14,7 @@
 
 #include <linux/usb/composite.h>
 #include <linux/usb/cdc.h>
+#include <mach/usb_gadget_fserial.h>
 
 /*
  * One non-multiplexed "serial" I/O port ... there can be several of these
@@ -52,6 +53,10 @@ struct gserial {
 	int (*send_break)(struct gserial *p, int duration);
 	unsigned int (*send_carrier_detect)(struct gserial *p, unsigned int);
 	unsigned int (*send_ring_indicator)(struct gserial *p, unsigned int);
+	int (*send_modem_ctrl_bits)(struct gserial *p, int ctrl_bits);
+
+	/* notification changes to modem */
+	void (*notify_modem)(struct gserial *gser, u8 portno, int ctrl_bits);
 };
 
 /* utilities to allocate/free request and buffer */
@@ -65,6 +70,28 @@ void gserial_cleanup(void);
 /* connect/disconnect is handled by individual functions */
 int gserial_connect(struct gserial *, u8 port_num);
 void gserial_disconnect(struct gserial *);
+
+#ifdef CONFIG_USB_F_SERIAL_SDIO
+/* sdio related functions */
+int gsdio_setup(struct usb_gadget *g, unsigned n_ports,
+		struct sdio_port_info *pi);
+int gsdio_connect(struct gserial *, u8 port_num);
+void gsdio_disconnect(struct gserial *, u8 portno);
+#else
+static inline int gsdio_setup(struct usb_gadget *g, unsigned n_ports,
+		struct sdio_port_info *pi)
+{
+	return 0;
+}
+static inline int gsdio_connect(struct gserial *g, u8 port_num)
+{
+	return 0;
+}
+static inline void gsdio_disconnect(struct gserial *g, u8 portno)
+{
+	return;
+}
+#endif
 
 /* functions are bound to configurations by a config or gadget driver */
 int acm_bind_config(struct usb_configuration *c, u8 port_num);

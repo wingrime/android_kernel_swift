@@ -31,9 +31,20 @@
 #define __LINUX_USB_GADGET_FSERIAL_H__
 
 #include <linux/platform_device.h>
+#include <mach/sdio_al.h>
+
+struct sdio_port_info {
+	/* data channel info */
+	char *data_ch_name;
+	struct sdio_channel *ch;
+
+	/* control channel info */
+	int ctrl_ch_id;
+};
 
 enum transport_type {
 	USB_GADGET_FSERIAL_TRANSPORT_TTY,
+	USB_GADGET_FSERIAL_TRANSPORT_SDIO,
 };
 
 struct usb_gadget_fserial_platform_data {

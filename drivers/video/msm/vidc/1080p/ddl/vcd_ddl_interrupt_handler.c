@@ -546,8 +546,11 @@ static u32 ddl_decoder_frame_run_callback(struct ddl_client_context *ddl)
 		vidc_1080p_get_display_frame_result(dec_disp_info);
 		ddl_vidc_decode_dynamic_property(ddl, false);
 		if (dec_disp_info->resl_change) {
-			DDL_MSG_ERROR("DEC_RECONFIG_NOT_SUPPORTED");
-			ddl_client_fatal_cb(ddl);
+			DDL_MSG_HIGH("DEC_FRM_RUN_DONE: DEC_RECONFIG");
+			ddl->client_state = DDL_CLIENT_WAIT_FOR_EOS_DONE;
+			ddl->cmd_state = DDL_CMD_EOS;
+			vidc_1080p_frame_start_realloc(ddl->instance_id);
+			ret_status = false;
 		} else {
 			if ((VCD_FRAME_FLAG_EOS &
 				ddl->input_frame.vcd_frm.flags)) {
@@ -608,7 +611,7 @@ static u32 ddl_eos_frame_done_callback(
 	struct vidc_1080p_dec_disp_info *dec_disp_info =
 		&decoder->dec_disp_info;
 	struct ddl_mask *dpb_mask = &decoder->dpb_mask;
-	u32 ret_status = true;
+	u32 ret_status = true, rsl_chg;
 
 	if (!DDLCLIENT_STATE_IS(ddl, DDL_CLIENT_WAIT_FOR_EOS_DONE)) {
 		DDL_MSG_ERROR("STATE-CRITICAL-EOSFRMRUN");
@@ -617,10 +620,20 @@ static u32 ddl_eos_frame_done_callback(
 		DDL_MSG_LOW("EOS_FRM_RUN_DONE");
 		ddl->cmd_state = DDL_CMD_INVALID;
 		vidc_1080p_get_display_frame_result(dec_disp_info);
+		vidc_sm_get_extended_decode_status(
+			&ddl->shared_mem[ddl->command_channel], &rsl_chg);
 		ddl_vidc_decode_dynamic_property(ddl, false);
 		if (dec_disp_info->display_status ==
 			VIDC_1080P_DISPLAY_STATUS_DPB_EMPTY) {
-			ddl_decoder_eos_done_callback(ddl);
+			if (rsl_chg) {
+				decoder->header_in_start = false;
+				decoder->decode_config.sequence_header =
+					ddl->input_frame.vcd_frm.physical;
+				decoder->decode_config.sequence_header_len =
+					ddl->input_frame.vcd_frm.data_len;
+				ddl_vidc_decode_init_codec(ddl);
+			} else
+				ddl_decoder_eos_done_callback(ddl);
 		} else {
 			struct vidc_1080p_dec_frame_start_param dec_param;
 			if (dec_disp_info->display_status ==

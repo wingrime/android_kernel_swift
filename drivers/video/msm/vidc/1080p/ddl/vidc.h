@@ -309,6 +309,8 @@ enum vidc_1080p_decode{
 	VIDC_1080P_DEC_TYPE_SEQ_HEADER       = 0x00010000,
 	VIDC_1080P_DEC_TYPE_FRAME_DATA       = 0x00020000,
 	VIDC_1080P_DEC_TYPE_LAST_FRAME_DATA  = 0x00030000,
+	VIDC_1080P_DEC_TYPE_INIT_BUFFERS     = 0x00040000,
+	VIDC_1080P_DEC_TYPE_FRAME_START_REALLOC = 0x00050000,
 	VIDC_1080P_DEC_TYPE_32BIT            = 0x7FFFFFFF
 };
 enum vidc_1080p_encode{
@@ -540,4 +542,5 @@ void vidc_1080p_get_encoder_sequence_header_size(u32 *seq_header_size);
 void vidc_1080p_get_intermedia_stage_debug_counter(
 	u32 *intermediate_stage_counter);
 void vidc_1080p_get_exception_status(u32 *exception_status);
+void vidc_1080p_frame_start_realloc(u32 instance_id);
 #endif

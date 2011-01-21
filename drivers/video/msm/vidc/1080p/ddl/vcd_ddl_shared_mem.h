@@ -73,7 +73,7 @@ enum VIDC_SM_ref_picture{
 	VIDC_SM_REF_PICT_BOTTOM_FIELD         = 1
 };
 void vidc_sm_get_extended_decode_status(struct ddl_buf_addr *shared_mem,
-	u32 *pn_decode_status);
+	u32 *resl_change);
 void vidc_sm_set_frame_tag(struct ddl_buf_addr *shared_mem,
 	u32 frame_tag);
 void vidc_sm_get_frame_tags(struct ddl_buf_addr *shared_mem,

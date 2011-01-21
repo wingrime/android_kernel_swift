@@ -19,6 +19,8 @@
 #include "vcd_ddl_shared_mem.h"
 
 #define VIDC_SM_EXTENDED_DECODE_STATUS_ADDR    0x0000
+#define VIDC_SM_EXT_DEC_STATUS_RESOLUTION_CHANGE_BMSK 0x1
+#define VIDC_SM_EXT_DEC_STATUS_RESOLUTION_CHANGE_SHFT 0x0
 
 #define VIDC_SM_SET_FRAME_TAG_ADDR             0x0004
 #define VIDC_SM_GET_FRAME_TAG_TOP_ADDR         0x0008
@@ -185,10 +187,15 @@ static u32 ddl_mem_read_32(u32 *addr)
 }
 
 void vidc_sm_get_extended_decode_status(struct ddl_buf_addr *shared_mem,
-	u32 *pn_decode_status)
+	u32 *resl_change)
 {
-	*pn_decode_status = DDL_MEM_READ_32(shared_mem,
+	u32 decode_status = DDL_MEM_READ_32(shared_mem,
 					VIDC_SM_EXTENDED_DECODE_STATUS_ADDR);
+	if (resl_change)
+		*resl_change =
+				VIDC_GETFIELD(decode_status,
+				VIDC_SM_EXT_DEC_STATUS_RESOLUTION_CHANGE_BMSK,
+				VIDC_SM_EXT_DEC_STATUS_RESOLUTION_CHANGE_SHFT);
 }
 
 void vidc_sm_set_frame_tag(struct ddl_buf_addr *shared_mem,

@@ -965,3 +965,11 @@ void vidc_1080p_get_exception_status(u32 *exception_status)
 {
 	VIDC_HWIO_IN(REG_493355, exception_status);
 }
+
+void vidc_1080p_frame_start_realloc(u32 instance_id)
+{
+	VIDC_HWIO_OUT(REG_695082, VIDC_1080P_RISC2HOST_CMD_EMPTY);
+	VIDC_HWIO_OUT(REG_666957, VIDC_1080P_INIT_CH_INST_ID);
+	VIDC_HWIO_OUT(REG_666957,
+		VIDC_1080P_DEC_TYPE_FRAME_START_REALLOC | instance_id);
+}

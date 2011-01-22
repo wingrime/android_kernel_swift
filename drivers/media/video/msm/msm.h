@@ -162,7 +162,8 @@ struct msm_cam_v4l2_device {
 	 */
 	struct msm_device_queue ctrl_q;
 
-	struct msm_isp_ctrl_cmd ctrl_cmd_returned;
+	uint8_t ctrl_data[max_control_command_size];
+	struct msm_ctrl_cmd ctrl;
 };
 
 /* ISP related functions */

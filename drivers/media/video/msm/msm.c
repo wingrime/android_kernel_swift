@@ -73,15 +73,31 @@ static void msm_enqueue(struct msm_device_queue *queue,
 static int msm_ctrl_cmd_done(struct msm_cam_v4l2_device *ctrl_pmsm,
 						void __user *arg)
 {
+	void __user *uptr;
 	struct msm_queue_cmd *qcmd;
+	struct msm_ctrl_cmd *command = &ctrl_pmsm->ctrl;
 
-	if (copy_from_user(&ctrl_pmsm->ctrl_cmd_returned, arg,
-			sizeof(struct msm_isp_ctrl_cmd)))
+	if (copy_from_user(command, arg,
+			sizeof(struct msm_ctrl_cmd)))
 		return -EINVAL;
 
 	qcmd = kzalloc(sizeof(struct msm_queue_cmd), GFP_KERNEL);
 	atomic_set(&qcmd->on_heap, 0);
-	qcmd->command = &ctrl_pmsm->ctrl_cmd_returned;
+	uptr = command->value;
+	qcmd->command = command;
+
+	if (command->length > 0) {
+		command->value = ctrl_pmsm->ctrl_data;
+		if (command->length > sizeof(ctrl_pmsm->ctrl_data)) {
+			pr_err("%s: user data %d is too big (max %d)\n",
+				__func__, command->length,
+				sizeof(ctrl_pmsm->ctrl_data));
+			return -EINVAL;
+		}
+		if (copy_from_user(command->value, uptr, command->length))
+			return -EINVAL;
+	}
+
 	msm_enqueue(&ctrl_pmsm->ctrl_q, &qcmd->list_control);
 	return 0;
 }
@@ -725,22 +741,45 @@ static long msm_ioctl_config(struct file *fp, unsigned int cmd,
 
 	switch (cmd) {
 
-	case VIDIOC_DQEVENT:
+	case VIDIOC_DQEVENT: {
+		void __user *u_ctrl_value = NULL;
+		struct msm_isp_stats_event_ctrl *u_isp_event;
+		struct msm_isp_stats_event_ctrl *k_isp_event;
+
+		/* Make a copy of control value and event data pointer */
 		D("%s: VIDIOC_DQEVENT\n", __func__);
 		if (copy_from_user(&ev, (void __user *)arg,
 				sizeof(struct v4l2_event)))
 			break;
+		u_isp_event = (struct msm_isp_stats_event_ctrl *)ev.u.data;
+		u_ctrl_value = u_isp_event->isp_data.ctrl.value;
 
 		rc = v4l2_event_dequeue(&pcam->eventHandle, &ev,
 			fp->f_flags & O_NONBLOCK);
 		if (rc < 0) {
 			printk(KERN_ERR "no pending events?");
 			break;
-		} else if (copy_to_user((void __user *)arg, &ev,
-					sizeof(struct v4l2_event))) {
+		}
+
+		k_isp_event = (struct msm_isp_stats_event_ctrl *)ev.u.data;
+		if (ev.type == V4L2_EVENT_PRIVATE_START+MSM_CAM_RESP_V4L2 &&
+			u_isp_event->isp_data.ctrl.length > 0) {
+			void *k_ctrl_value = k_isp_event->isp_data.ctrl.value;
+			if (copy_to_user(u_ctrl_value, k_ctrl_value,
+				u_isp_event->isp_data.ctrl.length)) {
+				rc = -EINVAL;
+				break;
+			}
+			k_isp_event->isp_data.ctrl.value = u_ctrl_value;
+		}
+
+		if (copy_to_user((void __user *)arg, &ev,
+				sizeof(struct v4l2_event))) {
 			rc = -EINVAL;
 			break;
-			}
+		}
+		}
+
 		break;
 
 	case MSM_CAM_IOCTL_CTRL_CMD_DONE:

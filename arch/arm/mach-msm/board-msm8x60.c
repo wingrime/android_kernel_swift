@@ -541,7 +541,7 @@ static struct platform_device smsc911x_device = {
 #define ADM_CRCI_0_OUT		DMOV_CE_CRCI_OUT
 #define ADM_CRCI_0_HASH		DMOV_CE_CRCI_HASH
 
-static struct resource qce_resources[] = {
+static struct resource qcrypto_resources[] = {
 	[0] = {
 		.start = QCE_0_BASE,
 		.end = QCE_0_BASE + QCE_SIZE - 1,
@@ -573,6 +573,37 @@ static struct resource qce_resources[] = {
 	},
 };
 
+static struct resource qcedev_resources[] = {
+	[0] = {
+		.start = QCE_0_BASE,
+		.end = QCE_0_BASE + QCE_SIZE - 1,
+		.flags = IORESOURCE_MEM,
+	},
+	[1] = {
+		.name = "crypto_channels",
+		.start = ADM_CHANNEL_CE_0_IN,
+		.end = ADM_CHANNEL_CE_0_OUT,
+		.flags = IORESOURCE_DMA,
+	},
+	[2] = {
+		.name = "crypto_crci_in",
+		.start = ADM_CRCI_0_IN,
+		.end = ADM_CRCI_0_IN,
+		.flags = IORESOURCE_DMA,
+	},
+	[3] = {
+		.name = "crypto_crci_out",
+		.start = ADM_CRCI_0_OUT,
+		.end = ADM_CRCI_0_OUT,
+		.flags = IORESOURCE_DMA,
+	},
+	[4] = {
+		.name = "crypto_crci_hash",
+		.start = ADM_CRCI_0_HASH,
+		.end = ADM_CRCI_0_HASH,
+		.flags = IORESOURCE_DMA,
+	},
+};
 #endif
 
 #if defined(CONFIG_CRYPTO_DEV_QCRYPTO) || \
@@ -587,8 +618,8 @@ static struct msm_ce_hw_support qcrypto_ce_hw_suppport = {
 static struct platform_device qcrypto_device = {
 	.name		= "qcrypto",
 	.id		= 0,
-	.num_resources	= ARRAY_SIZE(qce_resources),
-	.resource	= qce_resources,
+	.num_resources	= ARRAY_SIZE(qcrypto_resources),
+	.resource	= qcrypto_resources,
 	.dev		= {
 		.coherent_dma_mask = DMA_BIT_MASK(32),
 		.platform_data = &qcrypto_ce_hw_suppport,
@@ -608,8 +639,8 @@ static struct msm_ce_hw_support qcedev_ce_hw_suppport = {
 static struct platform_device qcedev_device = {
 	.name		= "qce",
 	.id		= 0,
-	.num_resources	= ARRAY_SIZE(qce_resources),
-	.resource	= qce_resources,
+	.num_resources	= ARRAY_SIZE(qcedev_resources),
+	.resource	= qcedev_resources,
 	.dev		= {
 		.coherent_dma_mask = DMA_BIT_MASK(32),
 		.platform_data = &qcedev_ce_hw_suppport,

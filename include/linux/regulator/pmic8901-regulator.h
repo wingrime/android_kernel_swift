@@ -73,6 +73,10 @@
 #define PM8901_VREG_PIN_CTRL_D0		0x04
 #define PM8901_VREG_PIN_CTRL_D1		0x08
 
+/* Minimum high power mode loads in uA. */
+#define PM8901_VREG_LDO_300_HPM_MIN_LOAD	10000
+#define PM8901_VREG_FTSMPS_HPM_MIN_LOAD		100000
+
 /* Pin ctrl enables/disables or toggles high/low power modes */
 enum pm8901_vreg_pin_fn {
 	PM8901_VREG_PIN_FN_ENABLE = 0,

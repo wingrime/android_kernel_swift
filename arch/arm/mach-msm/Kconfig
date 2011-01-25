@@ -71,6 +71,17 @@ config ARCH_MSM8X60
 	select MSM_GPIOMUX
 	select MSM_BUS_SCALING
 
+config ARCH_MSM8960
+	bool "MSM8960"
+	select ARCH_MSM_SCORPIONMP
+	select MACH_MSM8960_SIM
+	select ARM_GIC
+	select CPU_V7
+	select MSM_V2_TLMM
+	select MSM_GPIOMUX
+	select MSM_SCM if SMP
+	select MSM_DIRECT_SCLK_ACCESS
+
 endchoice
 
 choice
@@ -348,6 +359,12 @@ config MACH_MSM8X60_CHARM_FFA
 	bool "MSM8x60 CHARM FFA"
 	help
 	  Support for the Qualcomm MSM8x60 Charm FFA device.
+
+config MACH_MSM8960_SIM
+	depends on ARCH_MSM8960
+	bool "MSM8960 Simulator"
+	help
+	  Support for the Qualcomm MSM8960 simulator.
 
 endmenu
 

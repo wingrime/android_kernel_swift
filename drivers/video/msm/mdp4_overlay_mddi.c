@@ -643,3 +643,15 @@ void mdp4_mddi_overlay(struct msm_fb_data_type *mfd)
 	mdp4_overlay_resource_release();
 	mutex_unlock(&mfd->dma->ov_mutex);
 }
+
+int mdp4_mddi_overlay_cursor(struct fb_info *info, struct fb_cursor *cursor)
+{
+	struct msm_fb_data_type *mfd = info->par;
+	mutex_lock(&mfd->dma->ov_mutex);
+	if (mfd && mfd->panel_power_on) {
+		mdp4_mddi_dma_busy_wait(mfd, mddi_pipe);
+		mdp_hw_cursor_update(info, cursor);
+	}
+	mutex_unlock(&mfd->dma->ov_mutex);
+	return 0;
+}

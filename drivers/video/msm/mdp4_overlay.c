@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2010, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2009-2011, Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -1705,6 +1705,18 @@ int mdp4_overlay_unset(struct fb_info *info, int ndx)
 		ctrl->mixer1_played = 0;
 	else
 		ctrl->mixer0_played = 0;
+
+#ifdef CONFIG_FB_MSM_MIPI_DSI
+	if (ctrl->panel_mode & MDP4_PANEL_DSI_CMD) {
+		if (mfd->panel_power_on)
+			mdp4_dsi_cmd_dma_busy_wait(mfd, pipe);
+	}
+#else
+	if (ctrl->panel_mode & MDP4_PANEL_MDDI) {
+		if (mfd->panel_power_on)
+			mdp4_mddi_dma_busy_wait(mfd, pipe);
+	}
+#endif
 
 	mdp4_mixer_stage_down(pipe);
 

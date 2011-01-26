@@ -509,7 +509,7 @@ struct sdio_al_device {
 
 	struct workqueue_struct *workqueue;
 	struct sdio_al_work sdio_al_work;
-	struct work_struct boot_work;
+	struct sdio_al_work boot_work;
 
 	int is_ready;
 
@@ -672,10 +672,11 @@ static inline int is_inactive_time_expired(struct sdio_al_device *sdio_al_dev)
 }
 
 
-static int is_user_irq_enabled(int func_num)
+static int is_user_irq_enabled(struct sdio_al_device *sdio_al_dev,
+			       int func_num)
 {
 	int ret = 0;
-	struct sdio_func *func1 = sdio_al->bootloader_dev->card->sdio_func[0];
+	struct sdio_func *func1 = sdio_al_dev->card->sdio_func[0];
 	u32 user_irq = 0;
 	u32 addr = 0;
 	u32 offset = 0;
@@ -1039,47 +1040,56 @@ static void boot_worker(struct work_struct *work)
 	int ret = 0;
 	int func_num = 0;
 	int i;
-	struct sdio_func *func1 = sdio_al->bootloader_dev->card->sdio_func[0];
+	struct sdio_func *func1 = NULL;
+	struct sdio_al_device *sdio_al_dev = NULL;
+	struct sdio_al_work *sdio_al_work = container_of(work,
+							 struct sdio_al_work,
+							 work);
 
-	pr_info(MODULE_NAME ":Bootloader Worker Started..\n");
-	if (sdio_al->bootloader_dev->flashless_boot_on) {
-		pr_info(MODULE_NAME ":Wait for bootloader_done event..\n");
-		wait_event(sdio_al->bootloader_dev->wait_mbox,
-			   sdio_al->bootloader_dev->bootloader_done);
-		pr_info(MODULE_NAME ":Got bootloader_done event..\n");
-		/* Do polling until MDM is up */
-		for (i = 0; i < 50 ; ++i) {
-			sdio_claim_host(func1);
-			if (is_user_irq_enabled(func_num)) {
-				sdio_release_host(func1);
-				sdio_al->bootloader_dev->bootloader_done = 0;
-				for (i = 0; i < MAX_NUM_OF_SDIO_DEVICES; ++i) {
-					struct sdio_al_device *dev = NULL;
-					if (sdio_al->devices[i] == NULL)
-						continue;
-					dev = sdio_al->devices[i];
-					ret = sdio_al_client_setup(dev);
-					if (ret) {
-						pr_err(MODULE_NAME ":"
-						"sdio_al_client_setup failed, "
-						"for card %d ret=%d\n",
-						dev->card->host->index,
-						ret);
-						dev->is_err = true;
-					}
-				}
-				goto done;
-			}
-			sdio_release_host(func1);
-			msleep(100);
-		}
-		pr_err(MODULE_NAME "Timeout waiting for user_irq, go to "
-				   "error state\n");
-		sdio_al->bootloader_dev->is_err = true;
+	if (sdio_al_work == NULL) {
+		pr_err(MODULE_NAME ": %s: NULL sdio_al_work\n", __func__);
+		return;
 	}
 
+	sdio_al_dev = sdio_al_work->sdio_al_dev;
+	if (sdio_al_dev == NULL) {
+		pr_err(MODULE_NAME ": %s: NULL sdio_al_dev\n", __func__);
+		return;
+	}
+	func1 = sdio_al_dev->card->sdio_func[0];
+
+	pr_info(MODULE_NAME ":Bootloader Worker Started..\n");
+	pr_info(MODULE_NAME ":Wait for bootloader_done event..\n");
+	wait_event(sdio_al_dev->wait_mbox,
+		   sdio_al_dev->bootloader_done);
+	pr_info(MODULE_NAME ":Got bootloader_done event..\n");
+	/* Do polling until MDM is up */
+	for (i = 0; i < 50 ; ++i) {
+		sdio_claim_host(func1);
+		if (is_user_irq_enabled(sdio_al_dev, func_num)) {
+			sdio_release_host(func1);
+			sdio_al_dev->bootloader_done = 0;
+			ret = sdio_al_client_setup(sdio_al_dev);
+			if (ret) {
+				pr_err(MODULE_NAME ":"
+				"sdio_al_client_setup failed, "
+				"for card %d ret=%d\n",
+				sdio_al_dev->card->host->index,
+				ret);
+				sdio_al_dev->is_err = true;
+			}
+			goto done;
+		}
+		sdio_release_host(func1);
+		msleep(100);
+	}
+	pr_err(MODULE_NAME ":Timeout waiting for user_irq for card %d\n",
+	       sdio_al_dev->card->host->index);
+	sdio_al_dev->is_err = true;
+
 done:
-	pr_info(MODULE_NAME ":Boot Worker Exit!\n");
+	pr_info(MODULE_NAME ":Boot Worker for card %d Exit!\n",
+		sdio_al_dev->card->host->index);
 }
 
 /**
@@ -1309,9 +1319,61 @@ static void set_default_channels_config(struct sdio_al_device *sdio_al_dev)
 
 static int sdio_al_bootloader_completed(void)
 {
+	int i;
+
 	pr_info(MODULE_NAME ":sdio_al_bootloader_completed was called\n");
-	sdio_al->bootloader_dev->bootloader_done = 1;
-	wake_up(&sdio_al->bootloader_dev->wait_mbox);
+
+	for (i = 0; i < MAX_NUM_OF_SDIO_DEVICES; ++i) {
+		struct sdio_al_device *dev = NULL;
+		if (sdio_al->devices[i] == NULL)
+			continue;
+		dev = sdio_al->devices[i];
+		dev->bootloader_done = 1;
+		wake_up(&dev->wait_mbox);
+	}
+
+	return 0;
+}
+
+static int sdio_al_wait_for_bootloader_comp(struct sdio_al_device *sdio_al_dev)
+{
+	int ret = 0;
+
+	struct mmc_card *card = NULL;
+	struct sdio_func *func1;
+
+	card = sdio_al_dev->card;
+	if (card == NULL) {
+		pr_err(MODULE_NAME ":No Card detected\n");
+		return -ENODEV;
+	}
+	func1 = card->sdio_func[0];
+
+	sdio_claim_host(func1);
+	/*
+	 * Enable function 0 interrupt mask to allow 9k to raise this interrupt
+	 * in power-up. When sdio_downloader will notify its completion
+	 * we will poll on this interrupt to wait for 9k power-up
+	 */
+	ret = enable_mask_irq(sdio_al_dev, 0, 1, 0);
+	if (ret) {
+		pr_err(MODULE_NAME ":Enable_mask_irq for card %d failed, "
+				   "ret=%d\n",
+		       sdio_al_dev->card->host->index, ret);
+		sdio_release_host(func1);
+		return ret;
+	}
+
+	sdio_release_host(func1);
+
+	/*
+	 * Start bootloader worker that will wait for the bootloader
+	 * completion
+	 */
+	sdio_al_dev->boot_work.sdio_al_dev = sdio_al_dev;
+	INIT_WORK(&sdio_al_dev->boot_work.work, boot_worker);
+	sdio_al_dev->bootloader_done = 0;
+	queue_work(sdio_al_dev->workqueue, &sdio_al_dev->boot_work.work);
 
 	return 0;
 }
@@ -1319,17 +1381,24 @@ static int sdio_al_bootloader_completed(void)
 static int sdio_al_bootloader_setup(void)
 {
 	int ret = 0;
-	struct mmc_card *card = sdio_al->bootloader_dev->card;
+	struct mmc_card *card = NULL;
 	struct sdio_func *func1;
 	struct sdio_al_device *bootloader_dev = sdio_al->bootloader_dev;
 
-	if (card == NULL) {
-		pr_err(MODULE_NAME ":No Card detected\n");
+	if (bootloader_dev == NULL) {
+		pr_err(MODULE_NAME ":No bootloader_dev\n");
 		return -ENODEV;
 	}
 
-	if (bootloader_dev == NULL) {
-		pr_err(MODULE_NAME ":No bootloader_dev\n");
+
+	if (bootloader_dev->flashless_boot_on) {
+		pr_info(MODULE_NAME ":Already in boot process.\n");
+		return 0;
+	}
+
+	card = sdio_al->bootloader_dev->card;
+	if (card == NULL) {
+		pr_err(MODULE_NAME ":No Card detected\n");
 		return -ENODEV;
 	}
 
@@ -1364,14 +1433,6 @@ static int sdio_al_bootloader_setup(void)
 		goto exit_err;
 	}
 
-	if (bootloader_dev->flashless_boot_on) {
-		pr_err(MODULE_NAME ":MDM is not up after bootloader "
-				   "completed.\n");
-		sdio_release_host(func1);
-		ret = -EINVAL;
-		goto exit_err;
-	}
-
 	/* Upper byte has to be equal - no backward compatibility for unequal */
 	if ((bootloader_dev->sdioc_boot_sw_header->version >> 16) !=
 	    (PEER_SDIOC_BOOT_VERSION_MAJOR)) {
@@ -1387,27 +1448,14 @@ static int sdio_al_bootloader_setup(void)
 
 	bootloader_dev->flashless_boot_on = true;
 
-	/*
-	 * Enable function 0 interrupt mask to allow 9k to raise this interrupt
-	 * in power-up. When sdio_downloader will notify its completion
-	 * we will poll on this interrupt to wait for 9k power-up
-	 */
-	ret = enable_mask_irq(bootloader_dev, 0, 1, 0);
-	if (ret) {
-		pr_err(MODULE_NAME ":Enable_mask_irq failed, ret=%d\n", ret);
-		sdio_release_host(func1);
-		goto exit_err;
-	}
-
 	sdio_release_host(func1);
 
-	/*
-	 * Start bootloader worker that will wait for the bootloader
-	 * completion
-	 */
-	INIT_WORK(&bootloader_dev->boot_work, boot_worker);
-	bootloader_dev->bootloader_done = 0;
-	queue_work(bootloader_dev->workqueue, &bootloader_dev->boot_work);
+	ret = sdio_al_wait_for_bootloader_comp(bootloader_dev);
+	if (ret) {
+		pr_err(MODULE_NAME ":sdio_al_wait_for_bootloader_comp failed, "
+				   "err=%d\n", ret);
+		goto exit_err;
+	}
 
 	ret = sdio_downloader_setup(bootloader_dev->card, 1,
 			bootloader_dev->sdioc_boot_sw_header->boot_ch_num,
@@ -1427,6 +1475,7 @@ exit_err:
 	pr_info(MODULE_NAME ":free sdioc_boot_sw_header.\n");
 	kfree(bootloader_dev->sdioc_boot_sw_header);
 	bootloader_dev->sdioc_boot_sw_header = NULL;
+	bootloader_dev = NULL;
 
 	return ret;
 }
@@ -2751,7 +2800,16 @@ static int sdio_al_client_setup(struct sdio_al_device *sdio_al_dev)
 
 	switch (signature) {
 	case PEER_SDIOC_SW_MAILBOX_BOOT_SIGNATURE:
-		return sdio_al_bootloader_setup();
+		if (sdio_al_dev == sdio_al->bootloader_dev) {
+			pr_info(MODULE_NAME ":setup bootloader on card %d\n",
+				sdio_al_dev->card->host->index);
+			return sdio_al_bootloader_setup();
+		} else {
+			pr_info(MODULE_NAME ":wait for bootloader completion "
+					    "on card %d\n",
+				sdio_al_dev->card->host->index);
+			return sdio_al_wait_for_bootloader_comp(sdio_al_dev);
+		}
 	case PEER_SDIOC_SW_MAILBOX_SIGNATURE:
 	case PEER_SDIOC_SW_MAILBOX_UT_SIGNATURE:
 		return init_channels(sdio_al_dev);

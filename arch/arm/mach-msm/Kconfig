@@ -372,6 +372,13 @@ config MACH_MSM8960_RUMI3
 	help
 	  Support for the Qualcomm MSM8960 RUMI3 emulator.
 
+config MACH_MSM8X60_QT
+	depends on ARCH_MSM8X60
+	default n
+	bool "MSM8x60 QT"
+	help
+	  Support for the Qualcomm MSM8x60 QT board.
+
 endmenu
 
 config MSM_STACKED_MEMORY

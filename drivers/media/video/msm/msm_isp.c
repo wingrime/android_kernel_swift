@@ -148,10 +148,11 @@ static inline void free_qcmd(struct msm_queue_cmd *qcmd)
 
 /* send control command to config and wait for results*/
 static int msm_isp_control(struct msm_cam_v4l2_device *pcam,
-				struct msm_ctrl_cmd *out)
+				struct msm_isp_ctrl_cmd *out)
 {
 	int rc = 0;
 	struct msm_queue_cmd *rcmd;
+	struct msm_isp_ctrl_cmd *ctrl_return;
 	struct msm_device_queue *queue =  &pcam->ctrl_q;
 
 	struct v4l2_event v4l2_evt;
@@ -189,6 +190,9 @@ static int msm_isp_control(struct msm_cam_v4l2_device *pcam,
 	rcmd = msm_dequeue(queue, list_control);
 	BUG_ON(!rcmd);
 	D("%s Finished servicing ioctl\n", __func__);
+
+	ctrl_return = (struct msm_isp_ctrl_cmd *)(rcmd->command);
+	memcpy(out, ctrl_return, sizeof(struct msm_isp_ctrl_cmd));
 
 	free_qcmd(rcmd);
 	D("%s: rc %d\n", __func__, rc);
@@ -1695,7 +1699,7 @@ int msm_isp_set_fmt(struct msm_cam_v4l2_device *pcam, struct v4l2_format *pfmt)
 	int rc = 0;
 	int i = 0;
 	struct v4l2_pix_format *pix = &pfmt->fmt.pix;
-	struct msm_ctrl_cmd ctrlcmd;
+	struct msm_isp_ctrl_cmd ctrlcmd;
 
 	D("%s: %d, %d, 0x%x\n", __func__,
 		pfmt->fmt.pix.width, pfmt->fmt.pix.height,
@@ -1704,10 +1708,12 @@ int msm_isp_set_fmt(struct msm_cam_v4l2_device *pcam, struct v4l2_format *pfmt)
 	if (pfmt->type != V4L2_BUF_TYPE_VIDEO_CAPTURE)
 		D("%s, Attention! Wrong buf-type %d\n", __func__, pfmt->type);
 
-	ctrlcmd.type = MSM_V4L2_VID_CAP_TYPE;
-	ctrlcmd.length = 0;
-	ctrlcmd.value = NULL;
+	ctrlcmd.type       = MSM_V4L2_VID_CAP_TYPE;
+	ctrlcmd.length     = MSM_V4L2_DIMENSION_SIZE;
+	memcpy((void *)ctrlcmd.value, (const void *)pfmt->fmt.pix.priv,
+						MSM_V4L2_DIMENSION_SIZE);
 	ctrlcmd.timeout_ms = 10000;
+	kfree((const void *)pfmt->fmt.pix.priv);
 
 	/* send command to config thread in usersspace, and get return value */
 	rc = msm_isp_control(pcam, &ctrlcmd);
@@ -1783,12 +1789,11 @@ static int msm_isp_init_vidbuf(struct videobuf_queue *q,
 int msm_isp_streamon(struct msm_cam_v4l2_device *pcam)
 {
 	int rc = 0;
-	struct msm_ctrl_cmd ctrlcmd;
+	struct msm_isp_ctrl_cmd ctrlcmd;
 	D("%s\n", __func__);
 	ctrlcmd.type	   = MSM_V4L2_STREAM_ON;
 	ctrlcmd.timeout_ms = 10000;
 	ctrlcmd.length	 = 0;
-	ctrlcmd.value	  = NULL;
 
 	/* send command to config thread in usersspace, and get return value */
 	rc = msm_isp_control(pcam, &ctrlcmd);
@@ -1799,18 +1804,55 @@ int msm_isp_streamon(struct msm_cam_v4l2_device *pcam)
 int msm_isp_streamoff(struct msm_cam_v4l2_device *pcam)
 {
 	int rc = 0;
-	struct msm_ctrl_cmd ctrlcmd;
+	struct msm_isp_ctrl_cmd ctrlcmd;
 
 	D("%s, pcam = 0x%x\n", __func__, (u32)pcam);
 	ctrlcmd.type	   = MSM_V4L2_STREAM_OFF;
 	ctrlcmd.timeout_ms = 10000;
 	ctrlcmd.length	 = 0;
-	ctrlcmd.value	  = NULL;
 
 	/* send command to config thread in usersspace, and get return value */
 	rc = msm_isp_control(pcam, &ctrlcmd);
 
 	return rc;
+}
+
+int msm_isp_s_ctrl(struct msm_cam_v4l2_device *pcam, struct v4l2_control *ctrl)
+{
+	int rc = 0;
+	struct msm_isp_ctrl_cmd ctrlcmd;
+
+	WARN_ON(ctrl == NULL);
+
+	ctrlcmd.type = MSM_V4L2_SET_CTRL;
+	ctrlcmd.length = sizeof(struct v4l2_control);
+	memcpy(ctrlcmd.value, ctrl, ctrlcmd.length);
+	ctrlcmd.timeout_ms = 1000;
+
+	/* send command to config thread in usersspace, and get return value */
+	rc = msm_isp_control(pcam, &ctrlcmd);
+
+	return rc;
+}
+
+int msm_isp_g_ctrl(struct msm_cam_v4l2_device *pcam, struct v4l2_control *ctrl)
+{
+    int rc = 0;
+	struct msm_isp_ctrl_cmd ctrlcmd;
+
+	WARN_ON(ctrl == NULL);
+
+	ctrlcmd.type = MSM_V4L2_GET_CTRL;
+	ctrlcmd.length = sizeof(struct v4l2_control);
+	memcpy(ctrlcmd.value, ctrl, ctrlcmd.length);
+	ctrlcmd.timeout_ms = 1000;
+
+	/* send command to config thread in usersspace, and get return value */
+	rc = msm_isp_control(pcam, &ctrlcmd);
+
+    ctrl->value = ((struct v4l2_control *)ctrlcmd.value)->value;
+
+    return rc;
 }
 
 /* Init a msm device for ISP control,

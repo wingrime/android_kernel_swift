@@ -1,4 +1,4 @@
-/* Copyright (c) 2010, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2010-2011, Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -28,8 +28,8 @@
 #include <linux/suspend.h>
 #include <linux/interrupt.h>
 #include <mach/msm_iomap.h>
+#include <mach/scm-io.h>
 
-#define TCSR_BASE 0x16B00000
 #define TCSR_WDT_CFG 0x30
 
 #define WDT0_RST	(MSM_TMR0_BASE + 0x38)
@@ -58,7 +58,6 @@ module_param(enable, int, 0);
 static int print_all_stacks = 1;
 module_param(print_all_stacks, int,  S_IRUGO | S_IWUSR);
 
-static void *tcsr_base;
 static void pet_watchdog(struct work_struct *work);
 static DECLARE_DELAYED_WORK(dogwork_struct, pet_watchdog);
 
@@ -95,7 +94,7 @@ static int panic_wdog_handler(struct notifier_block *this,
 {
 	if (panic_timeout == 0) {
 		writel(0, WDT0_EN);
-		writel(0, tcsr_base + TCSR_WDT_CFG);
+		secure_writel(0, MSM_TCSR_BASE + TCSR_WDT_CFG);
 	} else {
 		writel(32768 * (panic_timeout + 4), WDT0_BARK_TIME);
 		writel(32768 * (panic_timeout + 4), WDT0_BITE_TIME);
@@ -127,8 +126,7 @@ static void __exit exit_watchdog(void)
 		writel(0, WDT0_EN);
 		unregister_pm_notifier(&msm_watchdog_power_notifier);
 		writel(0, WDT0_EN); /* In case we got suspended mid-exit */
-		writel(0, tcsr_base + TCSR_WDT_CFG);
-		iounmap(tcsr_base);
+		secure_writel(0, MSM_TCSR_BASE + TCSR_WDT_CFG);
 		free_irq(WDT0_ACCSCSSNBARK_INT, 0);
 		enable = 0;
 	}
@@ -173,11 +171,7 @@ static int __init init_watchdog(void)
 {
 	int ret;
 	if (enable) {
-		tcsr_base = ioremap_nocache(TCSR_BASE, SZ_4K);
-		if (tcsr_base == NULL)
-			return -ENOMEM;
-
-		writel(1, tcsr_base + TCSR_WDT_CFG);
+		secure_writel(1, MSM_TCSR_BASE + TCSR_WDT_CFG);
 		delay_time = msecs_to_jiffies(PET_DELAY);
 
 		/* 32768 ticks = 1 second */

@@ -28,8 +28,8 @@
 
 #include <mach/msm_iomap.h>
 #include <mach/restart.h>
+#include <mach/scm-io.h>
 
-#define TCSR_BASE 0x16B00000
 #define TCSR_WDT_CFG 0x30
 
 #define WDT0_RST       (MSM_TMR0_BASE + 0x38)
@@ -42,7 +42,6 @@
 #define RESTART_REASON_ADDR 0x2A05F010
 
 static int restart_mode;
-static void *tcsr_base;
 
 #ifdef CONFIG_MSM_DLOAD_MODE
 static int in_panic;
@@ -127,8 +126,7 @@ void arch_reset(char mode, const char *cmd)
 	writel(0x31F3, WDT0_BITE_TIME);
 	writel(3, WDT0_EN);
 	dmb();
-	if (tcsr_base != NULL)
-		writel(3, tcsr_base + TCSR_WDT_CFG);
+	secure_writel(3, MSM_TCSR_BASE + TCSR_WDT_CFG);
 
 	mdelay(10000);
 }
@@ -140,10 +138,6 @@ static int __init msm_restart_init(void)
 #endif
 
 	pm_power_off = msm_power_off;
-
-	tcsr_base = ioremap_nocache(TCSR_BASE, SZ_4K);
-	if (tcsr_base == NULL)
-		return -ENOMEM;
 
 	return 0;
 }

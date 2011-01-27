@@ -1,0 +1,72 @@
+Introduction
+============
+
+The driver is an implementation of Nokia Security Architecture.
+
+Right now, this driver is for 7x30 and 8x55 platforms.
+
+
+Hardware description
+====================
+
+There is no real hardware interaction. The driver loads the protected
+applications into TrustZone and operates on them as required.
+
+
+Software description
+====================
+
+The driver is built in two layers. A platform independent layer called
+"romlite_sec" layer and a platform dependent layer called "romlite_hs" layer.
+This driver provides an interface to the libbb5 from Nokia in userspace to
+load/read/write data to the protected applications inside TrustZone.
+
+
+Design
+======
+
+Both the layers of the driver are implemented as loadable kernel modules.
+The driver performs the setup and communication with protected applications
+which are to be loaded to execute in TrustZone.
+
+The driver provides the user application with functionality to load multiple
+protected applications into TrustZone as per the use case. It then provides
+a communication mechanism to load parameters and return results to this
+protected application.
+
+
+Interface
+=========
+
+There are no exported kernel APIs.
+
+The kernel driver registers itself as a misc driver and hence a device node
+"/dev/romlite_sec" will be created for the user space program to open and
+interact with kernel using standard file operations.
+
+
+Driver parameters
+=================
+
+1. kci: It is an unsigned integer used to decide which protected application
+is to be used.
+
+2. minor: It is an unsigned integer used to set the minor version of driver.
+
+
+Config options
+==============
+
+There is one required Config:
+
+CONFIG_ENABLE_ROMLITE would enable the build for this driver.
+
+
+User space utilities
+====================
+
+Nokia libbb5 would make use of this driver from userpace to make calls into
+TrustZone.
+
+
+TrustZone is a registered trademark of ARM holding.

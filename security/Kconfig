@@ -137,6 +137,18 @@ config LSM_MMAP_MIN_ADDR
 	  this low address space will need the permission specific to the
 	  systems running LSM.
 
+config ENABLE_ROMLITE
+	tristate "Enable TrustZone based Nokia Security"
+	default n
+	help
+	  This option enables the TrustZone based Nokia Security Architecture.
+	  The driver is built in two layers. A platform independent layer called
+	  "romlite_sec" layer and a platform dependent layer called "romlite_hs" layer.
+	  This driver provides an interface to the libbb5 from Nokia in userspace to
+	  load/read/write data to the protected applications inside TrustZone.
+
+	  TrustZone is a registered trademark of ARM holding.
+
 source security/selinux/Kconfig
 source security/smack/Kconfig
 source security/tomoyo/Kconfig

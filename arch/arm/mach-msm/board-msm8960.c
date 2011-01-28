@@ -29,6 +29,8 @@
 
 #include "timer.h"
 
+#include "devices.h"
+
 static void __init msm8960_map_io(void)
 {
 	msm_map_msm8960_io();
@@ -59,14 +61,24 @@ static void __init msm8960_init_irq(void)
 	}
 }
 
+static struct platform_device *sim_devices[] __initdata = {
+	&msm8960_device_uart_gsbi2,
+};
+
+static struct platform_device *rumi3_devices[] __initdata = {
+	&msm8960_device_uart_gsbi5,
+};
+
 static void __init msm8960_sim_init(void)
 {
 	msm_clock_init(msm_clocks_8960, msm_num_clocks_8960);
+	platform_add_devices(sim_devices, ARRAY_SIZE(sim_devices));
 }
 
 static void __init msm8960_rumi3_init(void)
 {
 	msm_clock_init(msm_clocks_8960, msm_num_clocks_8960);
+	platform_add_devices(rumi3_devices, ARRAY_SIZE(rumi3_devices));
 }
 
 MACHINE_START(MSM8960_SIM, "QCT MSM8960 SIMULATOR")

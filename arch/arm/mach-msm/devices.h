@@ -32,6 +32,9 @@ extern struct platform_device msm_device_uart_dm3;
 extern struct platform_device msm_device_uart_dm12;
 extern struct platform_device msm_device_uart_gsbi9;
 
+extern struct platform_device msm8960_device_uart_gsbi2;
+extern struct platform_device msm8960_device_uart_gsbi5;
+
 extern struct platform_device msm_device_sdc1;
 extern struct platform_device msm_device_sdc2;
 extern struct platform_device msm_device_sdc3;

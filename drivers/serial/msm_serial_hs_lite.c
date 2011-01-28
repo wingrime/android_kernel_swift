@@ -87,7 +87,7 @@ static inline unsigned int msm_hsl_read(struct uart_port *port,
 
 static unsigned int msm_serial_hsl_has_gsbi(void)
 {
-#ifdef CONFIG_ARCH_MSM8X60
+#if defined(CONFIG_ARCH_MSM8X60) || defined(CONFIG_ARCH_MSM8960)
 	return 1;
 #else
 	return 0;

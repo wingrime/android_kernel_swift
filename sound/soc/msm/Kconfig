@@ -116,4 +116,17 @@ config MSM_8x60_VOIP
 	 To support ALSA VOIP driver for MSM8x60 target.
 	 This driver communicates with QDSP6, for getting
 	 uplink and downlink voice packets.
+
+config SND_SOC_MSM8660_QRDC
+       tristate "SoC Machine driver for MSM8660 QRDC"
+       select SND_SOC_MSM8660_PCM
+       select SND_SOC_MSM8660_LPAIF
+       select SND_SOC_WM8994
+       select SND_SOC_WM_HUBS
+       select MFD_WM8994
+       default n
+       help
+        To add support for SoC audio on MSM8660 QRDC for direct playback
+        and capture over hardware DMA.
+
 endmenu

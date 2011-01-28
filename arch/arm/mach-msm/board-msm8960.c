@@ -42,6 +42,7 @@
 #include "devices.h"
 #include "devices-msm8x60.h"
 #include "gpiomux.h"
+#include "board-msm8960.h"
 
 struct msm_gpiomux_config msm8960_gpiomux_configs[NR_GPIO_IRQS] = {};
 
@@ -453,6 +454,7 @@ static struct pm8921_platform_data pm8921_platform_data __devinitdata = {
 	.mpp_pdata		= &pm8xxx_mpp_pdata,
 	.rtc_pdata              = &pm8xxx_rtc_pdata,
 	.pwrkey_pdata		= &pm8xxx_pwrkey_pdata,
+	.regulator_pdatas	= msm_pm8921_regulator_pdata,
 };
 
 static struct msm_ssbi_platform_data msm8960_ssbi_pm8921_pdata __devinitdata = {
@@ -470,6 +472,7 @@ static void __init msm8960_sim_init(void)
 	msm_clock_init(msm_clocks_8960, msm_num_clocks_8960);
 	msm8960_device_ssbi_pm8921.dev.platform_data =
 				&msm8960_ssbi_pm8921_pdata;
+	pm8921_platform_data.num_regulators = msm_pm8921_regulator_pdata_len;
 	msm8960_device_qup_spi_gsbi1.dev.platform_data =
 				&msm8960_qup_spi_gsbi1_pdata;
 
@@ -491,6 +494,7 @@ static void __init msm8960_rumi3_init(void)
 	gpiomux_init();
 	msm8960_device_ssbi_pm8921.dev.platform_data =
 				&msm8960_ssbi_pm8921_pdata;
+	pm8921_platform_data.num_regulators = msm_pm8921_regulator_pdata_len;
 	msm8960_device_qup_spi_gsbi1.dev.platform_data =
 				&msm8960_qup_spi_gsbi1_pdata;
 	msm8960_i2c_init();

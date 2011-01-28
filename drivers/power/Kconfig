@@ -181,12 +181,11 @@ config SMB137B_CHARGER
 	default n
 	depends on I2C
 	help
-         The smb137b charger chip from summit is a switching mode based
-	 charging solution.
-
-         Choose Y if you are compiling for Qualcomm's msm8x60 fluid board.
-	 To compile this driver as a module, choose M here: the module will
-	 be called smb137b.
+	  The smb137b charger chip from summit is a switching mode based
+	  charging solution.
+	  Choose Y if you are compiling for Qualcomm's msm8x60 fluid board.
+	  To compile this driver as a module, choose M here: the module will
+	  be called smb137b.
 
 config BATTERY_MSM_FAKE
 	tristate "Fake MSM battery"
@@ -209,7 +208,21 @@ config BATTERY_QCIBAT
 	depends on SENSORS_WPCE775X
 	default n
 	help
-	 Say Y here if you want to use the Quanta battery driver for ST15
-	 platform.
+	  Say Y here if you want to use the Quanta battery driver for ST15
+	  platform.
+
+config BATTERY_BQ27520
+	tristate "BQ27520 battery driver"
+	depends on I2C
+	default n
+	help
+	  Say Y here to enable support for batteries with BQ27520 (I2C) chips.
+
+config BQ27520_TEST_ENABLE
+	bool "Enable BQ27520 Fuel Gauge Chip Test"
+	depends on BATTERY_BQ27520
+	default n
+	help
+	  Say Y here to enable Test sysfs Interface for BQ27520 Drivers.
 
 endif # POWER_SUPPLY

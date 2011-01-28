@@ -123,6 +123,7 @@ struct kgsl_mmu {
 	uint32_t        va_base;
 	unsigned int     va_range;
 	struct kgsl_memdesc    dummyspace;
+	struct kgsl_mmu_reg    reg;
 	/* current page table object being used by device mmu */
 	struct kgsl_pagetable  *defaultpagetable;
 	struct kgsl_pagetable  *hwpagetable;

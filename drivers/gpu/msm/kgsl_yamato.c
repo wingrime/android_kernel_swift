@@ -92,6 +92,19 @@ static struct kgsl_yamato_device yamato_device = {
 			.mpu_range =  0xFFFFF000,
 			.va_base = 0x66000000,
 			/* va_range is set by the platform file */
+			.reg = {
+				.config = REG_MH_MMU_CONFIG,
+				.mpu_base = REG_MH_MMU_MPU_BASE,
+				.mpu_end = REG_MH_MMU_MPU_END,
+				.va_range = REG_MH_MMU_VA_RANGE,
+				.pt_page = REG_MH_MMU_PT_BASE,
+				.page_fault = REG_MH_MMU_PAGE_FAULT,
+				.tran_error = REG_MH_MMU_TRAN_ERROR,
+				.invalidate = REG_MH_MMU_INVALIDATE,
+				.interrupt_mask = REG_MH_INTERRUPT_MASK,
+				.interrupt_status = REG_MH_INTERRUPT_STATUS,
+				.interrupt_clear = REG_MH_INTERRUPT_CLEAR
+			},
 		},
 		.mutex = __MUTEX_INITIALIZER(yamato_device.dev.mutex),
 		.state = KGSL_STATE_INIT,

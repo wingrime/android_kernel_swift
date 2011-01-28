@@ -202,12 +202,6 @@
 #define NCP_UV_MAX			3050000
 #define NCP_UV_STEP			50000
 
-/* Max low power mode loads in uA */
-#define LDO_50_LPM_MAX_LOAD		5000
-#define LDO_150_LPM_MAX_LOAD		10000
-#define LDO_300_LPM_MAX_LOAD		10000
-#define SMPS_LPM_MAX_LOAD		50000
-
 #define GLOBAL_ENABLE_MAX		(2)
 struct pm8058_enable {
 	u16				addr;
@@ -218,7 +212,7 @@ struct pm8058_vreg {
 	struct pm8058_vreg_pdata	*pdata;
 	struct regulator_dev		*rdev;
 	struct pm8058_enable		*global_enable[GLOBAL_ENABLE_MAX];
-	int				lpm_max_load;
+	int				hpm_min_load;
 	int				save_uV;
 	unsigned			pc_vote;
 	unsigned			optimum;
@@ -236,13 +230,13 @@ struct pm8058_vreg {
 	u8				global_enable_mask[GLOBAL_ENABLE_MAX];
 };
 
-#define LDO_M2(_id, _ctrl_addr, _test_addr, _is_nmos, _lpm_load_max, \
+#define LDO_M2(_id, _ctrl_addr, _test_addr, _is_nmos, _hpm_min_load, \
 	      _en0, _en0_mask, _en1, _en1_mask) \
-	[_id] = { \
+	[PM8058_VREG_ID_##_id] = { \
 		.ctrl_addr = _ctrl_addr, \
 		.test_addr = _test_addr, \
 		.type = REGULATOR_TYPE_LDO, \
-		.lpm_max_load = _lpm_load_max, \
+		.hpm_min_load = PM8058_VREG_##_hpm_min_load##_HPM_MIN_LOAD, \
 		.is_nmos = _is_nmos, \
 		.global_enable = { \
 			[0] = _en0, \
@@ -254,20 +248,20 @@ struct pm8058_vreg {
 		}, \
 	}
 
-#define LDO(_id, _ctrl_addr, _test_addr, _is_nmos, _lpm_load_max, \
+#define LDO(_id, _ctrl_addr, _test_addr, _is_nmos, _hpm_min_load, \
 	    _en0, _en0_mask) \
-		LDO_M2(_id, _ctrl_addr, _test_addr, _is_nmos, _lpm_load_max, \
+		LDO_M2(_id, _ctrl_addr, _test_addr, _is_nmos, _hpm_min_load, \
 		      _en0, _en0_mask, NULL, 0)
 
 #define SMPS(_id, _ctrl_addr, _test_addr, _clk_ctrl_addr, _sleep_ctrl_addr, \
-	     _lpm_load_max, _en0, _en0_mask) \
-	[_id] = { \
+	     _hpm_min_load, _en0, _en0_mask) \
+	[PM8058_VREG_ID_##_id] = { \
 		.ctrl_addr = _ctrl_addr, \
 		.test_addr = _test_addr, \
 		.clk_ctrl_addr = _clk_ctrl_addr, \
 		.sleep_ctrl_addr = _sleep_ctrl_addr, \
 		.type = REGULATOR_TYPE_SMPS, \
-		.lpm_max_load = _lpm_load_max, \
+		.hpm_min_load = PM8058_VREG_##_hpm_min_load##_HPM_MIN_LOAD, \
 		.global_enable = { \
 			[0] = _en0, \
 			[1] = NULL, \
@@ -279,7 +273,7 @@ struct pm8058_vreg {
 	}
 
 #define LVS(_id, _ctrl_addr, _en0, _en0_mask) \
-	[_id] = { \
+	[PM8058_VREG_ID_##_id] = { \
 		.ctrl_addr = _ctrl_addr, \
 		.type = REGULATOR_TYPE_LVS, \
 		.global_enable = { \
@@ -293,7 +287,7 @@ struct pm8058_vreg {
 	}
 
 #define NCP(_id, _ctrl_addr, _test1) \
-	[_id] = { \
+	[PM8058_VREG_ID_##_id] = { \
 		.ctrl_addr = _ctrl_addr, \
 		.type = REGULATOR_TYPE_NCP, \
 		.test_addr = _test1, \
@@ -340,84 +334,49 @@ static struct pm8058_enable m_en[MASTER_ENABLE_COUNT] = {
 
 
 static struct pm8058_vreg pm8058_vreg[] = {
-	/*
-	 * id			ctrl   test  n/p  lpm_max_load
-	 *  m_en	       m_en_mask
-	 */
-	LDO(PM8058_VREG_ID_L0,  0x009, 0x065, 1, LDO_150_LPM_MAX_LOAD,
-	    &m_en[EN_GRP_5_4], BIT(3)),
-	LDO(PM8058_VREG_ID_L1,  0x00A, 0x066, 1, LDO_300_LPM_MAX_LOAD,
-	    &m_en[EN_GRP_5_4], BIT(6) | BIT(2)),
-	LDO(PM8058_VREG_ID_L2,  0x00B, 0x067, 0, LDO_300_LPM_MAX_LOAD,
-	    &m_en[EN_GRP_3_2], BIT(2)),
-	LDO(PM8058_VREG_ID_L3,  0x00C, 0x068, 0, LDO_150_LPM_MAX_LOAD,
-	    &m_en[EN_GRP_1_0], BIT(1)),
-	LDO(PM8058_VREG_ID_L4,  0x00D, 0x069, 0, LDO_50_LPM_MAX_LOAD,
-	    &m_en[EN_MSM],     0),
-	LDO(PM8058_VREG_ID_L5,  0x00E, 0x06A, 0, LDO_300_LPM_MAX_LOAD,
-	    &m_en[EN_GRP_1_0], BIT(7)),
-	LDO(PM8058_VREG_ID_L6,  0x00F, 0x06B, 0, LDO_50_LPM_MAX_LOAD,
-	    &m_en[EN_GRP_1_0], BIT(2)),
-	LDO(PM8058_VREG_ID_L7,  0x010, 0x06C, 0, LDO_50_LPM_MAX_LOAD,
-	    &m_en[EN_GRP_3_2], BIT(3)),
-	LDO(PM8058_VREG_ID_L8,  0x011, 0x06D, 0, LDO_300_LPM_MAX_LOAD,
-	    &m_en[EN_PH],      BIT(7)),
-	LDO(PM8058_VREG_ID_L9,  0x012, 0x06E, 0, LDO_300_LPM_MAX_LOAD,
-	    &m_en[EN_GRP_1_0], BIT(3)),
-	LDO(PM8058_VREG_ID_L10, 0x013, 0x06F, 0, LDO_300_LPM_MAX_LOAD,
-	    &m_en[EN_GRP_3_2], BIT(4)),
-	LDO(PM8058_VREG_ID_L11, 0x014, 0x070, 0, LDO_150_LPM_MAX_LOAD,
-	    &m_en[EN_PH],      BIT(4)),
-	LDO(PM8058_VREG_ID_L12, 0x015, 0x071, 0, LDO_150_LPM_MAX_LOAD,
-	    &m_en[EN_PH],      BIT(3)),
-	LDO(PM8058_VREG_ID_L13, 0x016, 0x072, 0, LDO_300_LPM_MAX_LOAD,
-	    &m_en[EN_GRP_3_2], BIT(1)),
-	LDO(PM8058_VREG_ID_L14, 0x017, 0x073, 0, LDO_300_LPM_MAX_LOAD,
-	    &m_en[EN_GRP_1_0], BIT(5)),
-	LDO(PM8058_VREG_ID_L15, 0x089, 0x0E5, 0, LDO_300_LPM_MAX_LOAD,
-	    &m_en[EN_GRP_1_0], BIT(4)),
-	LDO(PM8058_VREG_ID_L16, 0x08A, 0x0E6, 0, LDO_300_LPM_MAX_LOAD,
-	    &m_en[EN_GRP_3_2], BIT(0)),
-	LDO(PM8058_VREG_ID_L17, 0x08B, 0x0E7, 0, LDO_150_LPM_MAX_LOAD,
-	    &m_en[EN_RF],      BIT(7)),
-	LDO(PM8058_VREG_ID_L18, 0x11D, 0x125, 0, LDO_150_LPM_MAX_LOAD,
-	    &m_en[EN_RF],      BIT(6)),
-	LDO(PM8058_VREG_ID_L19, 0x11E, 0x126, 0, LDO_150_LPM_MAX_LOAD,
-	    &m_en[EN_RF],      BIT(5)),
-	LDO(PM8058_VREG_ID_L20, 0x11F, 0x127, 0, LDO_150_LPM_MAX_LOAD,
-	    &m_en[EN_RF],      BIT(4)),
-	LDO_M2(PM8058_VREG_ID_L21, 0x120, 0x128, 1, LDO_150_LPM_MAX_LOAD,
-	    &m_en[EN_GRP_5_4], BIT(1), &m_en[EN_GRP_1_0], BIT(6)),
-	LDO(PM8058_VREG_ID_L22, 0x121, 0x129, 1, LDO_300_LPM_MAX_LOAD,
-	    &m_en[EN_GRP_3_2], BIT(7)),
-	LDO(PM8058_VREG_ID_L23, 0x122, 0x12A, 1, LDO_300_LPM_MAX_LOAD,
-	    &m_en[EN_GRP_5_4], BIT(0)),
-	LDO(PM8058_VREG_ID_L24, 0x123, 0x12B, 1, LDO_150_LPM_MAX_LOAD,
-	    &m_en[EN_RF],      BIT(3)),
-	LDO(PM8058_VREG_ID_L25, 0x124, 0x12C, 1, LDO_150_LPM_MAX_LOAD,
-	    &m_en[EN_RF],      BIT(2)),
+	/*  id   ctrl   test  n/p hpm_min  m_en		      m_en_mask */
+	LDO(L0,  0x009, 0x065, 1, LDO_150, &m_en[EN_GRP_5_4], BIT(3)),
+	LDO(L1,  0x00A, 0x066, 1, LDO_300, &m_en[EN_GRP_5_4], BIT(6) | BIT(2)),
+	LDO(L2,  0x00B, 0x067, 0, LDO_300, &m_en[EN_GRP_3_2], BIT(2)),
+	LDO(L3,  0x00C, 0x068, 0, LDO_150, &m_en[EN_GRP_1_0], BIT(1)),
+	LDO(L4,  0x00D, 0x069, 0, LDO_50,  &m_en[EN_MSM],     0),
+	LDO(L5,  0x00E, 0x06A, 0, LDO_300, &m_en[EN_GRP_1_0], BIT(7)),
+	LDO(L6,  0x00F, 0x06B, 0, LDO_50,  &m_en[EN_GRP_1_0], BIT(2)),
+	LDO(L7,  0x010, 0x06C, 0, LDO_50,  &m_en[EN_GRP_3_2], BIT(3)),
+	LDO(L8,  0x011, 0x06D, 0, LDO_300, &m_en[EN_PH],      BIT(7)),
+	LDO(L9,  0x012, 0x06E, 0, LDO_300, &m_en[EN_GRP_1_0], BIT(3)),
+	LDO(L10, 0x013, 0x06F, 0, LDO_300, &m_en[EN_GRP_3_2], BIT(4)),
+	LDO(L11, 0x014, 0x070, 0, LDO_150, &m_en[EN_PH],      BIT(4)),
+	LDO(L12, 0x015, 0x071, 0, LDO_150, &m_en[EN_PH],      BIT(3)),
+	LDO(L13, 0x016, 0x072, 0, LDO_300, &m_en[EN_GRP_3_2], BIT(1)),
+	LDO(L14, 0x017, 0x073, 0, LDO_300, &m_en[EN_GRP_1_0], BIT(5)),
+	LDO(L15, 0x089, 0x0E5, 0, LDO_300, &m_en[EN_GRP_1_0], BIT(4)),
+	LDO(L16, 0x08A, 0x0E6, 0, LDO_300, &m_en[EN_GRP_3_2], BIT(0)),
+	LDO(L17, 0x08B, 0x0E7, 0, LDO_150, &m_en[EN_RF],      BIT(7)),
+	LDO(L18, 0x11D, 0x125, 0, LDO_150, &m_en[EN_RF],      BIT(6)),
+	LDO(L19, 0x11E, 0x126, 0, LDO_150, &m_en[EN_RF],      BIT(5)),
+	LDO(L20, 0x11F, 0x127, 0, LDO_150, &m_en[EN_RF],      BIT(4)),
+	LDO_M2(L21, 0x120, 0x128, 1, LDO_150, &m_en[EN_GRP_5_4], BIT(1),
+		&m_en[EN_GRP_1_0], BIT(6)),
+	LDO(L22, 0x121, 0x129, 1, LDO_300, &m_en[EN_GRP_3_2], BIT(7)),
+	LDO(L23, 0x122, 0x12A, 1, LDO_300, &m_en[EN_GRP_5_4], BIT(0)),
+	LDO(L24, 0x123, 0x12B, 1, LDO_150, &m_en[EN_RF],      BIT(3)),
+	LDO(L25, 0x124, 0x12C, 1, LDO_150, &m_en[EN_RF],      BIT(2)),
 
-	/*
-	 *  id			ctrl   test2  clk_ctrl sleep_ctrl lpm_max_load
-	 *   m_en              m_en_mask
-	 */
-	SMPS(PM8058_VREG_ID_S0, 0x004, 0x084, 0x1D1, 0x1D8, SMPS_LPM_MAX_LOAD,
-	     &m_en[EN_MSM],    BIT(7)),
-	SMPS(PM8058_VREG_ID_S1, 0x005, 0x085, 0x1D2, 0x1DB, SMPS_LPM_MAX_LOAD,
-	     &m_en[EN_MSM],    BIT(6)),
-	SMPS(PM8058_VREG_ID_S2, 0x110, 0x119, 0x1D3, 0x1DE, SMPS_LPM_MAX_LOAD,
-	     &m_en[EN_GRP_5_4], BIT(5)),
-	SMPS(PM8058_VREG_ID_S3, 0x111, 0x11A, 0x1D4, 0x1E1, SMPS_LPM_MAX_LOAD,
-	     &m_en[EN_GRP_5_4], BIT(7) | BIT(4)),
-	SMPS(PM8058_VREG_ID_S4, 0x112, 0x11B, 0x1D5, 0x1E4, SMPS_LPM_MAX_LOAD,
-	     &m_en[EN_GRP_3_2], BIT(5)),
+	/*   id  ctrl   test2  clk    sleep hpm_min  m_en	    m_en_mask */
+	SMPS(S0, 0x004, 0x084, 0x1D1, 0x1D8, SMPS, &m_en[EN_MSM],    BIT(7)),
+	SMPS(S1, 0x005, 0x085, 0x1D2, 0x1DB, SMPS, &m_en[EN_MSM],    BIT(6)),
+	SMPS(S2, 0x110, 0x119, 0x1D3, 0x1DE, SMPS, &m_en[EN_GRP_5_4], BIT(5)),
+	SMPS(S3, 0x111, 0x11A, 0x1D4, 0x1E1, SMPS, &m_en[EN_GRP_5_4],
+		BIT(7) | BIT(4)),
+	SMPS(S4, 0x112, 0x11B, 0x1D5, 0x1E4, SMPS, &m_en[EN_GRP_3_2], BIT(5)),
 
-	/*   id			  ctrl  m_en		   m_en_mask */
-	LVS(PM8058_VREG_ID_LVS0, 0x12D, &m_en[EN_RF],      BIT(1)),
-	LVS(PM8058_VREG_ID_LVS1, 0x12F, &m_en[EN_GRP_1_0], BIT(0)),
+	/*  id	  ctrl   m_en		    m_en_mask */
+	LVS(LVS0, 0x12D, &m_en[EN_RF],      BIT(1)),
+	LVS(LVS1, 0x12F, &m_en[EN_GRP_1_0], BIT(0)),
 
-	/*   id			 ctrl  test1 */
-	NCP(PM8058_VREG_ID_NCP, 0x090, 0x0EC),
+	/*  id   ctrl   test1 */
+	NCP(NCP, 0x090, 0x0EC),
 };
 
 static int pm8058_smps_set_voltage_advanced(struct pm8058_vreg *vreg,
@@ -1452,7 +1411,7 @@ unsigned int pm8058_vreg_get_optimum_mode(struct regulator_dev *dev,
 		return pm8058_vreg_get_mode(dev);
 	}
 
-	if (load_uA > vreg->lpm_max_load)
+	if (load_uA >= vreg->hpm_min_load)
 		return REGULATOR_MODE_FAST;
 	return REGULATOR_MODE_STANDBY;
 }

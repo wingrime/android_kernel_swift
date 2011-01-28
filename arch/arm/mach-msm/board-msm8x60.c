@@ -49,6 +49,7 @@
 #include <linux/cyttsp.h>
 #include <linux/i2c/isa1200.h>
 #include <linux/dma-mapping.h>
+#include <linux/i2c/bq27520.h>
 
 #ifdef CONFIG_ANDROID_PMEM
 #include <linux/android_pmem.h>
@@ -738,6 +739,25 @@ static struct i2c_board_info msm_isa1200_board_info[] = {
 	{
 		I2C_BOARD_INFO("isa1200_1", 0x90>>1),
 		.platform_data = &isa1200_1_pdata,
+	},
+};
+#endif
+
+#if defined(CONFIG_BATTERY_BQ27520) || \
+		defined(CONFIG_BATTERY_BQ27520_MODULE)
+static struct bq27520_platform_data bq27520_pdata = {
+	.name = "fuel-gauge",
+	.vreg_name = "8058_s3",
+	.vreg_value = 1800000,
+	.soc_int = GPIO_BATT_GAUGE_INT_N,
+	.bi_tout = GPIO_CAP_GAUGE_BI_TOUT,
+	.chip_en = GPIO_BATT_GAUGE_EN,
+};
+
+static struct i2c_board_info msm_bq27520_board_info[] = {
+	{
+		I2C_BOARD_INFO("bq27520", 0xaa>>1),
+		.platform_data = &bq27520_pdata,
 	},
 };
 #endif
@@ -5369,6 +5389,15 @@ static struct i2c_registry msm8x60_i2c_devices[] __initdata = {
 		MSM_GSBI8_QUP_I2C_BUS_ID,
 		smb137b_charger_i2c_info,
 		ARRAY_SIZE(smb137b_charger_i2c_info),
+	},
+#endif
+#if defined(CONFIG_BATTERY_BQ27520) || \
+		defined(CONFIG_BATTERY_BQ27520_MODULE)
+	{
+		I2C_FLUID,
+		MSM_GSBI8_QUP_I2C_BUS_ID,
+		msm_bq27520_board_info,
+		ARRAY_SIZE(msm_bq27520_board_info),
 	},
 #endif
 };

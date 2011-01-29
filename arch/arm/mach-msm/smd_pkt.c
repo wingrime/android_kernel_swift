@@ -1,4 +1,4 @@
-/* Copyright (c) 2008-2010, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2008-2011, Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -66,6 +66,7 @@ struct smd_pkt_dev {
 	int needed_space;
 	int is_open;
 	unsigned ch_size;
+	uint open_modem_wait;
 
 	struct notifier_block nb;
 	int has_reset;
@@ -78,9 +79,6 @@ struct class *smd_pkt_classp;
 static dev_t smd_pkt_number;
 static void check_and_wakeup_reader(struct smd_pkt_dev *smd_pkt_devp);
 static void check_and_wakeup_writer(struct smd_pkt_dev *smd_pkt_devp);
-static uint smd_pkt_modem_wait;
-module_param_named(modem_wait_timeout, smd_pkt_modem_wait,
-		   uint, S_IRUGO | S_IWUSR | S_IWGRP);
 
 #define DEBUG
 #undef DEBUG
@@ -103,6 +101,41 @@ do { \
 #else
 #define D(x...) do {} while (0)
 #endif
+
+static ssize_t open_timeout_store(struct device *d,
+				  struct device_attribute *attr,
+				  const char *buf,
+				  size_t n)
+{
+	int i;
+	unsigned long tmp;
+	for (i = 0; i < NUM_SMD_PKT_PORTS; ++i) {
+		if (smd_pkt_devp[i]->devicep == d)
+			break;
+	}
+	if (!strict_strtoul(buf, 10, &tmp)) {
+		smd_pkt_devp[i]->open_modem_wait = tmp;
+		return n;
+	} else {
+		pr_err("%s: unable to convert: %s to an int\n", __func__,
+			buf);
+		return -EINVAL;
+	}
+}
+
+static ssize_t open_timeout_show(struct device *d,
+				 struct device_attribute *attr,
+				 char *buf)
+{
+	int i;
+	for (i = 0; i < NUM_SMD_PKT_PORTS; ++i) {
+		if (smd_pkt_devp[i]->devicep == d)
+			break;
+	}
+	return sprintf(buf, "%d\n", smd_pkt_devp[i]->open_modem_wait);
+}
+
+static DEVICE_ATTR(open_timeout, 0664, open_timeout_show, open_timeout_store);
 
 static void clean_and_signal(struct smd_pkt_dev *smd_pkt_devp)
 {
@@ -550,10 +583,11 @@ int smd_pkt_open(struct inode *inode, struct file *file)
 			 * Wait for a packet channel to be allocated so we know
 			 * the modem is ready enough.
 			 */
-			if (smd_pkt_modem_wait) {
+			if (smd_pkt_devp->open_modem_wait) {
 				r = wait_for_completion_interruptible_timeout(
 					&smd_pkt_devp->ch_allocated,
-					msecs_to_jiffies(smd_pkt_modem_wait
+					msecs_to_jiffies(
+						smd_pkt_devp->open_modem_wait
 							 * 1000));
 				if (r == 0)
 					r = -ETIMEDOUT;
@@ -730,6 +764,10 @@ static int __init smd_pkt_init(void)
 			kfree(smd_pkt_devp[i]);
 			goto error2;
 		}
+		if (device_create_file(smd_pkt_devp[i]->devicep,
+					&dev_attr_open_timeout))
+			pr_err("%s: unable to create device attr on #%d\n",
+				__func__, i);
 
 		smd_pkt_devp[i]->nb.notifier_call = modem_notifier;
 		modem_register_notifier(&smd_pkt_devp[i]->nb);

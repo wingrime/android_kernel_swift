@@ -505,4 +505,18 @@ struct audpreproc_cmd_cfg_cal_gain {
 	unsigned short  reserved;
 }  __attribute__((packed));
 
+#define AUDPREPROC_CMD_CFG_LVNV_PARMS	0x0006
+#define AUDPREPROC_CMD_CFG_LVNV_PARMS_LEN	\
+		sizeof(struct audpreproc_cmd_cfg_lvnv_param)
+
+struct audpreproc_cmd_cfg_lvnv_param {
+	unsigned short cmd_id;
+	unsigned short stream_id;
+	unsigned short cs_mode;
+	unsigned short lvnv_ext_buf_size;
+	unsigned short lvnv_ext_partition;
+	unsigned short lvnv_ext_buf_start_lsw;
+	unsigned short lvnv_ext_buf_start_msw;
+};
+
 #endif /* QDSP5AUDPREPROCCMDI_H */

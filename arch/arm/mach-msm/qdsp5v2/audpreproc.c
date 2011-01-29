@@ -493,3 +493,11 @@ void get_audrec_session_info(int id, struct audrec_session_info *info)
 }
 EXPORT_SYMBOL(get_audrec_session_info);
 
+int audpreproc_dsp_set_lvnv(
+	struct audpreproc_cmd_cfg_lvnv_param *preproc_lvnv, unsigned len)
+{
+	return msm_adsp_write(the_audpreproc_state.mod,
+		QDSP_uPAudPreProcCmdQueue, preproc_lvnv, len);
+}
+EXPORT_SYMBOL(audpreproc_dsp_set_lvnv);
+

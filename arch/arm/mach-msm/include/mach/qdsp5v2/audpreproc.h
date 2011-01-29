@@ -107,4 +107,6 @@ int audpreproc_dsp_set_gain_tx(
 
 void get_audrec_session_info(int id, struct audrec_session_info *info);
 
+int audpreproc_dsp_set_lvnv(
+	struct audpreproc_cmd_cfg_lvnv_param *preproc_lvnv, unsigned len);
 #endif /* _MACH_QDSP5_V2_AUDPREPROC_H */

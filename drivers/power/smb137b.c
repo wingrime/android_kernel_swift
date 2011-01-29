@@ -223,6 +223,8 @@ struct smb137b_data {
 	int usb_status;
 
 	bool stop_heartbeat;
+
+	u8 dev_id_reg;
 };
 
 static unsigned int disabled;
@@ -391,6 +393,17 @@ static int smb137b_write_reg(struct i2c_client *client, int reg,
 	}
 	return 0;
 }
+
+static ssize_t id_reg_show(struct device *dev, struct device_attribute *attr,
+		char *buf)
+{
+	struct smb137b_data *smb137b_chg;
+
+	smb137b_chg = i2c_get_clientdata(to_i2c_client(dev));
+
+	return sprintf(buf, "%02x\n", smb137b_chg->dev_id_reg);
+}
+static DEVICE_ATTR(id_reg, S_IRUGO | S_IWUSR, id_reg_show, NULL);
 
 #ifdef DEBUG
 static void smb137b_dbg_print_status_regs(struct smb137b_data *smb137b_chg)
@@ -782,6 +795,11 @@ static int __devinit smb137b_probe(struct i2c_client *client,
 	ret = smb137b_write_reg(smb137b_chg->client,
 					PIN_CTRL_REG, PIN_CTRL_REG_CHG_OFF);
 
+	ret = smb137b_read_reg(smb137b_chg->client, DEV_ID_REG,
+			&smb137b_chg->dev_id_reg);
+
+	ret = device_create_file(&smb137b_chg->client->dev, &dev_attr_id_reg);
+
 	smb137b_chg->psy_batt.name = "battery";
 	smb137b_chg->psy_batt.type = POWER_SUPPLY_TYPE_BATTERY;
 	smb137b_chg->psy_batt.properties = batt_power_props;
@@ -833,7 +851,8 @@ static int __devinit smb137b_probe(struct i2c_client *client,
 	schedule_delayed_work(&smb137b_chg->charge_work, SMB137B_CHG_PERIOD);
 	smb137b_create_debugfs_entries(smb137b_chg);
 	dev_dbg(&client->dev,
-		"%s OK chg_state=%d\n", __func__, smb137b_chg->usb_status);
+		"%s OK device_id = %x chg_state=%d\n", __func__,
+		smb137b_chg->dev_id_reg, smb137b_chg->usb_status);
 	return 0;
 
 free_batt_psy:

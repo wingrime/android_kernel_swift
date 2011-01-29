@@ -196,6 +196,16 @@ static int msm_isp_control(struct msm_cam_v4l2_device *pcam,
 
 	free_qcmd(rcmd);
 	D("%s: rc %d\n", __func__, rc);
+	/* rc is the time elapsed. */
+	if (rc >= 0) {
+		/* TODO: Refactor msm_ctrl_cmd::status field */
+		if (out->status == 0)
+			rc = -1;
+		else if (out->status == 1)
+			rc = 0;
+		else
+			rc = -EINVAL;
+	}
 	return rc;
 }
 

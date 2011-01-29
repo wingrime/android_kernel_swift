@@ -84,6 +84,9 @@ static struct msm_adspenc_database msm_enc_database = {
 	.enc_info_list = enc_info_list,
 };
 
+
+static struct audrec_session_info session_info[MAX_ENC_COUNT];
+
 struct audpreproc_state {
 	struct msm_adsp_module *mod;
 	audpreproc_event_func func[MAX_ENC_COUNT];
@@ -154,10 +157,12 @@ static void audpreproc_dsp_event(void *data, unsigned id, size_t len,
 			audpreproc->private[enc_cfg_msg.stream_id], id,
 			&enc_cfg_msg);
 		for (n = 0; n < MAX_EVENT_CALLBACK_CLIENTS; ++n) {
-			if (audpreproc->cb_tbl[n] && audpreproc->cb_tbl[n]->fn)
+			if (audpreproc->cb_tbl[n] &&
+					audpreproc->cb_tbl[n]->fn) {
 				audpreproc->cb_tbl[n]->fn( \
 					audpreproc->cb_tbl[n]->private, \
 					id, (void *) &enc_cfg_msg);
+			}
 		}
 		break;
 	}
@@ -262,6 +267,23 @@ out:
 	return res;
 }
 EXPORT_SYMBOL(audpreproc_enable);
+
+int audpreproc_update_audrec_info(
+			struct audrec_session_info *audrec_session_info)
+{
+	if (!audrec_session_info) {
+		MM_ERR("error in audrec session info address\n");
+		return -EINVAL;
+	}
+	if (audrec_session_info->session_id < MAX_ENC_COUNT) {
+		memcpy(&session_info[audrec_session_info->session_id],
+				audrec_session_info,
+				sizeof(struct audrec_session_info));
+		return 0;
+	}
+	return -EINVAL;
+}
+EXPORT_SYMBOL(audpreproc_update_audrec_info);
 
 void audpreproc_disable(int enc_id, void *private)
 {
@@ -460,3 +482,14 @@ int audpreproc_dsp_set_gain_tx(
 			QDSP_uPAudPreProcCmdQueue, calib_gain_tx, len);
 }
 EXPORT_SYMBOL(audpreproc_dsp_set_gain_tx);
+
+void get_audrec_session_info(int id, struct audrec_session_info *info)
+{
+	if (id >= MAX_ENC_COUNT) {
+		MM_ERR("invalid session id = %d\n", id);
+		return;
+	}
+	memcpy(info, &session_info[id], sizeof(struct audrec_session_info));
+}
+EXPORT_SYMBOL(get_audrec_session_info);
+

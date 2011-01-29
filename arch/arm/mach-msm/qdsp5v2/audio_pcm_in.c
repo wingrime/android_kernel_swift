@@ -100,6 +100,7 @@ struct audio_in {
 	int voice_state;
 	spinlock_t dev_lock;
 
+	struct audrec_session_info session_info; /*audrec session info*/
 	/* data allocated for various buffers */
 	char *data;
 	dma_addr_t phys;
@@ -356,7 +357,7 @@ static int audpcm_in_enc_config(struct audio_in *audio, int enable)
 	struct audpreproc_audrec_cmd_enc_cfg cmd;
 
 	memset(&cmd, 0, sizeof(cmd));
-	cmd.cmd_id = AUDPREPROC_AUDREC_CMD_ENC_CFG;
+	cmd.cmd_id = AUDPREPROC_AUDREC_CMD_ENC_CFG_2;
 	cmd.stream_id = audio->enc_id;
 
 	if (enable)
@@ -553,6 +554,10 @@ static long audpcm_in_ioctl(struct file *file,
 			break;
 		}
 		audio->dual_mic_config = msm_get_dual_mic_config(audio->enc_id);
+		/*update aurec session info in audpreproc layer*/
+		audio->session_info.session_id = audio->enc_id;
+		audio->session_info.sampling_freq = audio->samp_rate;
+		audpreproc_update_audrec_info(&audio->session_info);
 		rc = audpcm_in_enable(audio);
 		if (!rc) {
 			rc =

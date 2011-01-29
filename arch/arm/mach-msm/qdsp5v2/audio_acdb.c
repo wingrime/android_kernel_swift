@@ -62,6 +62,7 @@ enum {
 	AUDPP_READY	= 0x2,
 	AUDREC0_READY	= 0x4,
 	AUDREC1_READY	= 0x8,
+	AUDREC2_READY	= 0x10,
 };
 
 
@@ -93,8 +94,7 @@ struct acdb_data {
 	u32 audpp_cb_compl;
 	u32 preproc_cb_compl;
 	u8 preproc_stream_id;
-	u8 audrec0_applied;
-	u8 audrec1_applied;
+	u8 audrec_applied;
 	u32 multiple_sessions;
 	u32 cur_tx_session;
 	struct acdb_result acdb_result;
@@ -135,7 +135,8 @@ struct acdb_cache_node acdb_cache_rx[MAX_COPP_NODE_SUPPORTED];
 the depth of the tx cache is define by number of AUDREC sessions supported*/
 struct acdb_cache_node acdb_cache_tx[MAX_AUDREC_SESSIONS];
 
-
+/*Audrec session info includes Attributes Sampling frequency and enc_id */
+struct audrec_session_info session_info[MAX_AUDREC_SESSIONS];
 
 static s32 acdb_set_calibration_blk(unsigned long arg)
 {
@@ -298,6 +299,59 @@ struct miscdevice acdb_misc = {
 	.fops	= &acdb_fops,
 };
 
+static s32 acdb_get_calibration(void)
+{
+	struct acdb_cmd_get_device_table	acdb_cmd;
+	s32					result = 0;
+	u32 iterations = 0;
+
+	MM_DBG("acdb state = %d\n", acdb_data.acdb_state);
+	acdb_cmd.command_id = ACDB_GET_DEVICE_TABLE;
+	acdb_cmd.device_id = acdb_data.device_info->acdb_id;
+	acdb_cmd.network_id = 0x0108B153;
+	acdb_cmd.sample_rate_id = acdb_data.device_info->sample_rate;
+	acdb_cmd.total_bytes = ACDB_BUF_SIZE;
+	acdb_cmd.phys_buf = (u32 *)acdb_data.phys_addr;
+
+	do {
+		result = dalrpc_fcn_8(ACDB_DalACDB_ioctl, acdb_data.handle,
+				(const void *)&acdb_cmd, sizeof(acdb_cmd),
+				&acdb_data.acdb_result,
+				sizeof(acdb_data.acdb_result));
+
+		if (result < 0) {
+			MM_ERR("ACDB=> Device table RPC failure"
+				" result = %d\n", result);
+			goto error;
+		}
+		/*following check is introduced to handle boot up race
+		condition between AUDCAL SW peers running on apps
+		and modem (ACDB_RES_BADSTATE indicates modem AUDCAL SW is
+		not in initialized sate) we need to retry to get ACDB
+		values*/
+		if (acdb_data.acdb_result.result == ACDB_RES_BADSTATE) {
+			msleep(500);
+			iterations++;
+		} else if (acdb_data.acdb_result.result == ACDB_RES_SUCCESS) {
+			MM_DBG("Modem query for acdb values is successful"
+					" (iterations = %d)\n", iterations);
+			acdb_data.acdb_state |= CAL_DATA_READY;
+			return result;
+		} else {
+			MM_ERR("ACDB=> modem failed to fill acdb values,"
+					" reuslt = %d, (iterations = %d)\n",
+					acdb_data.acdb_result.result,
+					iterations);
+			goto error;
+		}
+	} while (iterations < MAX_RETRY);
+	MM_ERR("ACDB=> AUDCAL SW on modem is not in intiailized state (%d)\n",
+			acdb_data.acdb_result.result);
+error:
+	result = -EINVAL;
+	return result;
+}
+
 s32 acdb_get_calibration_data(struct acdb_get_block *get_block)
 {
 	s32 result = -EINVAL;
@@ -358,7 +412,8 @@ static u8 check_device_info_already_present(
 		/*checking for cache node status if it is not filled then the
 		acdb values are not cleaned from node so update node status
 		with acdb value filled*/
-		if (acdb_cache_free_node->node_status != ACDB_VALUES_FILLED) {
+		if ((acdb_cache_free_node->node_status != ACDB_VALUES_FILLED) &&
+			((acdb_data.device_info->dev_type & RX_DEVICE) == 1)) {
 			MM_DBG("device was released earlier\n");
 			acdb_cache_free_node->node_status = ACDB_VALUES_FILLED;
 			acdb_data.acdb_state |= CAL_DATA_READY;
@@ -1191,23 +1246,45 @@ static s32 acdb_send_calibration(void)
 			goto done;
 	} else if ((acdb_data.device_info->dev_type & TX_DEVICE) == 2) {
 		result = acdb_calibrate_audpreproc();
-		if (acdb_data.preproc_stream_id == 1)
-			acdb_data.audrec1_applied = 1;
-		else
-			acdb_data.audrec0_applied = 1;
 		if (result)
 			goto done;
+		if (acdb_data.preproc_stream_id == 0)
+			acdb_data.audrec_applied |= AUDREC0_READY;
+		else if (acdb_data.preproc_stream_id == 1)
+			acdb_data.audrec_applied |= AUDREC1_READY;
+		else if (acdb_data.preproc_stream_id == 2)
+			acdb_data.audrec_applied |= AUDREC2_READY;
+
 	}
 done:
 	return result;
+}
+
+static u8 check_tx_acdb_values_cached(void)
+{
+	u8 stream_id  = acdb_data.preproc_stream_id;
+
+	if ((acdb_data.device_info->dev_id ==
+		acdb_cache_tx[stream_id].device_info.dev_id) &&
+		(acdb_data.device_info->sample_rate ==
+		acdb_cache_tx[stream_id].device_info.sample_rate) &&
+		(acdb_data.device_info->acdb_id ==
+		acdb_cache_tx[stream_id].device_info.acdb_id) &&
+		(acdb_cache_tx[stream_id].node_status ==
+						ACDB_VALUES_FILLED))
+		return 0;
+	else
+		return 1;
 }
 
 static void handle_tx_device_ready_callback(void)
 {
 	u8 i = 0;
 	u8 ret = 0;
-	acdb_cache_tx[acdb_data.cur_tx_session].node_status =
-							ACDB_VALUES_FILLED;
+	u8 acdb_value_apply = 0;
+	u8 result = 0;
+	u8 stream_id = acdb_data.preproc_stream_id;
+
 	if (acdb_data.multiple_sessions) {
 		for (i = 0; i < MAX_AUDREC_SESSIONS; i++) {
 			/*check is to exclude copying acdb values in the
@@ -1231,25 +1308,42 @@ static void handle_tx_device_ready_callback(void)
 	}
 	/*check wheather AUDREC enabled before device call backs*/
 	if ((acdb_data.acdb_state & AUDREC0_READY) &&
-					(!acdb_data.audrec0_applied)) {
+			!(acdb_data.audrec_applied & AUDREC0_READY)) {
 		MM_DBG("AUDREC0 already enabled apply acdb values\n");
-		acdb_send_calibration();
-	}
-	if ((acdb_data.acdb_state & AUDREC1_READY) &&
-					(!acdb_data.audrec1_applied)) {
+		acdb_value_apply |= AUDREC0_READY;
+	} else if ((acdb_data.acdb_state & AUDREC1_READY) &&
+			!(acdb_data.audrec_applied & AUDREC1_READY)) {
 		MM_DBG("AUDREC1 already enabled apply acdb values\n");
+		acdb_value_apply |= AUDREC1_READY;
+	} else if ((acdb_data.acdb_state & AUDREC2_READY) &&
+			!(acdb_data.audrec_applied & AUDREC2_READY)) {
+		MM_DBG("AUDREC2 already enabled apply acdb values\n");
+		acdb_value_apply |= AUDREC2_READY;
+	}
+	if (acdb_value_apply) {
+		acdb_data.device_info->sample_rate =
+					session_info[stream_id].sampling_freq;
+		result = check_tx_acdb_values_cached();
+		if (result) {
+			result = acdb_get_calibration();
+			if (result < 0) {
+				MM_ERR("Not able to get calibration"
+						" data continue\n");
+				return;
+			}
+		}
+		acdb_cache_tx[stream_id].node_status = ACDB_VALUES_FILLED;
 		acdb_send_calibration();
 	}
 }
 
-static struct acdb_cache_node *get_acdb_values_from_cache_tx(
-						u32 preproc_stream_id)
+static struct acdb_cache_node *get_acdb_values_from_cache_tx(u32 stream_id)
 {
-	MM_DBG("searching node with stream_id %d\n", preproc_stream_id);
-	if ((acdb_cache_tx[preproc_stream_id].stream_id == preproc_stream_id) &&
-			(acdb_cache_tx[preproc_stream_id].node_status ==
-					ACDB_VALUES_FILLED)) {
-			return &acdb_cache_tx[preproc_stream_id];
+	MM_DBG("searching node with stream_id %d\n", stream_id);
+	if ((acdb_cache_tx[stream_id].stream_id == stream_id) &&
+			(acdb_cache_tx[stream_id].node_status ==
+					ACDB_VALUES_NOT_FILLED)) {
+			return &acdb_cache_tx[stream_id];
 	}
 	MM_DBG("Error! in finding node\n");
 	return NULL;
@@ -1276,59 +1370,6 @@ static void send_acdb_values_for_active_devices(void)
 				acdb_send_calibration();
 		}
 	}
-}
-
-static s32 acdb_get_calibration(void)
-{
-	struct acdb_cmd_get_device_table	acdb_cmd;
-	s32					result = 0;
-	u32 iterations = 0;
-
-	MM_DBG("acdb state = %d\n", acdb_data.acdb_state);
-	acdb_cmd.command_id = ACDB_GET_DEVICE_TABLE;
-	acdb_cmd.device_id = acdb_data.device_info->acdb_id;
-	acdb_cmd.network_id = 0x0108B153;
-	acdb_cmd.sample_rate_id = acdb_data.device_info->sample_rate;
-	acdb_cmd.total_bytes = ACDB_BUF_SIZE;
-	acdb_cmd.phys_buf = (u32 *)acdb_data.phys_addr;
-
-	do {
-		result = dalrpc_fcn_8(ACDB_DalACDB_ioctl, acdb_data.handle,
-				(const void *)&acdb_cmd, sizeof(acdb_cmd),
-				&acdb_data.acdb_result,
-				sizeof(acdb_data.acdb_result));
-
-		if (result < 0) {
-			MM_ERR("ACDB=> Device table RPC failure"
-				" result = %d\n", result);
-			goto error;
-		}
-		/*following check is introduced to handle boot up race
-		condition between AUDCAL SW peers running on apps
-		and modem (ACDB_RES_BADSTATE indicates modem AUDCAL SW is
-		not in initialized sate) we need to retry to get ACDB
-		values*/
-		if (acdb_data.acdb_result.result == ACDB_RES_BADSTATE) {
-			msleep(500);
-			iterations++;
-		} else if (acdb_data.acdb_result.result == ACDB_RES_SUCCESS) {
-			MM_DBG("Modem query for acdb values is successful"
-					" (iterations = %d)\n", iterations);
-			acdb_data.acdb_state |= CAL_DATA_READY;
-			return result;
-		} else {
-			MM_ERR("ACDB=> modem failed to fill acdb values,"
-					" reuslt = %d, (iterations = %d)\n",
-					acdb_data.acdb_result.result,
-					iterations);
-			goto error;
-		}
-	} while (iterations < MAX_RETRY);
-	MM_ERR("ACDB=> AUDCAL SW on modem is not in intiailized state (%d)\n",
-			acdb_data.acdb_result.result);
-error:
-	result = -EINVAL;
-	return result;
 }
 
 static s32 initialize_rpc(void)
@@ -1640,6 +1681,22 @@ static u32 free_acdb_cache_node(union auddev_evt_data *evt)
 	return 0;
 }
 
+static u8 check_device_change(struct auddev_evt_audcal_info audcal_info)
+{
+	if (!acdb_data.device_info) {
+		MM_ERR("not pointing to previous valid device detail\n");
+		return 1; /*device info will not be pointing to*/
+			/* valid device when acdb driver comes up*/
+	}
+	if ((audcal_info.dev_id == acdb_data.device_info->dev_id) &&
+		(audcal_info.sample_rate ==
+				acdb_data.device_info->sample_rate) &&
+		(audcal_info.acdb_id == acdb_data.device_info->acdb_id)) {
+		return 0;
+	}
+	return 1;
+}
+
 static void device_cb(u32 evt_id, union auddev_evt_data *evt, void *private)
 {
 	struct auddev_evt_audcal_info	audcal_info;
@@ -1648,10 +1705,10 @@ static void device_cb(u32 evt_id, union auddev_evt_data *evt, void *private)
 	u8 ret = 0;
 	u8 count = 0;
 	u8 i = 0;
+	u8 device_change = 0;
 
 	if (!((evt_id == AUDDEV_EVT_DEV_RDY) ||
-		(evt_id == AUDDEV_EVT_DEV_RLS)) ||
-		(evt->audcal_info.acdb_id == PSEUDO_ACDB_ID)) {
+		(evt_id == AUDDEV_EVT_DEV_RLS))) {
 		goto done;
 	}
 	/*if session value is zero it indicates that device call back is for
@@ -1674,27 +1731,24 @@ static void device_cb(u32 evt_id, union auddev_evt_data *evt, void *private)
 	MM_DBG("sample_rate = %d\n", audcal_info.sample_rate);
 	MM_DBG("acdb_id = %d\n", audcal_info.acdb_id);
 	MM_DBG("sessions = %d\n", audcal_info.sessions);
-	MM_DBG("acdb_state = %d\n", acdb_data.acdb_state);
+	MM_DBG("acdb_state = %x\n", acdb_data.acdb_state);
 	mutex_lock(&acdb_data.acdb_mutex);
-	if (acdb_data.acdb_state & CAL_DATA_READY) {
-		if ((audcal_info.dev_id ==
-				 acdb_data.device_info->dev_id) &&
-			(audcal_info.sample_rate ==
-				 acdb_data.device_info->sample_rate) &&
-			(audcal_info.acdb_id == acdb_data.device_info->
-							acdb_id)) {
-			MM_DBG("called for same device type and sample rate\n");
-			if ((audcal_info.dev_type & TX_DEVICE) == 2) {
-				if (!(acdb_data.acdb_state & AUDREC0_READY))
-					acdb_data.audrec0_applied = 0;
-				if (!(acdb_data.acdb_state & AUDREC1_READY))
-					acdb_data.audrec1_applied = 0;
-					acdb_data.acdb_state &= ~CAL_DATA_READY;
-					goto update_cache;
-			}
-		} else
-			/* state is updated to querry the modem for values */
-			acdb_data.acdb_state &= ~CAL_DATA_READY;
+	device_change = check_device_change(audcal_info);
+	if (!device_change) {
+		if ((audcal_info.dev_type & TX_DEVICE) == 2) {
+			if (!(acdb_data.acdb_state & AUDREC0_READY))
+				acdb_data.audrec_applied &= ~AUDREC0_READY;
+			if (!(acdb_data.acdb_state & AUDREC1_READY))
+				acdb_data.audrec_applied &= ~AUDREC1_READY;
+			if (!(acdb_data.acdb_state & AUDREC2_READY))
+				acdb_data.audrec_applied &= ~AUDREC2_READY;
+				acdb_data.acdb_state &= ~CAL_DATA_READY;
+				goto update_cache;
+		}
+	} else {
+		/* state is updated to querry the modem for values */
+		acdb_data.acdb_state &= ~CAL_DATA_READY;
+		acdb_data.audrec_applied = 0;
 	}
 update_cache:
 	if ((audcal_info.dev_type & TX_DEVICE) == 2) {
@@ -1777,34 +1831,81 @@ done:
 	return;
 }
 
+static s8 handle_audpreproc_cb(void)
+{
+	struct acdb_cache_node *acdb_cached_values;
+	s8 result = 0;
+	u8 stream_id = acdb_data.preproc_stream_id;
+	acdb_data.preproc_cb_compl = 0;
+	acdb_cached_values = get_acdb_values_from_cache_tx(stream_id);
+	if (acdb_cached_values == NULL) {
+		MM_DBG("ERROR: to get chached acdb values\n");
+		return -EPERM;
+	}
+	update_acdb_data_struct(acdb_cached_values);
+	acdb_data.device_info->sample_rate =
+					session_info[stream_id].sampling_freq;
+	if (!(acdb_data.acdb_state & CAL_DATA_READY)) {
+		result = check_tx_acdb_values_cached();
+		if (result) {
+			result = acdb_get_calibration();
+			if (result < 0) {
+				MM_ERR("failed to get calibration data\n");
+				return result;
+			}
+		}
+		acdb_cached_values->node_status = ACDB_VALUES_FILLED;
+	}
+	return result;
+}
 
 static void audpreproc_cb(void *private, u32 id, void *msg)
 {
 	struct audpreproc_cmd_enc_cfg_done_msg *tmp;
-
+	u8 result = 0;
+	int stream_id = 0;
 	if (id != AUDPREPROC_CMD_ENC_CFG_DONE_MSG)
 		goto done;
 
 	tmp = (struct audpreproc_cmd_enc_cfg_done_msg *)msg;
 	acdb_data.preproc_stream_id = tmp->stream_id;
+	stream_id = acdb_data.preproc_stream_id;
+	get_audrec_session_info(stream_id, &session_info[stream_id]);
 	MM_DBG("rec_enc_type = %x\n", tmp->rec_enc_type);
 	if ((tmp->rec_enc_type & 0x8000) ==
 				AUD_PREPROC_CONFIG_DISABLED) {
 		if (acdb_data.preproc_stream_id == 0) {
 			acdb_data.acdb_state &= ~AUDREC0_READY;
-			acdb_data.audrec0_applied = 0;
-		} else {
+			acdb_data.audrec_applied &= ~AUDREC0_READY;
+		} else if (acdb_data.preproc_stream_id == 1) {
 			acdb_data.acdb_state &= ~AUDREC1_READY;
-			acdb_data.audrec1_applied = 0;
+			acdb_data.audrec_applied &= ~AUDREC1_READY;
+		} else if (acdb_data.preproc_stream_id == 2) {
+			acdb_data.acdb_state &= ~AUDREC2_READY;
+			acdb_data.audrec_applied &= ~AUDREC2_READY;
 		}
-		MM_DBG("AUD_PREPROC_CONFIG_DISABLED\n");
+		acdb_cache_tx[tmp->stream_id].node_status =\
+						ACDB_VALUES_NOT_FILLED;
+		acdb_data.acdb_state &= ~CAL_DATA_READY;
 		goto done;
+	}
+	acdb_data.device_info->sample_rate =
+					session_info[stream_id].sampling_freq;
+	result = check_tx_acdb_values_cached();
+	if (!result) {
+		MM_INFO("acdb values for the stream is querried from modem");
+		acdb_data.acdb_state |= CAL_DATA_READY;
+	} else {
+		acdb_data.acdb_state &= ~CAL_DATA_READY;
 	}
 	if (acdb_data.preproc_stream_id == 0)
 		acdb_data.acdb_state |= AUDREC0_READY;
-	else
+	else if (acdb_data.preproc_stream_id == 1)
 		acdb_data.acdb_state |= AUDREC1_READY;
+	else if (acdb_data.preproc_stream_id == 2)
+		acdb_data.acdb_state |= AUDREC2_READY;
 	acdb_data.preproc_cb_compl = 1;
+	MM_DBG("acdb_data.acdb_state = %x\n", acdb_data.acdb_state);
 	wake_up(&acdb_data.wait);
 done:
 	return;
@@ -1909,12 +2010,25 @@ static s32 acdb_calibrate_device(void *data)
 		if (acdb_data.device_cb_compl) {
 			acdb_data.device_cb_compl = 0;
 			if (!(acdb_data.acdb_state & CAL_DATA_READY)) {
-				result = acdb_get_calibration();
-				if (result < 0) {
-					mutex_unlock(&acdb_data.acdb_mutex);
-					MM_ERR("Not able to get calibration "
-						"data continue\n");
-					continue;
+				if ((acdb_data.device_info->dev_type
+							& RX_DEVICE) == 1) {
+					/*we need to get calibration values
+					only for RX device as resampler
+					moved to start of the pre - proc chain
+					tx calibration value will be based on
+					sampling frequency what audrec is
+					configured, calibration values for tx
+					device are fetch in audpreproc
+					callback*/
+					result = acdb_get_calibration();
+					if (result < 0) {
+						mutex_unlock(
+							&acdb_data.acdb_mutex);
+						MM_ERR("Not able to get "
+							"calibration "
+							"data continue\n");
+						continue;
+					}
 				}
 			}
 			MM_DBG("acdb state = %d\n",
@@ -1948,18 +2062,11 @@ static s32 acdb_calibrate_device(void *data)
 				mutex_unlock(&acdb_data.acdb_mutex);
 				continue;
 			} else {
-				struct acdb_cache_node *acdb_cached_values;
-				acdb_data.preproc_cb_compl = 0;
-				acdb_cached_values =
-					 get_acdb_values_from_cache_tx(
-						acdb_data.preproc_stream_id);
-				if (acdb_cached_values == NULL) {
-					MM_DBG("ERROR: to get chached"
-						" acdb values\n");
+				result = handle_audpreproc_cb();
+				if (result < 0) {
 					mutex_unlock(&acdb_data.acdb_mutex);
 					continue;
 				}
-				update_acdb_data_struct(acdb_cached_values);
 			}
 		}
 apply:

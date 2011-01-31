@@ -68,6 +68,7 @@ obj-$(CONFIG_USB_ANDROID)	+= android.o
 obj-$(CONFIG_USB_QCOM_MAEMO)    += qcom_maemo.o
 obj-$(CONFIG_USB_ANDROID_ACM)	+= f_acm.o u_serial.o
 obj-$(CONFIG_USB_F_SERIAL)	+= f_serial.o u_serial.o
+obj-$(CONFIG_USB_F_SERIAL_SDIO)	+= f_serial.o u_sdio.o
 obj-$(CONFIG_USB_ANDROID_ADB)	+= f_adb.o
 obj-$(CONFIG_USB_ANDROID_MASS_STORAGE)	+= f_mass_storage.o
 obj-$(CONFIG_USB_ANDROID_MTP)	+= f_mtp.o

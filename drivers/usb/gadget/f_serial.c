@@ -71,6 +71,17 @@ struct f_gser {
 #endif
 };
 
+enum transport_type transport;
+#define NR_PORTS	2
+struct sdio_port_info port_info[NR_PORTS];
+
+static inline bool is_transport_sdio(enum transport_type t)
+{
+	if (t == USB_GADGET_FSERIAL_TRANSPORT_SDIO)
+		return 1;
+	return 0;
+}
+
 static inline struct f_gser *func_to_gser(struct usb_function *f)
 {
 	return container_of(f, struct f_gser, port.func);
@@ -293,6 +304,9 @@ gser_setup(struct usb_function *f, const struct usb_ctrlrequest *ctrl)
 
 		value = 0;
 		gser->port_handshake_bits = w_value;
+		if (gser->port.notify_modem)
+			gser->port.notify_modem(&gser->port,
+					gser->port_num, w_value);
 		break;
 
 	default:
@@ -346,7 +360,10 @@ static int gser_set_alt(struct usb_function *f, unsigned intf, unsigned alt)
 
 	if (gser->port.in->driver_data) {
 		DBG(cdev, "reset generic data ttyGS%d\n", gser->port_num);
-		gserial_disconnect(&gser->port);
+		if (is_transport_sdio(transport))
+			gsdio_disconnect(&gser->port, gser->port_num);
+		else
+			gserial_disconnect(&gser->port);
 	} else {
 		DBG(cdev, "activate generic data ttyGS%d\n", gser->port_num);
 	}
@@ -354,7 +371,10 @@ static int gser_set_alt(struct usb_function *f, unsigned intf, unsigned alt)
 			gser->hs.in, gser->fs.in);
 	gser->port.out_desc = ep_choose(cdev->gadget,
 			gser->hs.out, gser->fs.out);
-	gserial_connect(&gser->port, gser->port_num);
+	if (is_transport_sdio(transport))
+		gsdio_connect(&gser->port, gser->port_num);
+	else
+		gserial_connect(&gser->port, gser->port_num);
 	gser->online = 1;
 	return rc;
 }
@@ -365,7 +385,10 @@ static void gser_disable(struct usb_function *f)
 	struct usb_composite_dev *cdev = f->config->cdev;
 
 	DBG(cdev, "generic ttyGS%d deactivated\n", gser->port_num);
-	gserial_disconnect(&gser->port);
+	if (is_transport_sdio(transport))
+		gsdio_disconnect(&gser->port, gser->port_num);
+	else
+		gserial_disconnect(&gser->port);
 #ifdef CONFIG_MODEM_SUPPORT
 	usb_ep_fifo_flush(gser->notify);
 	usb_ep_disable(gser->notify);
@@ -526,6 +549,15 @@ static int gser_send_break(struct gserial *port, int duration)
 		state |= ACM_CTRL_BRK;
 
 	gser->serial_state = state;
+	return gser_notify_serial_state(gser);
+}
+
+static int gser_send_modem_ctrl_bits(struct gserial *port, int ctrl_bits)
+{
+	struct f_gser *gser = port_to_gser(port);
+
+	gser->serial_state = ctrl_bits;
+
 	return gser_notify_serial_state(gser);
 }
 #endif
@@ -718,6 +750,7 @@ int gser_bind_config(struct usb_configuration *c, u8 port_num)
 	gser->port.get_rts = gser_get_rts;
 	gser->port.send_carrier_detect = gser_send_carrier_detect;
 	gser->port.send_ring_indicator = gser_send_ring_indicator;
+	gser->port.send_modem_ctrl_bits = gser_send_modem_ctrl_bits;
 	gser->port.disconnect = gser_disconnect;
 	gser->port.send_break = gser_send_break;
 #endif
@@ -748,7 +781,11 @@ int fserial_modem_bind_config(struct usb_configuration *c)
 	 * serial ports. But for now allocate
 	 * two ports for modem and nmea.
 	 */
-	ret = gserial_setup(c->cdev->gadget, 2);
+	if (is_transport_sdio(transport))
+		ret = gsdio_setup(c->cdev->gadget, 2, port_info);
+	else
+		ret = gserial_setup(c->cdev->gadget, 2);
+
 	if (ret)
 		return ret;
 	return gser_bind_config(c, 0);
@@ -772,13 +809,32 @@ static struct platform_driver usb_fserial = {
 		.name = "usb_fserial",
 		.owner = THIS_MODULE,
 	},
-
 };
 
 static int __init fserial_probe(struct platform_device *pdev)
 {
+	struct usb_gadget_fserial_platform_data	*pdata =
+					pdev->dev.platform_data;
+
 	dev_dbg(&pdev->dev, "%s: probe\n", __func__);
 
+	if (!pdata || !is_transport_sdio(pdata->transport))
+		goto probe_android_register;
+
+	transport = pdata->transport;
+	if (is_transport_sdio(transport) && pdata->no_ports > NR_PORTS) {
+		pr_err("%s: Transpor: SDIO ports avail:%d requested:%d\n",
+				__func__, NR_PORTS, pdata->no_ports);
+		return -EINVAL;
+	}
+
+	/* REVISIT: How can we get this data from config/pdata...*/
+	port_info[0].data_ch_name = "SDIO_DUN";
+	port_info[0].ctrl_ch_id = 9;
+	port_info[1].data_ch_name = "SDIO_NMEA";
+	port_info[1].ctrl_ch_id = 10;
+
+probe_android_register:
 	android_register_function(&modem_function);
 	android_register_function(&nmea_function);
 

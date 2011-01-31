@@ -30,6 +30,7 @@
 #include <linux/pmic8058-othc.h>
 #include <linux/mfd/pmic8901.h>
 #include <linux/regulator/pmic8901-regulator.h>
+#include <linux/regulator/fixed.h>
 #include <linux/bootmem.h>
 #include <linux/pwm.h>
 #include <linux/pmic8058-pwm.h>
@@ -1487,6 +1488,112 @@ static struct platform_device rpm_vreg_device[RPM_VREG_ID_MAX] = {
 	RPM_VREG(RPM_VREG_ID_PM8901_LVS2),
 	RPM_VREG(RPM_VREG_ID_PM8901_LVS3),
 	RPM_VREG(RPM_VREG_ID_PM8901_MVS0),
+};
+
+enum {
+	VREG_FIXED_ID_DBVDD,
+	VREG_FIXED_ID_DCVDD,
+	VREG_FIXED_ID_AVDD1,
+	VREG_FIXED_ID_AVDD2,
+	VREG_FIXED_ID_CPVDD,
+	VREG_FIXED_ID_SPKVDD1,
+	VREG_FIXED_ID_SPKVDD2,
+	MAX_FIXED_SUPPLIES,
+};
+
+static struct regulator_consumer_supply fixed_vreg_supply[MAX_FIXED_SUPPLIES]
+= {
+	[VREG_FIXED_ID_DBVDD]  = REGULATOR_SUPPLY("DBVDD",  NULL),
+	[VREG_FIXED_ID_DCVDD]  = REGULATOR_SUPPLY("DCVDD",  NULL),
+	[VREG_FIXED_ID_AVDD1]  = REGULATOR_SUPPLY("AVDD1",  NULL),
+	[VREG_FIXED_ID_AVDD2]  = REGULATOR_SUPPLY("AVDD2",  NULL),
+	[VREG_FIXED_ID_CPVDD]  = REGULATOR_SUPPLY("CPVDD",  NULL),
+	[VREG_FIXED_ID_SPKVDD1]  = REGULATOR_SUPPLY("SPKVDD1",  NULL),
+	[VREG_FIXED_ID_SPKVDD2]  = REGULATOR_SUPPLY("SPKVDD2",  NULL),
+};
+
+#define VREG_FIXED_INIT_DATA(_id, _modes, _ops, _min_uV, _max_uV, _apply_uV) \
+	[_id] = { \
+		.constraints = { \
+			.valid_modes_mask = _modes, \
+			.valid_ops_mask = _ops, \
+			.min_uV = _min_uV, \
+			.max_uV = _max_uV, \
+			.apply_uV = _apply_uV, \
+		}, \
+		.num_consumer_supplies = 1, \
+		.consumer_supplies = &fixed_vreg_supply[_id], \
+	}
+
+#define VREG_FIXED_VOLTAGE_MICROVOLTS 1800000
+
+#define VREG_FIXED_INIT_DATA_STANDARD(_id) \
+	VREG_FIXED_INIT_DATA(_id, REGULATOR_MODE_NORMAL | \
+			REGULATOR_MODE_IDLE | REGULATOR_MODE_STANDBY, \
+			REGULATOR_CHANGE_VOLTAGE | REGULATOR_CHANGE_STATUS | \
+			REGULATOR_CHANGE_MODE, VREG_FIXED_VOLTAGE_MICROVOLTS,\
+			VREG_FIXED_VOLTAGE_MICROVOLTS, 1)
+
+#define INVALID_GPIO -1
+
+#define VREG_FIXED_CONFIG(_id, _name) \
+	[_id] = { \
+			.supply_name = _name, \
+			.gpio = INVALID_GPIO, \
+			.microvolts = VREG_FIXED_VOLTAGE_MICROVOLTS, \
+			.enable_high = 1, \
+			.enabled_at_boot = 1, \
+			.init_data = &vreg_fixed_init_data[_id], \
+		} \
+
+#define VREG_FIXED_DEVICE(_id) \
+	[_id] = { \
+			.name	  = "reg-fixed-voltage",\
+			.id	    = _id,\
+			.dev	   = {\
+				.platform_data = &vreg_fixed_config_data[_id],\
+			},\
+		} \
+
+static struct regulator_init_data vreg_fixed_init_data[MAX_FIXED_SUPPLIES] = {
+	VREG_FIXED_INIT_DATA_STANDARD(VREG_FIXED_ID_DBVDD),
+	VREG_FIXED_INIT_DATA_STANDARD(VREG_FIXED_ID_DCVDD),
+	VREG_FIXED_INIT_DATA_STANDARD(VREG_FIXED_ID_AVDD1),
+	VREG_FIXED_INIT_DATA_STANDARD(VREG_FIXED_ID_AVDD2),
+	VREG_FIXED_INIT_DATA_STANDARD(VREG_FIXED_ID_CPVDD),
+	VREG_FIXED_INIT_DATA_STANDARD(VREG_FIXED_ID_SPKVDD1),
+	VREG_FIXED_INIT_DATA_STANDARD(VREG_FIXED_ID_SPKVDD2),
+};
+
+static struct fixed_voltage_config vreg_fixed_config_data[MAX_FIXED_SUPPLIES]
+= {
+	VREG_FIXED_CONFIG(VREG_FIXED_ID_DBVDD, "DBVDD"),
+	VREG_FIXED_CONFIG(VREG_FIXED_ID_DCVDD, "DCVDD"),
+	VREG_FIXED_CONFIG(VREG_FIXED_ID_AVDD1, "AVDD1"),
+	VREG_FIXED_CONFIG(VREG_FIXED_ID_AVDD2, "AVDD2"),
+	VREG_FIXED_CONFIG(VREG_FIXED_ID_CPVDD, "CPVDD"),
+	VREG_FIXED_CONFIG(VREG_FIXED_ID_SPKVDD1, "SPKVDD1"),
+	VREG_FIXED_CONFIG(VREG_FIXED_ID_SPKVDD2, "SPKVDD2"),
+};
+
+static struct platform_device msm_vreg_fixed_devices[MAX_FIXED_SUPPLIES] = {
+	VREG_FIXED_DEVICE(VREG_FIXED_ID_DBVDD),
+	VREG_FIXED_DEVICE(VREG_FIXED_ID_DCVDD),
+	VREG_FIXED_DEVICE(VREG_FIXED_ID_AVDD1),
+	VREG_FIXED_DEVICE(VREG_FIXED_ID_AVDD2),
+	VREG_FIXED_DEVICE(VREG_FIXED_ID_CPVDD),
+	VREG_FIXED_DEVICE(VREG_FIXED_ID_SPKVDD1),
+	VREG_FIXED_DEVICE(VREG_FIXED_ID_SPKVDD2),
+};
+
+static struct platform_device *fixed_regulators[MAX_FIXED_SUPPLIES] = {
+	&msm_vreg_fixed_devices[VREG_FIXED_ID_DBVDD],
+	&msm_vreg_fixed_devices[VREG_FIXED_ID_DCVDD],
+	&msm_vreg_fixed_devices[VREG_FIXED_ID_AVDD1],
+	&msm_vreg_fixed_devices[VREG_FIXED_ID_AVDD2],
+	&msm_vreg_fixed_devices[VREG_FIXED_ID_CPVDD],
+	&msm_vreg_fixed_devices[VREG_FIXED_ID_SPKVDD1],
+	&msm_vreg_fixed_devices[VREG_FIXED_ID_SPKVDD2],
 };
 
 static struct platform_device *early_regulators[] __initdata = {
@@ -4137,6 +4244,8 @@ static void __init msm8x60_init(struct msm_board_data *board_data)
 
 	/* Initialize regulators needed for clock_init. */
 	platform_add_devices(early_regulators, ARRAY_SIZE(early_regulators));
+
+	platform_add_devices(fixed_regulators, ARRAY_SIZE(fixed_regulators));
 
 	msm_clock_init(msm_clocks_8x60, msm_num_clocks_8x60);
 

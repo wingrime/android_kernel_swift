@@ -2843,7 +2843,7 @@ static int mmc_probe(struct mmc_card *card)
 
 	if ((card->cis.vendor != 0x70) ||
 	    ((card->cis.device != 0x2460) && (card->cis.device != 0x0460)
-	     && (card->cis.device != 0x23F1))) {
+	     && (card->cis.device != 0x23F1) && (card->cis.device != 0x23F0))) {
 		dev_info(&card->dev,
 			 "ignore card vendor id 0x%x, device id 0x%x",
 			 card->cis.vendor, card->cis.device);
@@ -3105,6 +3105,8 @@ static int sdio_al_sdio_resume(struct device *dev)
 static struct sdio_device_id sdio_al_sdioid[] = {
     {.class = 0, .vendor = 0x70, .device = 0x2460},
     {.class = 0, .vendor = 0x70, .device = 0x0460},
+    {.class = 0, .vendor = 0x70, .device = 0x23F1},
+    {.class = 0, .vendor = 0x70, .device = 0x23F0},
     {}
 };
 

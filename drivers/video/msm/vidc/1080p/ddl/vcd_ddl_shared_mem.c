@@ -522,7 +522,7 @@ void vidc_sm_set_pand_b_frame_qp(struct ddl_buf_addr *shared_mem,
 
 
 void vidc_sm_get_profile_info(struct ddl_buf_addr *shared_mem,
-	u32 *pn_disp_profile_info, u32 *pn_disp_level_info)
+	u32 *pn_disp_profile_info, u32 *pn_disp_level_info, u32 *idc_value)
 {
 	u32 disp_pic_profile;
 
@@ -534,6 +534,7 @@ void vidc_sm_get_profile_info(struct ddl_buf_addr *shared_mem,
 	*pn_disp_level_info = VIDC_GETFIELD(disp_pic_profile,
 			VIDC_SM_DISP_PIC_PROFILE_DISP_PIC_LEVEL_BMASK,
 			VIDC_SM_DISP_PIC_PROFILE_DISP_PIC_LEVEL_SHFT);
+	*idc_value = (disp_pic_profile & 0x60) >> 5;
 }
 
 void vidc_sm_set_encoder_new_bit_rate(struct ddl_buf_addr *shared_mem,

@@ -173,6 +173,7 @@ static u32 ddl_decoder_seq_done_callback(struct ddl_context *ddl_context,
 	struct ddl_decoder_data *decoder = &ddl->codec_data.decoder;
 	struct vidc_1080p_seq_hdr_info seq_hdr_info;
 	u32 process_further = true;
+	u32 idc_value = VIDC_1080P_IDCFORMAT_32BIT;
 
 	DDL_MSG_MED("ddl_decoder_seq_done_callback");
 	if (!ddl->decoding ||
@@ -209,9 +210,17 @@ static u32 ddl_decoder_seq_done_callback(struct ddl_context *ddl_context,
 		}
 		vidc_sm_get_profile_info(&ddl->shared_mem
 			[ddl->command_channel],
-			&seq_hdr_info.profile, &seq_hdr_info.level);
+			&seq_hdr_info.profile, &seq_hdr_info.level, &idc_value);
 		ddl_get_dec_profile_level(decoder, seq_hdr_info.profile,
 			seq_hdr_info.level);
+		if (decoder->codec.codec == VCD_CODEC_H264)
+			if (decoder->profile.profile == VCD_PROFILE_H264_HIGH ||
+				decoder->profile.profile == VCD_PROFILE_UNKNOWN)
+				if (idc_value > VIDC_1080P_IDCFORMAT_420) {
+					DDL_MSG_ERROR("Unsupported IDC format");
+					ddl_client_fatal_cb(ddl);
+					return process_further;
+				}
 		ddl_calculate_stride(&decoder->frame_size,
 			!decoder->progressive_only);
 		if (seq_hdr_info.crop_exists) {

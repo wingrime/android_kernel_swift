@@ -163,6 +163,8 @@ static struct dentry *stats_dentry;
 
 /* MDM EFS*/
 #define RAMFS_MDM_STORAGE_ID		0x4D4583A1
+/* SSD */
+#define RAMFS_SSD_STORAGE_ID		0x00535344
 
 #define for_each_smem_info(s, i)	\
 		for (i = 0; \
@@ -1550,6 +1552,8 @@ static uint32_t rmt_storage_get_sid(const char *path)
 		return RAMFS_MDM_STORAGE_ID;
 	if (!strncmp(path, "/q6_fsg_parti_id_0x5B", MAX_PATH_NAME))
 		return RAMFS_MDM_STORAGE_ID;
+	if (!strncmp(path, "ssd", MAX_PATH_NAME))
+		return RAMFS_SSD_STORAGE_ID;
 	return 0;
 }
 

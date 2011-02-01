@@ -17,7 +17,9 @@ obj-$(CONFIG_ARCH_MSM_ARM11) += acpuclock.o timer.o
 obj-$(CONFIG_ARCH_MSM_SCORPION) += timer.o
 obj-$(CONFIG_ARCH_MSM_SCORPION) += pmu.o
 obj-$(CONFIG_ARCH_MSM_SCORPIONMP) += timer.o
+ifndef CONFIG_ARCH_MSM8960
 obj-$(CONFIG_ARCH_MSM_SCORPIONMP) += pmu.o
+endif
 
 obj-$(CONFIG_ARCH_MSM_SCORPION) += msm_fault_handlers.o
 
@@ -144,6 +146,7 @@ obj-$(CONFIG_ARCH_MSM7X27) += board-msm7x27.o devices-msm7x27.o
 obj-$(CONFIG_ARCH_MSM7X30) += board-msm7x30.o devices-msm7x30.o memory_topology.o
 obj-$(CONFIG_ARCH_MSM7X30) += clock-local.o clock-7x30.o acpuclock-7x30.o
 obj-$(CONFIG_ARCH_MSM7X25) += board-msm7x27.o devices-msm7x25.o
+obj-$(CONFIG_ARCH_MSM8960) += board-msm8960.o devices-8960.o clock-dummy.o
 
 obj-$(CONFIG_MACH_SAPPHIRE) += board-sapphire.o board-sapphire-gpio.o
 obj-$(CONFIG_MACH_SAPPHIRE) += board-sapphire-keypad.o board-sapphire-panel.o
@@ -178,7 +181,9 @@ obj-$(CONFIG_ARCH_MSM7X30) += gpiomux-7x30.o gpiomux-v1.o gpiomux.o
 obj-$(CONFIG_ARCH_QSD8X50) += gpiomux-8x50.o gpiomux-v1.o gpiomux.o
 obj-$(CONFIG_ARCH_MSM8X60) += gpiomux-8x60.o gpiomux-v2.o gpiomux.o
 ifdef CONFIG_MSM_V2_TLMM
+ifndef CONFIG_ARCH_MSM8960
 obj-y	+= gpio-v2.o
+endif
 else
 obj-y	+= gpio.o
 endif

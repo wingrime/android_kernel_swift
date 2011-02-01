@@ -20,16 +20,11 @@
  *
  */
 
-#ifndef __ASM_ARCH_MSM_IOMAP_H
-#define __ASM_ARCH_MSM_IOMAP_H
-
-#include <asm/sizes.h>
+#ifndef __ASM_ARCH_MSM_IOMAP_8960_H
+#define __ASM_ARCH_MSM_IOMAP_8960_H
 
 /* Physical base address and size of peripherals.
  * Ordered by the virtual base addresses they will be mapped at.
- *
- * MSM_VIC_BASE must be an value that can be loaded via a "mov"
- * instruction, otherwise entry-macro.S will not compile.
  *
  * If you add or remove entries here, you'll want to edit the
  * msm_io_desc array in arch/arm/mach-msm/io.c to reflect your
@@ -37,22 +32,31 @@
  *
  */
 
-#ifdef __ASSEMBLY__
-#define IOMEM(x)	x
-#else
-#define IOMEM(x)	((void __force __iomem *)(x))
-#endif
 
-#if defined(CONFIG_ARCH_MSM7X30)
-#include "msm_iomap-7x30.h"
-#elif defined(CONFIG_ARCH_QSD8X50)
-#include "msm_iomap-8x50.h"
-#elif defined(CONFIG_ARCH_MSM8X60)
-#include "msm_iomap-8x60.h"
-#elif defined(CONFIG_ARCH_MSM8960)
-#include "msm_iomap-8960.h"
-#else
-#include "msm_iomap-7xxx.h"
-#endif
+#define MSM_QGIC_DIST_BASE	IOMEM(0xF0000000)
+#define MSM_QGIC_DIST_PHYS	0x02000000
+#define MSM_QGIC_DIST_SIZE	SZ_4K
+
+#define MSM_QGIC_CPU_BASE	IOMEM(0xF0001000)
+#define MSM_QGIC_CPU_PHYS	0x02002000
+#define MSM_QGIC_CPU_SIZE	SZ_4K
+
+#define MSM_TMR_BASE		IOMEM(0xF0100000)
+#define MSM_TMR_PHYS		0x0200A000
+#define MSM_TMR_SIZE		(SZ_4K)
+
+#define MSM_TMR0_BASE		IOMEM(0xF0101000)
+#define MSM_TMR0_PHYS		0x0208A000
+#define MSM_TMR0_SIZE		(SZ_4K)
+
+#define MSM_SHARED_RAM_BASE	IOMEM(0xF0200000)
+#define MSM_SHARED_RAM_SIZE	SZ_1M
+
+#define MSM_DMOV_BASE		IOMEM(0xF0300000)
+#define MSM_DMOV_PHYS		0x18300000
+#define MSM_DMOV_SIZE		SZ_1M
+
+#define MSM_GPT_BASE		(MSM_TMR_BASE + 0x4)
+#define MSM_DGT_BASE		(MSM_TMR_BASE + 0x24)
 
 #endif

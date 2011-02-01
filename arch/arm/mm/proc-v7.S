@@ -267,7 +267,7 @@ __v7_setup:
 	mcr     p15, 0, r0, c1, c0, 1           @ write ACTLR
 #endif
 
-#if defined (CONFIG_ARCH_MSM_SCORPIONMP)
+#if defined (CONFIG_ARCH_MSM_SCORPIONMP) && !defined (CONFIG_ARCH_MSM8960)
 	mrc     p15, 3, r0, c15, c0, 2  @ optimal setting for Scorpion MP
 	orr	    r0, r0, #0x1 << 21
 	mcr     p15, 3, r0, c15, c0, 2

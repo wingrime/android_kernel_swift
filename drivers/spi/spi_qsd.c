@@ -1,4 +1,4 @@
-/* Copyright (c) 2008-2010, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2008-2011, Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -1156,7 +1156,7 @@ static void msm_spi_unmap_dma_buffers(struct msm_spi *dd)
  * 2. Buffers should be aligned to cache line.
   */
 static inline int msm_use_dm(struct msm_spi *dd, struct spi_transfer *tr,
-				u32 xfr_len)
+				u32 xfr_len, u8 bpw)
 {
 	u32 cache_line = dma_get_cache_alignment();
 
@@ -1174,6 +1174,10 @@ static inline int msm_use_dm(struct msm_spi *dd, struct spi_transfer *tr,
 		if (!IS_ALIGNED((size_t)tr->rx_buf, cache_line))
 			return 0;
 	}
+
+	if (tr->cs_change &&
+	   ((bpw != 8) || (bpw != 16) || (bpw != 32)))
+		return 0;
 	return 1;
 }
 
@@ -1231,7 +1235,7 @@ static void msm_spi_process_transfer(struct msm_spi *dd)
 		__func__);
 		return;
 	}
-	if ((!msm_use_dm(dd, dd->cur_transfer, transfer_len))) {
+	if (!msm_use_dm(dd, dd->cur_transfer, transfer_len, bpw)) {
 		dd->mode = SPI_FIFO_MODE;
 		dd->tx_bytes_remaining = transfer_len;
 		dd->rx_bytes_remaining = transfer_len;
@@ -1505,7 +1509,8 @@ static int msm_spi_transfer(struct spi_device *spi, struct spi_message *msg)
 		}
 
 		xfr_len = get_transfer_length(tr, msg);
-		if (!msm_use_dm(dd, tr, xfr_len) || msg->is_dma_mapped)
+		if (!msm_use_dm(dd, tr, xfr_len, tr->bits_per_word) ||
+		   msg->is_dma_mapped)
 			continue;
 
 		/* Do DMA mapping "early" for better error reporting */
@@ -1570,7 +1575,8 @@ static int msm_spi_transfer(struct spi_device *spi, struct spi_message *msg)
 error:
 	list_for_each_entry_continue_reverse(tr, &msg->transfers, transfer_list)
 	{
-		if (msm_use_dm(dd, tr, xfr_len) && !msg->is_dma_mapped) {
+		if (msm_use_dm(dd, tr, xfr_len, tr->bits_per_word) &&
+		   !msg->is_dma_mapped) {
 			if (tr->rx_buf != NULL)
 				dma_unmap_single(&spi->dev, tr->rx_dma, tr->len,
 						 DMA_TO_DEVICE);

@@ -23,13 +23,13 @@
 #include <linux/mutex.h>
 #include <linux/errno.h>
 #include <linux/cpufreq.h>
+#include <linux/clk.h>
 
 #include <mach/board.h>
 #include <mach/msm_iomap.h>
 
 #include "acpuclock.h"
 #include "avs.h"
-#include "clock.h"
 
 #define SHOT_SWITCH 4
 #define HOP_SWITCH 5
@@ -167,6 +167,7 @@ struct clock_state {
 	uint32_t			max_speed_delta_khz;
 	uint32_t			vdd_switch_time_us;
 	unsigned int			max_vdd;
+	struct clk			*ebi1_clk;
 	int (*acpu_set_vdd) (int mvolts);
 };
 
@@ -482,8 +483,8 @@ int acpuclk_set_rate(int cpu, unsigned long rate, enum setrate_reason reason)
 		goto out;
 
 	if (strt_s->axiclk_khz != tgt_s->axiclk_khz) {
-		res = ebi1_clk_set_min_rate(CLKVOTE_ACPUCLK,
-			tgt_s->axiclk_khz * 1000);
+		res = clk_set_rate(drv_state.ebi1_clk,
+				tgt_s->axiclk_khz * 1000);
 		if (res < 0)
 			pr_warning("Setting AXI min rate failed (%d)\n", res);
 	}
@@ -570,9 +571,12 @@ static void __init acpuclk_init(void)
 	}
 
 	drv_state.current_speed = speed;
-	res = ebi1_clk_set_min_rate(CLKVOTE_ACPUCLK, speed->axiclk_khz * 1000);
+	res = clk_set_rate(drv_state.ebi1_clk, speed->axiclk_khz * 1000);
 	if (res < 0)
 		pr_warning("Setting AXI min rate failed (%d)\n", res);
+	res = clk_enable(drv_state.ebi1_clk);
+	if (res < 0)
+		pr_warning("Enabling AXI clock failed (%d)\n", res);
 
 	pr_info("ACPU running at %d KHz\n", speed->acpuclk_khz);
 }
@@ -707,6 +711,9 @@ void __init msm_acpu_clock_init(struct msm_acpu_clock_platform_data *clkdata)
 	drv_state.vdd_switch_time_us = clkdata->vdd_switch_time_us;
 	drv_state.max_vdd = clkdata->max_vdd;
 	drv_state.acpu_set_vdd = clkdata->acpu_set_vdd;
+
+	drv_state.ebi1_clk = clk_get(NULL, "ebi1_acpu_clk");
+	BUG_ON(IS_ERR(drv_state.ebi1_clk));
 
 	acpu_freq_tbl_fixup();
 	acpuclk_init();

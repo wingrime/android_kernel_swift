@@ -22,13 +22,13 @@
 #include <linux/mutex.h>
 #include <linux/errno.h>
 #include <linux/cpufreq.h>
+#include <linux/clk.h>
 
 #include <mach/board.h>
 #include <mach/msm_iomap.h>
 #include <mach/socinfo.h>
 
 #include "acpuclock.h"
-#include "clock.h"
 
 /* Frequency switch modes. */
 #define SHOT_SWITCH		4
@@ -135,6 +135,7 @@ struct clock_state {
 	uint32_t			acpu_switch_time_us;
 	uint32_t			max_speed_delta_khz;
 	unsigned int			max_vdd;
+	struct clk			*ebi1_clk;
 	int (*acpu_set_vdd) (int mvolts);
 };
 
@@ -334,8 +335,8 @@ int acpuclk_set_rate(int cpu, unsigned long rate, enum setrate_reason reason)
 		goto out;
 
 	if (strt_s->ebi1clk_khz != tgt_s->ebi1clk_khz) {
-		res = ebi1_clk_set_min_rate(CLKVOTE_ACPUCLK,
-			tgt_s->ebi1clk_khz * 1000);
+		res = clk_set_rate(drv_state.ebi1_clk,
+				tgt_s->ebi1clk_khz * 1000);
 		if (res < 0)
 			pr_warning("Setting EBI1/AXI min rate failed (%d)\n",
 									res);
@@ -503,6 +504,9 @@ void __init msm_acpu_clock_init(struct msm_acpu_clock_platform_data *clkdata)
 	drv_state.max_vdd = clkdata->max_vdd;
 	drv_state.acpu_set_vdd = clkdata->acpu_set_vdd;
 
+	drv_state.ebi1_clk = clk_get(NULL, "ebi1_acpu_clk");
+	BUG_ON(IS_ERR(drv_state.ebi1_clk));
+
 	max_freq = msm_acpu_clock_fixup();
 
 	/* Configure hardware. */
@@ -513,6 +517,8 @@ void __init msm_acpu_clock_init(struct msm_acpu_clock_platform_data *clkdata)
 
 	/* Improve boot time */
 	acpuclk_set_rate(smp_processor_id(), max_freq, SETRATE_CPUFREQ);
+	if (clk_enable(drv_state.ebi1_clk))
+		pr_warning("Failed to enable ebi1_clk\n");
 
 #ifdef CONFIG_CPU_FREQ_MSM
 	cpufreq_table_init();

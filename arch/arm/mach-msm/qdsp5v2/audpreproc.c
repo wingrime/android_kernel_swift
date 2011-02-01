@@ -1,7 +1,7 @@
 /*
  * Common code to deal with the AUDPREPROC dsp task (audio preprocessing)
  *
- * Copyright (c) 2009-2010, Code Aurora Forum. All rights reserved.
+ * Copyright (c) 2009-2011, Code Aurora Forum. All rights reserved.
  *
  * Based on the audpp layer in arch/arm/mach-msm/qdsp5/audpp.c
  *
@@ -45,13 +45,15 @@ struct msm_adspenc_info {
 #define MAX_EVENT_CALLBACK_CLIENTS 1
 
 #define ENC0_FORMAT ((1<<MSM_ADSP_ENC_CODEC_WAV)| \
-	(1<<MSM_ADSP_ENC_CODEC_SBC))
+	(1<<MSM_ADSP_ENC_CODEC_SBC) | (1<<MSM_ADSP_ENC_CODEC_EXT_WAV))
 
 #define ENC1_FORMAT ((1<<MSM_ADSP_ENC_CODEC_WAV)| \
 	(1<<MSM_ADSP_ENC_CODEC_AAC) | (1<<MSM_ADSP_ENC_CODEC_AMRNB) | \
-	(1<<MSM_ADSP_ENC_CODEC_EVRC) | (1<<MSM_ADSP_ENC_CODEC_QCELP))
+	(1<<MSM_ADSP_ENC_CODEC_EVRC) | (1<<MSM_ADSP_ENC_CODEC_QCELP) | \
+	(1<<MSM_ADSP_ENC_CODEC_EXT_WAV))
 
-#define ENC2_FORMAT (1<<MSM_ADSP_ENC_CODEC_WAV)
+#define ENC2_FORMAT ((1<<MSM_ADSP_ENC_CODEC_WAV) | \
+	(1<<MSM_ADSP_ENC_CODEC_EXT_WAV))
 
 struct msm_adspenc_database {
 	unsigned num_enc;
@@ -62,18 +64,18 @@ static struct msm_adspenc_info enc_info_list[] = {
 	ENC_MODULE_INFO("AUDREC0TASK", \
 			((QDSP_uPAudRec0BitStreamQueue << 16)| \
 			   QDSP_uPAudRec0CmdQueue), 0, \
-			 (ENC0_FORMAT  | (1 << MSM_ADSP_ENC_MODE_TUNNEL)), 2),
+			 (ENC0_FORMAT  | (1 << MSM_ADSP_ENC_MODE_TUNNEL)), 3),
 
 	ENC_MODULE_INFO("AUDREC1TASK", \
 			 ((QDSP_uPAudRec1BitStreamQueue << 16)| \
 			   QDSP_uPAudRec1CmdQueue), 1, \
 			 (ENC1_FORMAT | (1 << MSM_ADSP_ENC_MODE_TUNNEL) | \
-			  (1 << MSM_ADSP_ENC_MODE_NON_TUNNEL)), 5),
+			  (1 << MSM_ADSP_ENC_MODE_NON_TUNNEL)), 6),
 
 	ENC_MODULE_INFO("AUDREC2TASK", \
 			 ((QDSP_uPAudRec2BitStreamQueue << 16)| \
 			   QDSP_uPAudRec2CmdQueue), 2, \
-			 (ENC2_FORMAT  | (1 << MSM_ADSP_ENC_MODE_TUNNEL)), 1),
+			 (ENC2_FORMAT  | (1 << MSM_ADSP_ENC_MODE_TUNNEL)), 2),
 
 };
 

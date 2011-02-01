@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2010, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2009-2011, Code Aurora Forum. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -41,6 +41,7 @@
 #define MSM_ADSP_ENC_CODEC_AMRNB 3
 #define MSM_ADSP_ENC_CODEC_EVRC 4
 #define MSM_ADSP_ENC_CODEC_QCELP 5
+#define MSM_ADSP_ENC_CODEC_EXT_WAV (15)
 
 #define MSM_ADSP_ENC_MODE_TUNNEL 24
 #define MSM_ADSP_ENC_MODE_NON_TUNNEL 25

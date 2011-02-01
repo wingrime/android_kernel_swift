@@ -3,7 +3,7 @@
  *
  * Copyright (C) 2008 Google, Inc.
  * Copyright (C) 2008 HTC Corporation
- * Copyright (c) 2009-2010, Code Aurora Forum. All rights reserved.
+ * Copyright (c) 2009-2011, Code Aurora Forum. All rights reserved.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -37,10 +37,23 @@
 
 /* FRAME_NUM must be a power of two */
 #define FRAME_NUM		(8)
-#define FRAME_SIZE		(2052 * 2)
-#define MONO_DATA_SIZE		(2048)
-#define STEREO_DATA_SIZE	(MONO_DATA_SIZE * 2)
-#define DMASZ 			(FRAME_SIZE * FRAME_NUM)
+#define FRAME_HEADER_SIZE       (8) /*4 half words*/
+/* size of a mono frame with 256 samples */
+#define MONO_DATA_SIZE_256	(512) /* in bytes*/
+/*size of a mono frame with 512 samples */
+#define MONO_DATA_SIZE_512	(1024) /* in bytes*/
+/*size of a mono frame with 1024 samples */
+#define MONO_DATA_SIZE_1024	(2048) /* in bytes */
+
+/*size of a stereo frame with 256 samples per channel */
+#define STEREO_DATA_SIZE_256	(1024) /* in bytes*/
+/*size of a stereo frame with 512 samples per channel */
+#define STEREO_DATA_SIZE_512	(2048) /* in bytes*/
+/*size of a stereo frame with 1024 samples per channel */
+#define STEREO_DATA_SIZE_1024	(4096) /* in bytes */
+
+#define MAX_FRAME_SIZE		((STEREO_DATA_SIZE_1024) + FRAME_HEADER_SIZE)
+#define DMASZ			(MAX_FRAME_SIZE * FRAME_NUM)
 
 struct buffer {
 	void *data;
@@ -364,6 +377,10 @@ static int audpcm_in_param_config(struct audio_in *audio)
 	cmd.aud_rec_samplerate_idx = audio->samp_rate;
 	cmd.aud_rec_stereo_mode = audio->channel_mode;
 
+	if (audio->channel_mode == AUDREC_CMD_MODE_MONO)
+		cmd.aud_rec_frame_size = audio->buffer_size/2;
+	else
+		cmd.aud_rec_frame_size = audio->buffer_size/4;
 	return audpreproc_send_audreccmdqueue(&cmd, sizeof(cmd));
 }
 
@@ -415,9 +432,10 @@ static int audpcm_in_mem_config(struct audio_in *audio)
 	 * Stereo: 2048 samples + 4 halfword header
 	 */
 	for (n = 0; n < FRAME_NUM; n++) {
-		audio->in[n].data = data + 4;
-		data += (4 + (audio->channel_mode ? 2048 : 1024));
-		MM_DBG("0x%8x\n", (int)(audio->in[n].data - 8));
+		/* word increment*/
+		audio->in[n].data = data + (FRAME_HEADER_SIZE/2);
+		data += ((FRAME_HEADER_SIZE/2) + (audio->buffer_size/2));
+		MM_DBG("0x%8x\n", (int)(audio->in[n].data - FRAME_HEADER_SIZE));
 	}
 
 	return audrec_send_audrecqueue(audio, &cmd, sizeof(cmd));
@@ -576,10 +594,24 @@ static long audpcm_in_ioctl(struct file *file,
 		}
 		if (cfg.channel_count == 1) {
 			cfg.channel_count = AUDREC_CMD_MODE_MONO;
-			audio->buffer_size = MONO_DATA_SIZE;
+			if ((cfg.buffer_size == MONO_DATA_SIZE_256) ||
+			    (cfg.buffer_size == MONO_DATA_SIZE_512) ||
+			    (cfg.buffer_size == MONO_DATA_SIZE_1024)) {
+				audio->buffer_size = cfg.buffer_size;
+			} else {
+				rc = -EINVAL;
+				break;
+			}
 		} else if (cfg.channel_count == 2) {
 			cfg.channel_count = AUDREC_CMD_MODE_STEREO;
-			audio->buffer_size = STEREO_DATA_SIZE;
+			if ((cfg.buffer_size == STEREO_DATA_SIZE_256) ||
+			    (cfg.buffer_size == STEREO_DATA_SIZE_512) ||
+			    (cfg.buffer_size == STEREO_DATA_SIZE_1024)) {
+				audio->buffer_size = cfg.buffer_size;
+			} else {
+				rc = -EINVAL;
+				break;
+			}
 		} else {
 			rc = -EINVAL;
 			break;
@@ -705,7 +737,7 @@ static ssize_t audpcm_in_read(struct file *file,
 			count -= size;
 			buf += size;
 		} else {
-			MM_ERR("short read\n");
+			MM_ERR("short read count %d\n", count);
 			break;
 		}
 	}
@@ -773,9 +805,9 @@ static int audpcm_in_open(struct inode *inode, struct file *file)
 	 * but at least we need to have initial config
 	 */
 	audio->channel_mode = AUDREC_CMD_MODE_MONO;
-	audio->buffer_size = MONO_DATA_SIZE;
+	audio->buffer_size = MONO_DATA_SIZE_1024;
 	audio->samp_rate = 8000;
-	audio->enc_type = ENC_TYPE_WAV | audio->mode;
+	audio->enc_type = ENC_TYPE_EXT_WAV | audio->mode;
 
 	encid = audpreproc_aenc_alloc(audio->enc_type, &audio->module_name,
 			&audio->queue_ids);

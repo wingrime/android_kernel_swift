@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2010, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2009-2011, Code Aurora Forum. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -57,6 +57,7 @@
 #define ENC_TYPE_AMRNB	0x03
 #define ENC_TYPE_EVRC	0x04
 #define ENC_TYPE_V13K	0x05
+#define ENC_TYPE_EXT_WAV   0x0F /* to dynamically configure frame size */
 
 /* structure definitions according to
  * command description of ARM-DSP interface specifications
@@ -95,6 +96,7 @@ struct audpreproc_audrec_cmd_parm_cfg_wav {
 	struct audpreproc_audrec_cmd_param_cfg_common common;
 	unsigned short aud_rec_samplerate_idx;
 	unsigned short aud_rec_stereo_mode;
+	unsigned short aud_rec_frame_size;
 } __attribute__((packed));
 
 /*

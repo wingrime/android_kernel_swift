@@ -1,4 +1,4 @@
-/* Copyright (c) 2010 Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2010-2011 Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -223,8 +223,9 @@ struct smb137b_data {
 	int usb_status;
 
 	bool stop_heartbeat;
-	bool disabled;
 };
+
+static unsigned int disabled;
 
 static void (*notify_vbus_state_func_ptr)(int);
 static int usb_notified_of_insertion;
@@ -427,7 +428,7 @@ static int smb137b_start_charging(struct smb137b_data *smb137b_chg,
 	u8 temp = 0;
 	int ret = 0;
 
-	if (smb137b_chg->disabled) {
+	if (disabled) {
 		dev_err(&smb137b_chg->client->dev,
 			"%s called when disabled\n", __func__);
 		goto out;
@@ -580,32 +581,11 @@ static int otg_set(void *data, u64 value)
 }
 DEFINE_SIMPLE_ATTRIBUTE(smb137b_otg_fops, otg_get, otg_set, "%llu\n");
 
-static int disable_get(void *data, u64 *value)
-{
-	struct smb137b_data *smb137b_chg = data;
-
-	*value = (u64)smb137b_chg->disabled;
-	return 0;
-}
-static int disable_set(void *data, u64 value)
-{
-	struct smb137b_data *smb137b_chg = data;
-
-	smb137b_chg->disabled = !!value;
-	if (smb137b_chg->disabled)
-		smb137b_stop_charging(smb137b_chg);
-	return 0;
-}
-DEFINE_SIMPLE_ATTRIBUTE(smb137b_disable_fops,
-					disable_get, disable_set, "%llu\n");
-
 static void smb137b_create_debugfs_entries(struct smb137b_data *smb137b_chg)
 {
 	dent = debugfs_create_dir("smb137b", NULL);
 	if (dent) {
 		debugfs_create_file("otg", 0644, dent, NULL, &smb137b_otg_fops);
-		debugfs_create_file("disable", 0644, dent, smb137b_chg,
-							&smb137b_disable_fops);
 	}
 }
 static void smb137b_destroy_debugfs_entries(void)
@@ -622,6 +602,22 @@ static void smb137b_destroy_debugfs_entries(void)
 }
 #endif
 
+static int set_disable_status_param(const char *val, struct kernel_param *kp)
+{
+	int ret;
+
+	ret = param_set_int(val, kp);
+	if (ret)
+		return ret;
+
+	if (usb_smb137b_chg && disabled)
+		smb137b_stop_charging(usb_smb137b_chg);
+
+	pr_debug("%s disabled =%d\n", __func__, disabled);
+	return 0;
+}
+module_param_call(disabled, set_disable_status_param, param_get_uint,
+					&disabled, 0644);
 static void smb137b_heartbeat(struct work_struct *smb137b_work)
 {
 	int ret;

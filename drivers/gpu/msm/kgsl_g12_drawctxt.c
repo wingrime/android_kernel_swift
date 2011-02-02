@@ -66,6 +66,8 @@ kgsl_g12_drawctxt_destroy(struct kgsl_device *device,
 	if (!test_bit(drawctxt_id, g12_device->ringbuffer.ctxt_bitmap))
 		return KGSL_FAILURE;
 
+	kgsl_g12_idle(device, KGSL_TIMEOUT_DEFAULT);
+
 	if (g12_device->ringbuffer.prevctx == drawctxt_id)
 		g12_device->ringbuffer.prevctx = KGSL_G12_INVALID_CONTEXT;
 

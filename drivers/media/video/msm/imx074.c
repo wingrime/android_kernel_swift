@@ -844,7 +844,7 @@ static int32_t imx074_video_config(int mode)
 static int32_t imx074_snapshot_config(int mode)
 {
 	int32_t rc = 0;
-	int rt;
+	int rt = RES_PREVIEW; /* TODO: Used without initialization, guessing. */
 	/* change sensor resolution if needed */
 	if (imx074_ctrl->curr_res != imx074_ctrl->pict_res) {
 		if (imx074_ctrl->pict_res == QTR_SIZE) {
@@ -862,7 +862,7 @@ static int32_t imx074_snapshot_config(int mode)
 static int32_t imx074_raw_snapshot_config(int mode)
 {
 	int32_t rc = 0;
-	int rt;
+	int rt = RES_PREVIEW; /* TODO: Used without initialization, guessing. */
 	/* change sensor resolution if needed */
 	if (imx074_ctrl->curr_res != imx074_ctrl->pict_res) {
 		if (imx074_ctrl->pict_res == QTR_SIZE) {

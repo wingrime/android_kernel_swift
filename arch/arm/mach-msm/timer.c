@@ -437,6 +437,7 @@ static void msm_timer_set_mode(enum clock_event_mode mode,
 	local_irq_restore(irq_flags);
 }
 
+#ifdef CONFIG_PM
 /*
  * Retrieve the cycle count from sclk and optionally synchronize local clock
  * with the sclk value.
@@ -944,6 +945,8 @@ int __init msm_timer_init_time_sync(void (*timeout)(void))
 
 	return 0;
 }
+
+#endif
 
 static DEFINE_CLOCK_DATA(cd);
 

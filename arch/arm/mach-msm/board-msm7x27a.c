@@ -23,11 +23,53 @@
 #include <mach/msm_iomap.h>
 #include "devices.h"
 #include <linux/platform_device.h>
+#include <linux/io.h>
 #include "timer.h"
+
+#define MSM_EBI2_PHYS 0xa0d00000
+
+static struct resource smc91x_resources[] = {
+	[0] = {
+		.start = 0x90000300,
+		.end   = 0x900003ff,
+		.flags = IORESOURCE_MEM,
+	},
+	[1] = {
+		.start = MSM_GPIO_TO_INT(4),
+		.end   = MSM_GPIO_TO_INT(4),
+		.flags = IORESOURCE_IRQ,
+	},
+};
+
+static struct platform_device smc91x_device = {
+	.name           = "smc91x",
+	.id             = 0,
+	.num_resources  = ARRAY_SIZE(smc91x_resources),
+	.resource       = smc91x_resources,
+};
 
 static struct platform_device *rumi_sim_devices[] __initdata = {
 	&msm_device_dmov,
+	&smc91x_device,
 };
+
+static void __init msm7x27a_init_ebi2(void)
+{
+	uint32_t ebi2_cfg;
+	void __iomem *ebi2_cfg_ptr;
+
+	ebi2_cfg_ptr = ioremap_nocache(MSM_EBI2_PHYS, sizeof(uint32_t));
+	if (ebi2_cfg_ptr) {
+		ebi2_cfg = readl(ebi2_cfg_ptr);
+
+		if (machine_is_msm7x27a_rumi3())
+			ebi2_cfg |= (1 << 4); /* CS2 */
+
+		writel(ebi2_cfg, ebi2_cfg_ptr);
+		iounmap(ebi2_cfg_ptr);
+	}
+
+}
 
 static void __init msm7x2x_init_irq(void)
 {
@@ -38,6 +80,7 @@ static void __init msm7x2x_init_irq(void)
 static void __init msm7x2x_init(void)
 {
 	if (machine_is_msm7x27a_rumi3()) {
+		msm7x27a_init_ebi2();
 		platform_add_devices(rumi_sim_devices,
 				ARRAY_SIZE(rumi_sim_devices));
 	}

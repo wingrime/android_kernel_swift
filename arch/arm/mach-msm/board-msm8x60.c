@@ -7558,6 +7558,11 @@ static struct tvenc_platform_data atv_pdata = {
 
 static void __init msm_fb_add_devices(void)
 {
+#ifdef CONFIG_FB_MSM_LCDC_DSUB
+	mdp_pdata.mdp_core_clk_table = NULL;
+	mdp_pdata.num_mdp_clk = 0;
+	mdp_pdata.mdp_core_clk_rate = 200000000;
+#endif
 	if (machine_is_msm8x60_rumi3())
 		msm_fb_register_device("mdp", NULL);
 	else

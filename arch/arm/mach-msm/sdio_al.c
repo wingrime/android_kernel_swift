@@ -2754,8 +2754,14 @@ static int init_channels(struct sdio_al_device *sdio_al_dev)
 	if (ret)
 		goto exit;
 
-	if (sdio_al->unittest_mode)
+	if (sdio_al->unittest_mode) {
 		pr_info(MODULE_NAME ":==== SDIO-AL UNIT-TEST ====\n");
+		for (i = 0; i < SDIO_AL_MAX_CHANNELS; i++) {
+			if (!sdio_al_dev->channel[i].is_valid)
+				continue;
+			test_channel_init(sdio_al_dev->channel[i].name);
+		}
+	}
 	else
 		/* Allow clients to probe for this driver */
 		for (i = 0; i < SDIO_AL_MAX_CHANNELS; i++) {

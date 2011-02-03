@@ -98,9 +98,3 @@ struct clk_ops clk_ops_dummy = {
 
 struct clk_ops clk_ops_remote = {
 };
-
-unsigned long clk_get_max_axi_khz(void)
-{
-	return 0;
-}
-

@@ -64,6 +64,14 @@
 #define US_LOW_BAND                 (87.5)
 #define US_HIGH_BAND                (108)
 
+/* constant for Tx */
+
+#define MASK_PI                    (0x0000FFFF)
+#define MASK_PI_MSB                (0x0000FF00)
+#define MASK_PI_LSB                (0x000000FF)
+#define MASK_PTY                   (0x0000001F)
+#define MASK_TXREPCOUNT            (0x0000000F)
+
 #undef FMDBG
 #ifdef FM_DEBUG
   #define FMDBG(fmt, args...) printk(KERN_INFO "tavarua_radio: " fmt, ##args)
@@ -128,7 +136,11 @@ enum v4l2_cid_private_tavarua_t {
 	V4L2_CID_PRIVATE_TAVARUA_LP_MODE,
 	V4L2_CID_PRIVATE_TAVARUA_ANTENNA,
 	V4L2_CID_PRIVATE_TAVARUA_RDSD_BUF,
-	V4L2_CID_PRIVATE_TAVARUA_PSALL
+	V4L2_CID_PRIVATE_TAVARUA_PSALL,
+	/*v4l2 Tx controls*/
+	V4L2_CID_PRIVATE_TAVARUA_TX_SETPSREPEATCOUNT,
+	V4L2_CID_PRIVATE_TAVARUA_STOP_RDS_TX_PS_NAME,
+	V4L2_CID_PRIVATE_TAVARUA_STOP_RDS_TX_RT
 };
 
 enum tavarua_buf_t {
@@ -389,7 +401,9 @@ enum tavarua_evt_t {
 	TAVARUA_EVT_RDS_AVAIL,
 	TAVARUA_EVT_RDS_NOT_AVAIL,
 	TAVARUA_EVT_NEW_SRCH_LIST,
-	TAVARUA_EVT_NEW_AF_LIST
+	TAVARUA_EVT_NEW_AF_LIST,
+	TAVARUA_EVT_TXRDSDAT,
+	TAVARUA_EVT_TXRDSDONE
 };
 
 enum tavarua_region_t {

@@ -69,6 +69,7 @@
 #define KGSL_STATE_SLEEP	0x00000008
 #define KGSL_STATE_SUSPEND	0x00000010
 #define KGSL_STATE_HUNG		0x00000020
+#define KGSL_STATE_DUMP_AND_RECOVER	0x00000040
 
 #define KGSL_GRAPHICS_MEMORY_LOW_WATERMARK  0x1000000
 
@@ -159,6 +160,7 @@ struct kgsl_device {
 
 	struct workqueue_struct *work_queue;
 	struct platform_device *pdev;
+	struct completion recovery_gate;
 };
 
 struct kgsl_process_private {

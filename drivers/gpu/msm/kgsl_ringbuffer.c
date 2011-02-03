@@ -651,11 +651,16 @@ kgsl_ringbuffer_addcmds(struct kgsl_ringbuffer *rb,
 	*/
 	total_sizedwords += flags & KGSL_CMD_FLAGS_PMODE ? 4 : 0;
 	total_sizedwords += !(flags & KGSL_CMD_FLAGS_NO_TS_CMP) ? 7 : 0;
+	total_sizedwords += !(flags & KGSL_CMD_FLAGS_NOT_KERNEL_CMD) ? 2 : 0;
 
 	ringcmds = kgsl_ringbuffer_allocspace(rb, total_sizedwords);
 	rcmd_gpu = rb->buffer_desc.gpuaddr
 		+ sizeof(uint)*(rb->wptr-total_sizedwords);
 
+	if (!(flags & KGSL_CMD_FLAGS_NOT_KERNEL_CMD)) {
+		GSL_RB_WRITE(ringcmds, rcmd_gpu, pm4_nop_packet(1));
+		GSL_RB_WRITE(ringcmds, rcmd_gpu, KGSL_CMD_IDENTIFIER);
+	}
 	if (flags & KGSL_CMD_FLAGS_PMODE) {
 		/* disable protected mode error checking */
 		GSL_RB_WRITE(ringcmds, rcmd_gpu,
@@ -752,7 +757,7 @@ kgsl_ringbuffer_issueibcmds(struct kgsl_device_private *dev_priv,
 			numibs, timestamp);
 
 	if (device->state & KGSL_STATE_HUNG)
-		return -EINVAL;
+		return -EBUSY;
 	if (!(yamato_device->ringbuffer.flags & KGSL_FLAGS_STARTED) ||
 				(drawctxt_index >= KGSL_CONTEXT_MAX)) {
 		KGSL_CMD_VDBG("return %d\n", -EINVAL);
@@ -762,6 +767,13 @@ kgsl_ringbuffer_issueibcmds(struct kgsl_device_private *dev_priv,
 	BUG_ON(ibdesc == 0);
 	BUG_ON(numibs == 0);
 
+	if (yamato_device->drawctxt[drawctxt_index]->flags &
+		CTXT_FLAGS_GPU_HANG) {
+		KGSL_CTXT_WARN("Context %p caused a gpu hang.."
+			" will not accept commands for this context\n",
+			yamato_device->drawctxt[drawctxt_index]);
+		return -EINVAL;
+	}
 	link = kzalloc(sizeof(unsigned int) * numibs * 3, GFP_KERNEL);
 	cmds = link;
 	if (!link) {
@@ -787,7 +799,8 @@ kgsl_ringbuffer_issueibcmds(struct kgsl_device_private *dev_priv,
 			yamato_device->drawctxt[drawctxt_index], flags);
 
 	*timestamp = kgsl_ringbuffer_addcmds(&yamato_device->ringbuffer,
-					0, &link[0], (cmds - link));
+					KGSL_CMD_FLAGS_NOT_KERNEL_CMD,
+					&link[0], (cmds - link));
 
 	KGSL_CMD_INFO("ctxt %d g %08x numibs %d ts %d\n",
 		drawctxt_index, (unsigned int)ibdesc, numibs, *timestamp);
@@ -799,3 +812,177 @@ kgsl_ringbuffer_issueibcmds(struct kgsl_device_private *dev_priv,
 	return 0;
 }
 
+int kgsl_ringbuffer_extract(struct kgsl_ringbuffer *rb,
+				unsigned int *temp_rb_buffer,
+				int *rb_size)
+{
+	struct kgsl_device *device = rb->device;
+	unsigned int rb_rptr;
+	unsigned int retired_timestamp;
+	unsigned int temp_idx = 0;
+	unsigned int value;
+	unsigned int val1;
+	unsigned int val2;
+	unsigned int val3;
+	unsigned int copy_rb_contents = 0;
+	unsigned int cur_context;
+	unsigned int j;
+
+	GSL_RB_GET_READPTR(rb, &rb->rptr);
+
+	retired_timestamp = device->ftbl.device_cmdstream_readtimestamp(
+				device, KGSL_TIMESTAMP_RETIRED);
+	rmb();
+	KGSL_DRV_ERR("GPU successfully executed till ts: %x\n",
+			retired_timestamp);
+	rb_rptr = (rb->rptr - 4) * sizeof(unsigned int);
+	/* Read the rb contents going backwards to locate end of last
+	 * sucessfully executed command */
+	while ((rb_rptr / sizeof(unsigned int)) != rb->wptr) {
+		kgsl_sharedmem_readl(&rb->buffer_desc, &value, rb_rptr);
+		rmb();
+		if (value == retired_timestamp) {
+			rb_rptr += sizeof(unsigned int);
+			kgsl_sharedmem_readl(&rb->buffer_desc, &val1, rb_rptr);
+			rb_rptr += sizeof(unsigned int);
+			kgsl_sharedmem_readl(&rb->buffer_desc, &val2, rb_rptr);
+			rb_rptr += sizeof(unsigned int);
+			kgsl_sharedmem_readl(&rb->buffer_desc, &val3, rb_rptr);
+			rmb();
+			/* match the pattern found at the end of a command */
+			if ((val1 == 2 &&
+				val2 == pm4_type3_packet(PM4_INTERRUPT, 1)
+				&& val3 == CP_INT_CNTL__RB_INT_MASK) ||
+				(val1 == pm4_type3_packet(PM4_EVENT_WRITE, 3)
+				&& val2 == CACHE_FLUSH_TS &&
+				val3 == (rb->device->memstore.gpuaddr +
+				KGSL_DEVICE_MEMSTORE_OFFSET(eoptimestamp)))) {
+				rb_rptr += sizeof(unsigned int);
+				KGSL_DRV_ERR("Found end of last executed "
+						"command at offset: %x\n",
+						rb_rptr / sizeof(unsigned int));
+				break;
+			} else {
+				rb_rptr -= (3 * sizeof(unsigned int));
+			}
+		}
+
+		rb_rptr -= sizeof(unsigned int);
+		if (rb_rptr < 0)
+			rb_rptr = rb->buffer_desc.size - sizeof(unsigned int);
+	}
+
+	if ((rb_rptr / sizeof(unsigned int)) == rb->wptr) {
+		KGSL_DRV_ERR("GPU recovery from hang not possible because last"
+				" successful timestamp is overwritten\n");
+		return -EINVAL;
+	}
+	/* rb_rptr is now pointing to the first dword of the command following
+	 * the last sucessfully executed command sequence. Assumption is that
+	 * GPU is hung in the command sequence pointed by rb_rptr */
+	/* make sure the GPU is not hung in a command submitted by kgsl
+	 * itself */
+	kgsl_sharedmem_readl(&rb->buffer_desc, &val1, rb_rptr);
+	kgsl_sharedmem_readl(&rb->buffer_desc, &val2,
+				rb_rptr + sizeof(unsigned int));
+	rmb();
+	if (val1 == pm4_nop_packet(1) && val2 == KGSL_CMD_IDENTIFIER) {
+		KGSL_DRV_ERR("GPU recovery from hang not possible because "
+				"of hang in kgsl command\n");
+		return -EINVAL;
+	}
+
+	/* current_context is the context that is presently active in the
+	 * GPU, i.e the context in which the hang is caused */
+	kgsl_sharedmem_readl(&device->memstore, &cur_context,
+		KGSL_DEVICE_MEMSTORE_OFFSET(current_context));
+	while ((rb_rptr / sizeof(unsigned int)) != rb->wptr) {
+		kgsl_sharedmem_readl(&rb->buffer_desc, &value, rb_rptr);
+		rb_rptr = (rb_rptr + sizeof(unsigned int)) %
+				rb->buffer_desc.size;
+		rmb();
+		/* check for context switch indicator */
+		if (value == KGSL_CONTEXT_TO_MEM_IDENTIFIER) {
+			kgsl_sharedmem_readl(&rb->buffer_desc, &value, rb_rptr);
+			rb_rptr = (rb_rptr + sizeof(unsigned int)) %
+					rb->buffer_desc.size;
+			rmb();
+			BUG_ON(value != pm4_type3_packet(PM4_MEM_WRITE, 2));
+			kgsl_sharedmem_readl(&rb->buffer_desc, &val1, rb_rptr);
+			rb_rptr = (rb_rptr + sizeof(unsigned int)) %
+					rb->buffer_desc.size;
+			rmb();
+			BUG_ON(val1 != (device->memstore.gpuaddr +
+				KGSL_DEVICE_MEMSTORE_OFFSET(current_context)));
+			kgsl_sharedmem_readl(&rb->buffer_desc, &value, rb_rptr);
+			rb_rptr = (rb_rptr + sizeof(unsigned int)) %
+					rb->buffer_desc.size;
+			rmb();
+			BUG_ON((copy_rb_contents == 0) &&
+				(value == cur_context));
+			/* if context switches to a context that did not cause
+			 * hang then start saving the rb contents as those
+			 * commands can be executed */
+			if (value != cur_context) {
+				copy_rb_contents = 1;
+				temp_rb_buffer[temp_idx++] = pm4_nop_packet(1);
+				temp_rb_buffer[temp_idx++] =
+						KGSL_CMD_IDENTIFIER;
+				temp_rb_buffer[temp_idx++] = pm4_nop_packet(1);
+				temp_rb_buffer[temp_idx++] =
+						KGSL_CONTEXT_TO_MEM_IDENTIFIER;
+				temp_rb_buffer[temp_idx++] =
+					pm4_type3_packet(PM4_MEM_WRITE, 2);
+				temp_rb_buffer[temp_idx++] = val1;
+				temp_rb_buffer[temp_idx++] = value;
+			} else {
+				/* if temp_idx is not 0 then we do not need to
+				 * copy extra dwords indicating a kernel cmd */
+				if (temp_idx)
+					temp_idx -= 3;
+				copy_rb_contents = 0;
+			}
+		} else if (copy_rb_contents)
+			temp_rb_buffer[temp_idx++] = value;
+	}
+
+	*rb_size = temp_idx;
+	KGSL_DRV_ERR("Extracted rb contents, size: %x\n", *rb_size);
+	for (temp_idx = 0; temp_idx < *rb_size;) {
+		char str[80];
+		int idx = 0;
+		if ((temp_idx + 8) <= *rb_size)
+			j = 8;
+		else
+			j = *rb_size - temp_idx;
+		for (; j != 0; j--)
+			idx += scnprintf(str + idx, 80 - idx,
+				"%8.8X ", temp_rb_buffer[temp_idx++]);
+		printk(KERN_ALERT "%s", str);
+	}
+	return 0;
+}
+
+void
+kgsl_ringbuffer_restore(struct kgsl_ringbuffer *rb, unsigned int *rb_buff,
+			int num_rb_contents)
+{
+	int i;
+	unsigned int *ringcmds;
+	unsigned int rcmd_gpu;
+
+	if (!num_rb_contents)
+		return;
+
+	if (num_rb_contents > (rb->buffer_desc.size - rb->wptr)) {
+		kgsl_yamato_regwrite(rb->device, REG_CP_RB_RPTR, 0);
+		rb->rptr = 0;
+		BUG_ON(num_rb_contents > rb->buffer_desc.size);
+	}
+	ringcmds = (unsigned int *)rb->buffer_desc.hostptr + rb->wptr;
+	rcmd_gpu = rb->buffer_desc.gpuaddr + sizeof(unsigned int) * rb->wptr;
+	for (i = 0; i < num_rb_contents; i++)
+		GSL_RB_WRITE(ringcmds, rcmd_gpu, rb_buff[i]);
+	rb->wptr += num_rb_contents;
+	kgsl_ringbuffer_submit(rb);
+}

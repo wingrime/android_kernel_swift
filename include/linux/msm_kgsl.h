@@ -94,6 +94,8 @@ struct kgsl_devmemstore {
 	unsigned int sbz3;
 	volatile unsigned int ref_wait_ts;
 	unsigned int sbz4;
+	unsigned int current_context;
+	unsigned int sbz5;
 };
 
 #define KGSL_DEVICE_MEMSTORE_OFFSET(field) \

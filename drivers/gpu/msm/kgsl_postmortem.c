@@ -661,17 +661,12 @@ end:
 
 int kgsl_postmortem_dump(struct kgsl_device *device)
 {
-	/* If device state is already hung that means we already dumped
-	 * this hang or are in the process of dumping it */
-	if (device->state & KGSL_STATE_HUNG)
-		return 0;
-
 	BUG_ON(device == NULL);
 
 	if (device->id == KGSL_DEVICE_YAMATO) {
 		kgsl_pwrctrl_irq(device, KGSL_PWRFLAGS_IRQ_OFF);
 		del_timer(&device->idle_timer);
-		device->state = KGSL_STATE_HUNG;
+		device->state = KGSL_STATE_DUMP_AND_RECOVER;
 		KGSL_DRV_ERR("wait for work in workqueue to complete\n");
 		mutex_unlock(&device->mutex);
 		flush_workqueue(device->work_queue);
@@ -681,7 +676,7 @@ int kgsl_postmortem_dump(struct kgsl_device *device)
 	else
 		KGSL_DRV_FATAL("Unknown device id - 0x%x\n", device->id);
 
-	KGSL_DRV_FATAL("Dump Finished\n");
+	KGSL_DRV_ERR("Dump Finished\n");
 
 	return 0;
 }

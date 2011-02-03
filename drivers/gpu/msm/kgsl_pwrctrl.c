@@ -286,7 +286,7 @@ void kgsl_idle_check(struct work_struct *work)
 							idle_check_ws);
 
 	mutex_lock(&device->mutex);
-	if (device->state & KGSL_STATE_HUNG) {
+	if (device->state & (KGSL_STATE_HUNG | KGSL_STATE_DUMP_AND_RECOVER)) {
 		device->requested_state = KGSL_STATE_NONE;
 		goto done;
 	}
@@ -323,6 +323,11 @@ void kgsl_check_suspended(struct kgsl_device *device)
 				device->state == KGSL_STATE_SUSPEND) {
 		mutex_unlock(&device->mutex);
 		wait_for_completion(&device->hwaccess_gate);
+		mutex_lock(&device->mutex);
+	}
+	if (device->state == KGSL_STATE_DUMP_AND_RECOVER) {
+		mutex_unlock(&device->mutex);
+		wait_for_completion(&device->recovery_gate);
 		mutex_lock(&device->mutex);
 	}
  }

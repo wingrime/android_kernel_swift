@@ -201,6 +201,14 @@ int kgsl_ringbuffer_gettimestampshadow(struct kgsl_device *device,
 
 void kgsl_cp_intrcallback(struct kgsl_device *device);
 
+int kgsl_ringbuffer_extract(struct kgsl_ringbuffer *rb,
+				unsigned int *temp_rb_buffer,
+				int *rb_size);
+
+void
+kgsl_ringbuffer_restore(struct kgsl_ringbuffer *rb, unsigned int *rb_buff,
+			int num_rb_contents);
+
 static inline int kgsl_ringbuffer_count(struct kgsl_ringbuffer *rb,
 	unsigned int rptr)
 {

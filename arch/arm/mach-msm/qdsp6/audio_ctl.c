@@ -78,6 +78,7 @@ static int q6_voice_stop(void)
 
 static int q6_open(struct inode *inode, struct file *file)
 {
+	pr_debug("[%s:%s]\n", __MM_FILE__, __func__);
 	return 0;
 }
 
@@ -92,11 +93,15 @@ static int q6_ioctl(struct inode *inode, struct file *file,
 	switch (cmd) {
 	case AUDIO_SWITCH_DEVICE:
 		rc = copy_from_user(&id, (void *)arg, sizeof(id));
+		pr_info("[%s:%s] SWITCH_DEV: id[0] = 0x%x, id[1] = 0x%x",
+			__MM_FILE__, __func__, id[0], id[1]);
 		if (!rc)
 			rc = q6audio_do_routing(id[0], id[1]);
 		break;
 	case AUDIO_SET_VOLUME:
 		rc = copy_from_user(&n, (void *)arg, sizeof(n));
+		pr_debug("[%s:%s] SET_VOLUME: vol = %d\n", __MM_FILE__,
+				__func__, n);
 		if (!rc)
 			rc = q6audio_set_rx_volume(n);
 		break;
@@ -115,21 +120,28 @@ static int q6_ioctl(struct inode *inode, struct file *file,
 					mute_status = DEVICE_UNMUTE;
 			}
 
+			pr_debug("[%s:%s] SET_MUTE: mute_status = %d\n",
+				__MM_FILE__, __func__, mute_status);
 			rc = q6audio_set_tx_mute(mute_status);
 		}
 		break;
 	case AUDIO_UPDATE_ACDB:
 		rc = copy_from_user(&id, (void *)arg, sizeof(id));
+		pr_debug("[%s:%s] UPDATE_ACDB: id[0] = 0x%x, id[1] = 0x%x\n",
+				__MM_FILE__, __func__, id[0], id[1]);
 		if (!rc)
 			rc = q6audio_update_acdb(id[0], 0);
 		break;
 	case AUDIO_START_VOICE:
+		pr_debug("[%s:%s] START_VOICE\n", __MM_FILE__, __func__);
 		rc = q6_voice_start();
 		break;
 	case AUDIO_STOP_VOICE:
+		pr_debug("[%s:%s] STOP_VOICE\n", __MM_FILE__, __func__);
 		rc = q6_voice_stop();
 		break;
 	case AUDIO_REINIT_ACDB:
+		pr_debug("[%s:%s] REINIT_ACDB\n", __MM_FILE__, __func__);
 		rc = 0;
 		break;
 	default:
@@ -142,6 +154,7 @@ static int q6_ioctl(struct inode *inode, struct file *file,
 
 static int q6_release(struct inode *inode, struct file *file)
 {
+	pr_debug("[%s:%s]\n", __MM_FILE__, __func__);
 	return 0;
 }
 

@@ -22,6 +22,7 @@
 #include <mach/msm_qdsp6_audio.h>
 #include <asm/string.h>
 #include <asm/mach-types.h>
+#include <mach/debug_mm.h>
 
 #define GPIO_HEADSET_AMP 157
 #define GPIO_SPEAKER_AMP 39
@@ -45,6 +46,7 @@ void analog_init(void)
 
 void analog_headset_enable(int en)
 {
+	pr_debug("[%s:%s] en = %d\n", __MM_FILE__, __func__, en);
 	/* enable audio amp */
 	if (machine_is_qsd8x50a_st1_5())
 		gpio_set_value(GPIO_HEADSET_SHDN_N, !!en);
@@ -57,6 +59,7 @@ void analog_speaker_enable(int en)
 	struct spkr_config_mode scm;
 	memset(&scm, 0, sizeof(scm));
 
+	pr_debug("[%s:%s] en = %d\n", __MM_FILE__, __func__, en);
 	if (en) {
 		scm.is_right_chan_en = 1;
 		scm.is_left_chan_en = 1;
@@ -100,6 +103,7 @@ void analog_speaker_enable(int en)
 
 void analog_mic_enable(int en)
 {
+	pr_debug("[%s:%s] en = %d\n", __MM_FILE__, __func__, en);
 	pmic_mic_en(en);
 }
 

@@ -18,11 +18,13 @@
 #include <linux/module.h>
 #include <linux/miscdevice.h>
 #include <linux/uaccess.h>
+#include <mach/debug_mm.h>
 
 extern int q6audio_set_route(const char *name);
 
 static int q6_open(struct inode *inode, struct file *file)
 {
+	pr_debug("[%s:%s]\n", __MM_FILE__, __func__);
 	return 0;
 }
 
@@ -31,8 +33,12 @@ static ssize_t q6_write(struct file *file, const char __user *buf,
 {
 	char cmd[32];
 
-	if (count >= sizeof(cmd))
-		return -EINVAL;
+	pr_debug("[%s:%s] count = %d", __MM_FILE__, __func__, count);
+	if (count >= sizeof(cmd)) {
+		pr_err("[%s:%s] invalid count %d\n", __MM_FILE__,
+			__func__, count);
+			return -EINVAL;
+	}
 	if (copy_from_user(cmd, buf, count))
 		return -EFAULT;
 	cmd[count] = 0;
@@ -47,6 +53,7 @@ static ssize_t q6_write(struct file *file, const char __user *buf,
 
 static int q6_release(struct inode *inode, struct file *file)
 {
+	pr_debug("[%s:%s]\n", __MM_FILE__, __func__);
 	return 0;
 }
 

@@ -299,6 +299,7 @@ static struct dal_channel *dal_open_channel(const char *name, uint32_t cpu)
 {
 	struct dal_channel *dch;
 
+	pr_debug("[%s:%s]\n", __MM_FILE__, __func__);
 	mutex_lock(&dal_channel_list_lock);
 
 	list_for_each_entry(dch, &dal_channel_list, list) {
@@ -426,6 +427,7 @@ struct dal_client *dal_attach(uint32_t device_id, const char *name,
 	unsigned long flags;
 	int r;
 
+	pr_debug("[%s:%s]\n", __MM_FILE__, __func__);
 	dch = dal_open_channel(name, cpu);
 	if (!dch)
 		return 0;
@@ -476,6 +478,7 @@ int dal_detach(struct dal_client *client)
 	struct dal_channel *dch;
 	unsigned long flags;
 
+	pr_debug("[%s:%s]\n", __MM_FILE__, __func__);
 	mutex_lock(&client->write_lock);
 	if (client->remote) {
 		struct dal_hdr hdr;

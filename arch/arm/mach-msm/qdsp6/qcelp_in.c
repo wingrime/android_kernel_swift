@@ -81,6 +81,9 @@ static int q6_qcelp_flowcontrol(void *data)
 		ab = ac->buf + ac->cpu_buf;
 		if (ab->used)
 			wait_event(ac->wait, (ab->used == 0));
+
+		pr_debug("[%s:%s] ab->data = %p, cpu_buf = %d", __MM_FILE__,
+			__func__, ab->data, ac->cpu_buf);
 		xfer = ab->actual_size;
 
 
@@ -131,10 +134,12 @@ static long q6_qcelp_in_ioctl(struct file *file, unsigned int cmd,
 	mutex_lock(&qcelp->lock);
 	switch (cmd) {
 	case AUDIO_SET_VOLUME:
+		pr_debug("[%s:%s] SET_VOLUME\n", __MM_FILE__, __func__);
 		break;
 	case AUDIO_GET_STATS:
 	{
 		struct msm_audio_stats stats;
+		pr_debug("[%s:%s] GET_STATS\n", __MM_FILE__, __func__);
 		memset(&stats, 0, sizeof(stats));
 		if (copy_to_user((void *) arg, &stats,
 					sizeof(stats)))
@@ -144,6 +149,7 @@ static long q6_qcelp_in_ioctl(struct file *file, unsigned int cmd,
 	case AUDIO_START:
 	{
 		uint32_t acdb_id;
+		pr_debug("[%s:%s] AUDIO_START\n", __MM_FILE__, __func__);
 		if (arg == 0) {
 			acdb_id = 0;
 		} else {
@@ -154,6 +160,8 @@ static long q6_qcelp_in_ioctl(struct file *file, unsigned int cmd,
 			}
 		}
 		if (qcelp->audio_client) {
+			pr_err("[%s:%s] active session already existing\n",
+				__MM_FILE__, __func__);
 			rc = -EBUSY;
 			break;
 		} else {
@@ -166,6 +174,8 @@ static long q6_qcelp_in_ioctl(struct file *file, unsigned int cmd,
 				acdb_id);
 
 			if (!qcelp->audio_client) {
+				pr_err("[%s:%s] qcelp open session failed\n",
+					__MM_FILE__, __func__);
 				kfree(qcelp);
 				rc = -ENOMEM;
 				break;
@@ -209,10 +219,12 @@ fc_fail:
 		break;
 	}
 	case AUDIO_STOP:
+		pr_debug("[%s:%s] AUDIO_STOP\n", __MM_FILE__, __func__);
 		break;
 	case AUDIO_FLUSH:
 		break;
 	case AUDIO_SET_INCALL: {
+		pr_debug("[%s:%s] SET_INCALL\n", __MM_FILE__, __func__);
 		if (copy_from_user(&qcelp->voicerec_mode,
 			(void *)arg, sizeof(struct msm_voicerec_mode)))
 			rc = -EFAULT;
@@ -231,6 +243,9 @@ fc_fail:
 		if (copy_to_user((void *)arg, &qcelp->str_cfg,
 				sizeof(struct msm_audio_stream_config)))
 			rc = -EFAULT;
+		pr_debug("[%s:%s] GET_STREAM_CONFIG: buffsz=%d, buffcnt=%d\n",
+			 __MM_FILE__, __func__, qcelp->str_cfg.buffer_size,
+			qcelp->str_cfg.buffer_count);
 		break;
 	case AUDIO_SET_STREAM_CONFIG:
 		if (copy_from_user(&qcelp->str_cfg, (void *)arg,
@@ -238,6 +253,9 @@ fc_fail:
 			rc = -EFAULT;
 			break;
 		}
+		pr_debug("[%s:%s] SET_STREAM_CONFIG: buffsz=%d, buffcnt=%d\n",
+			 __MM_FILE__, __func__, qcelp->str_cfg.buffer_size,
+			qcelp->str_cfg.buffer_count);
 
 		if (qcelp->str_cfg.buffer_size < 35) {
 			pr_err("[%s:%s] Buffer size too small\n", __MM_FILE__,
@@ -254,6 +272,8 @@ fc_fail:
 		if (copy_from_user(&qcelp->cfg, (void *) arg,
 				sizeof(struct msm_audio_qcelp_enc_config)))
 			rc = -EFAULT;
+		pr_debug("[%s:%s] SET_QCELP_ENC_CONFIG\n", __MM_FILE__,
+			__func__);
 
 		if (qcelp->cfg.min_bit_rate > 4 ||
 			 qcelp->cfg.min_bit_rate < 1) {
@@ -275,12 +295,15 @@ fc_fail:
 		if (copy_to_user((void *) arg, &qcelp->cfg,
 			 sizeof(struct msm_audio_qcelp_enc_config)))
 			rc = -EFAULT;
+		pr_debug("[%s:%s] GET_QCELP_ENC_CONFIG\n", __MM_FILE__,
+			__func__);
 		break;
 
 	default:
 		rc = -EINVAL;
 	}
 	mutex_unlock(&qcelp->lock);
+	pr_debug("[%s:%s] rc = %d\n", __MM_FILE__, __func__, rc);
 	return rc;
 }
 
@@ -289,6 +312,7 @@ static int q6_qcelp_in_open(struct inode *inode, struct file *file)
 	struct qcelp *qcelp;
 	struct qcelp_fc *fc;
 	int i;
+	pr_info("[%s:%s] open\n", __MM_FILE__, __func__);
 	qcelp = kmalloc(sizeof(struct qcelp), GFP_KERNEL);
 	if (qcelp == NULL) {
 		pr_err("[%s:%s] Could not allocate memory for qcelp driver\n",
@@ -336,6 +360,7 @@ static ssize_t q6_qcelp_in_read(struct file *file, char __user *buf,
 	int xfer = 0;
 	int res = 0;
 
+	pr_debug("[%s:%s] count = %d\n", __MM_FILE__, __func__, count);
 	mutex_lock(&qcelp->lock);
 	ac = qcelp->audio_client;
 	if (!ac) {
@@ -350,6 +375,8 @@ static ssize_t q6_qcelp_in_read(struct file *file, char __user *buf,
 				(fc->fc_buff[fc->buff_index].empty == 0),
 				msecs_to_jiffies(QCELP_READ_TIMEOUT));
 
+			pr_debug("[%s:%s] buff_index = %d\n", __MM_FILE__,
+				__func__, fc->buff_index);
 			if (res == 0) {
 				pr_err("[%s:%s] Timeout!\n", __MM_FILE__,
 						__func__);
@@ -422,6 +449,7 @@ static int q6_qcelp_in_release(struct inode *inode, struct file *file)
 		rc = q6audio_close(qcelp->audio_client);
 	mutex_unlock(&qcelp->lock);
 	kfree(qcelp);
+	pr_info("[%s:%s] release\n", __MM_FILE__, __func__);
 	return rc;
 }
 

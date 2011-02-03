@@ -77,6 +77,8 @@ static int q6_aac_flowcontrol(void *data)
 		ab = ac->buf + ac->cpu_buf;
 		if (ab->used)
 			wait_event(ac->wait, (ab->used == 0));
+		pr_debug("[%s:%s] ab->data = %p, cpu_buf = %d\n", __MM_FILE__,
+			 __func__, ab->data, ac->cpu_buf);
 		xfer = ab->actual_size;
 
 		mutex_lock(&(fc->fc_buff[buff_index].lock));
@@ -130,6 +132,7 @@ static long q6_aac_in_ioctl(struct file *file,
 	case AUDIO_GET_STATS:
 	{
 		struct msm_audio_stats stats;
+		pr_debug("[%s:%s] GET_STATS\n", __MM_FILE__, __func__);
 		memset(&stats, 0, sizeof(stats));
 		if (copy_to_user((void *) arg, &stats, sizeof(stats)))
 			return -EFAULT;
@@ -138,6 +141,7 @@ static long q6_aac_in_ioctl(struct file *file,
 	case AUDIO_START:
 	{
 		uint32_t acdb_id;
+		pr_debug("[%s:%s] AUDIO_START\n", __MM_FILE__, __func__);
 		if (arg == 0) {
 			acdb_id = 0;
 		} else {
@@ -149,6 +153,8 @@ static long q6_aac_in_ioctl(struct file *file,
 		}
 		if (aac->audio_client) {
 			rc = -EBUSY;
+			pr_err("[%s:%s] active session already existing\n",
+				__MM_FILE__, __func__);
 			break;
 		} else {
 			aac->audio_client = q6audio_open_aac(
@@ -160,6 +166,8 @@ static long q6_aac_in_ioctl(struct file *file,
 					aac->voicerec_mode.rec_mode, acdb_id);
 
 			if (aac->audio_client < 0) {
+				pr_err("[%s:%s] aac open session failed\n",
+					__MM_FILE__, __func__);
 				rc = -ENOMEM;
 				break;
 			}
@@ -203,10 +211,12 @@ fc_fail:
 		break;
 	}
 	case AUDIO_STOP:
+		pr_debug("[%s:%s] AUDIO_STOP\n", __MM_FILE__, __func__);
 		break;
 	case AUDIO_FLUSH:
 		break;
 	case AUDIO_SET_INCALL: {
+		pr_debug("[%s:%s] SET_INCALL\n", __MM_FILE__, __func__);
 		if (copy_from_user(&aac->voicerec_mode,
 			(void *)arg, sizeof(struct msm_voicerec_mode)))
 			rc = -EFAULT;
@@ -225,6 +235,9 @@ fc_fail:
 		if (copy_to_user((void *)arg, &aac->str_cfg,
 			sizeof(struct msm_audio_stream_config)))
 			rc = -EFAULT;
+		pr_debug("[%s:%s] GET_STREAM_CONFIG: buffsz=%d, buffcnt=%d\n",
+			 __MM_FILE__, __func__, aac->str_cfg.buffer_size,
+			aac->str_cfg.buffer_count);
 		break;
 	case AUDIO_SET_STREAM_CONFIG:
 		if (copy_from_user(&aac->str_cfg, (void *)arg,
@@ -232,6 +245,9 @@ fc_fail:
 			rc = -EFAULT;
 			break;
 		}
+		pr_debug("[%s:%s] SET_STREAM_CONFIG: buffsz=%d, buffcnt=%d\n",
+			 __MM_FILE__, __func__, aac->str_cfg.buffer_size,
+			aac->str_cfg.buffer_count);
 		if (aac->str_cfg.buffer_size < 1543) {
 			pr_err("[%s:%s] Buffer size too small\n", __MM_FILE__,
 					__func__);
@@ -248,6 +264,9 @@ fc_fail:
 				 sizeof(struct msm_audio_aac_enc_config))) {
 			rc = -EFAULT;
 		}
+		pr_debug("[%s:%s] SET_AAC_ENC_CONFIG: channels=%d, rate=%d\n",
+			__MM_FILE__, __func__, aac->cfg.channels,
+			aac->cfg.sample_rate);
 		if (aac->cfg.channels < 1 || aac->cfg.channels > 2) {
 			pr_err("[%s:%s]invalid number of channels\n",
 				 __MM_FILE__, __func__);
@@ -270,12 +289,16 @@ fc_fail:
 				 sizeof(struct msm_audio_aac_enc_config))) {
 			rc = -EFAULT;
 		}
+		pr_debug("[%s:%s] GET_AAC_ENC_CONFIG: channels=%d, rate=%d\n",
+			__MM_FILE__, __func__, aac->cfg.channels,
+			aac->cfg.sample_rate);
 		break;
 	default:
 		rc = -EINVAL;
 	}
 
 	mutex_unlock(&aac->lock);
+	pr_debug("[%s:%s] rc = %d\n", __MM_FILE__, __func__, rc);
 	return rc;
 }
 
@@ -285,6 +308,7 @@ static int q6_aac_in_open(struct inode *inode, struct file *file)
 	struct aac *aac;
 	struct aac_fc *fc;
 	int i;
+	pr_info("[%s:%s] open\n", __MM_FILE__, __func__);
 	aac = kmalloc(sizeof(struct aac), GFP_KERNEL);
 	if (aac == NULL) {
 		pr_err("[%s:%s] Could not allocate memory for aac driver\n",
@@ -333,6 +357,7 @@ static ssize_t q6_aac_in_read(struct file *file, char __user *buf,
 	int xfer = 0;
 	int res = 0;
 
+	pr_debug("[%s:%s] count = %d\n", __MM_FILE__, __func__, count);
 	mutex_lock(&aac->lock);
 	ac = aac->audio_client;
 
@@ -348,6 +373,8 @@ static ssize_t q6_aac_in_read(struct file *file, char __user *buf,
 			(fc->fc_buff[fc->buff_index].empty == 0),
 				msecs_to_jiffies(AAC_READ_TIMEOUT));
 
+		pr_debug("[%s:%s] buff_index = %d\n", __MM_FILE__,
+			__func__, fc->buff_index);
 		if (res == 0) {
 			pr_err("[%s:%s] Timeout!\n", __MM_FILE__, __func__);
 			res = -ETIMEDOUT;
@@ -417,6 +444,7 @@ static int q6_aac_in_release(struct inode *inode, struct file *file)
 		rc = q6audio_close(aac->audio_client);
 	mutex_unlock(&aac->lock);
 	kfree(aac);
+	pr_info("[%s:%s] release\n", __MM_FILE__, __func__);
 	return rc;
 }
 

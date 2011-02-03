@@ -55,11 +55,13 @@ struct session_freq {
 	int evt;
 };
 
+
 struct audio_routing_info {
 	unsigned short mixer_mask[MAX_DEC_SESSIONS];
 	unsigned short audrec_mixer_mask[MAX_ENC_SESSIONS];
 	struct session_freq dec_freq[MAX_DEC_SESSIONS];
 	struct session_freq enc_freq[MAX_ENC_SESSIONS];
+	int dual_mic_setting[MAX_ENC_SESSIONS];
 	int voice_tx_dev_id;
 	int voice_rx_dev_id;
 	int voice_tx_sample_rate;
@@ -109,6 +111,29 @@ int msm_reset_all_device(void)
 	return 0;
 }
 EXPORT_SYMBOL(msm_reset_all_device);
+
+int msm_set_dual_mic_config(int enc_session_id, int config)
+{
+	int i;
+	if (enc_session_id >= MAX_ENC_SESSIONS)
+		return -EINVAL;
+	/*config is set(1) dual mic recording is selected */
+	/*config is reset (0) dual mic recording is not selected*/
+	routing_info.dual_mic_setting[enc_session_id] = config;
+	for (i = 0; i < MAX_ENC_SESSIONS; i++)
+		MM_DBG("dual_mic_setting[%d] = %d\n",
+			i, routing_info.dual_mic_setting[i]);
+	return 0;
+}
+EXPORT_SYMBOL(msm_set_dual_mic_config);
+
+int msm_get_dual_mic_config(int enc_session_id)
+{
+	if (enc_session_id >= MAX_ENC_SESSIONS)
+		return -EINVAL;
+	return routing_info.dual_mic_setting[enc_session_id];
+}
+EXPORT_SYMBOL(msm_get_dual_mic_config);
 
 int msm_get_voice_state(void)
 {
@@ -486,6 +511,8 @@ int auddev_unregister_evt_listner(u32 clnt_type, u32 clnt_id)
 		info = audio_dev_ctrl.devs[i];
 		info->sessions &= ~session_mask;
 	}
+	if (clnt_type == AUDDEV_CLNT_ENC)
+		msm_set_dual_mic_config(clnt_id, 0);
 	mutex_unlock(&session_lock);
 	return 0;
 }

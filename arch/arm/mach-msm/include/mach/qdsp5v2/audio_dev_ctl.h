@@ -76,6 +76,8 @@ struct msm_volume {
 
 extern struct msm_volume msm_vol_ctl;
 
+int msm_get_dual_mic_config(int enc_session_id);
+int msm_set_dual_mic_config(int enc_session_id, int config);
 int msm_reset_all_device(void);
 void msm_snddev_register(struct msm_snddev_info *);
 void msm_snddev_unregister(struct msm_snddev_info *);

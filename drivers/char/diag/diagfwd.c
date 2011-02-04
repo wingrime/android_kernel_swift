@@ -26,11 +26,15 @@
 #include <linux/workqueue.h>
 #include <linux/pm_runtime.h>
 #include <linux/diagchar.h>
+#include <linux/delay.h>
+#include <linux/reboot.h>
+#include <linux/smp_lock.h>
 #ifdef CONFIG_DIAG_OVER_USB
 #include <mach/usbdiag.h>
 #endif
 #include <mach/msm_smd.h>
 #include <mach/socinfo.h>
+#include <mach/restart.h>
 #include "diagmem.h"
 #include "diagchar.h"
 #include "diagfwd.h"
@@ -471,6 +475,21 @@ static int diag_process_apps_pkt(unsigned char *buf, int len)
 		TO DO
 	} */
 #if defined(CONFIG_DIAG_OVER_USB)
+	/* Check for download command */
+	else if (cpu_is_msm8x60() && (*buf == 0x3A)) {
+		/* send response back */
+		driver->apps_rsp_buf[0] = *buf;
+		ENCODE_RSP_AND_SEND(0);
+		msleep(5000);
+		/* call download API */
+		msm_set_restart_mode(RESTART_DLOAD);
+		printk(KERN_CRIT "diag: download mode set, Rebooting SoC..\n");
+		lock_kernel();
+		kernel_restart(NULL);
+		unlock_kernel();
+		/* Not required, represents that command isnt sent to modem */
+		return 0;
+	}
 	else if (CHK_APQ_GET_ID()) { /* Check for ID for APQ8060 */
 		/* Respond to polling for Apps only DIAG */
 		if ((*buf == 0x4b) && (*(buf+1) == 0x32) &&

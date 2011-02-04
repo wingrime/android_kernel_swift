@@ -215,6 +215,48 @@ static void msm_snddev_disable_dmic_power(void)
 	}
 }
 
+static struct regulator *l11;
+
+static int msm_snddev_enable_qt_dmic_power(void)
+{
+	int ret;
+
+	l11 = regulator_get(NULL, "8058_l11");
+	if (IS_ERR(l11))
+		return -EBUSY;
+
+	ret = regulator_set_voltage(l11, 1500000, 1500000);
+	if (ret) {
+		pr_err("%s: error setting regulator\n", __func__);
+		goto fail_l11;
+	}
+	ret = regulator_enable(l11);
+	if (ret) {
+		pr_err("%s: error enabling regulator\n", __func__);
+		goto fail_l11;
+	}
+	return 0;
+
+fail_l11:
+	regulator_put(l11);
+	l11 = NULL;
+	return ret;
+}
+
+
+static void msm_snddev_disable_qt_dmic_power(void)
+{
+	int ret;
+
+	if (l11) {
+		ret = regulator_disable(l11);
+		if (ret < 0)
+			pr_err("%s: error disabling regulator l11\n", __func__);
+		regulator_put(l11);
+		l11 = NULL;
+	}
+}
+
 #define PM8901_MPP_3 (2) /* PM8901 MPP starts from 0 */
 static int config_class_d1_gpio(int enable)
 {
@@ -707,6 +749,22 @@ static struct platform_device msm_imic_ffa_device = {
 	.dev = { .platform_data = &snddev_imic_ffa_data },
 };
 
+static struct snddev_icodec_data snddev_qt_dual_dmic_d0_data = {
+	.capability = (SNDDEV_CAP_TX | SNDDEV_CAP_VOICE),
+	.name = "speaker_mono_tx",
+	.copp_id = PRIMARY_I2S_TX,
+	.profile = &idmic_mono_profile,
+	.channel_mode = 1,
+	.default_sample_rate = 48000,
+	.pamp_on = msm_snddev_enable_qt_dmic_power,
+	.pamp_off = msm_snddev_disable_qt_dmic_power,
+};
+
+static struct platform_device msm_qt_dual_dmic_d0_device = {
+	.name = "snddev_icodec",
+	.dev = { .platform_data = &snddev_qt_dual_dmic_d0_data },
+};
+
 static struct adie_codec_action_unit dual_mic_endfire_8KHz_osr256_actions[] =
 	DMIC1_PRI_STEREO_8000_OSR_256;
 
@@ -1188,6 +1246,13 @@ static struct platform_device *snd_devices_fluid[] __initdata = {
 	&msm_anc_headset_device,
 };
 
+static struct platform_device *snd_devices_qt[] __initdata = {
+	&msm_headset_stereo_device,
+	&msm_headset_mic_device,
+	&msm_ispkr_stereo_device,
+	&msm_qt_dual_dmic_d0_device,
+};
+
 static struct platform_device *snd_devices_common[] __initdata = {
 	&msm_aux_pcm_device,
 	&msm_cdcclk_ctl_device,
@@ -1226,6 +1291,12 @@ void __init msm_snddev_init(void)
 
 		platform_add_devices(snd_devices_fluid,
 		ARRAY_SIZE(snd_devices_fluid));
+	} else if (machine_is_msm8x60_qt()) {
+		for (i = 0; i < ARRAY_SIZE(snd_devices_qt); i++)
+			snd_devices_qt[i]->id = dev_id++;
+
+		platform_add_devices(snd_devices_qt,
+		ARRAY_SIZE(snd_devices_qt));
 	}
 
 #ifdef CONFIG_DEBUG_FS

@@ -1563,14 +1563,14 @@ static struct msm_gpiomux_config msm8x60_cam_configs[] __initdata = {
 	{
 		.gpio = 29,
 		.settings = {
-			[GPIOMUX_ACTIVE]    = &cam_active_1_cfg,
+			[GPIOMUX_ACTIVE]    = &cam_active_2_cfg,
 			[GPIOMUX_SUSPENDED] = &cam_suspend_cfg,
 		},
 	},
 	{
 		.gpio = 30,
 		.settings = {
-			[GPIOMUX_ACTIVE]    = &cam_active_2_cfg,
+			[GPIOMUX_ACTIVE]    = &cam_active_1_cfg,
 			[GPIOMUX_SUSPENDED] = &cam_suspend_cfg,
 		},
 	},
@@ -1585,6 +1585,13 @@ static struct msm_gpiomux_config msm8x60_cam_configs[] __initdata = {
 		.gpio = 32,
 		.settings = {
 			[GPIOMUX_ACTIVE]    = &cam_active_1_cfg,
+			[GPIOMUX_SUSPENDED] = &cam_suspend_cfg,
+		},
+	},
+	{
+		.gpio = 42,
+		.settings = {
+			[GPIOMUX_ACTIVE]    = &cam_active_2_cfg,
 			[GPIOMUX_SUSPENDED] = &cam_suspend_cfg,
 		},
 	},

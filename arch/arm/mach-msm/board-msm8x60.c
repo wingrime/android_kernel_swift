@@ -3285,6 +3285,9 @@ struct platform_device msm_device_sdio_al = {
 
 static struct platform_device *charm_devices[] __initdata = {
 	&msm_charm_modem,
+#ifdef CONFIG_USB_ANDROID
+	&usb_diag_mdm_device,
+#endif
 };
 
 static struct platform_device *surf_devices[] __initdata = {
@@ -7946,10 +7949,6 @@ static void __init msm8x60_init(struct msm_board_data *board_data)
 		android_usb_pdata.products = charm_usb_products;
 		android_usb_pdata.num_products =
 				ARRAY_SIZE(charm_usb_products);
-
-		/* Add DIAG_MDM channel only for MDM target */
-		platform_device_register(&usb_diag_mdm_device);
-
 	}
 #endif
 

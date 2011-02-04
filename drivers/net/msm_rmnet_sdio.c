@@ -471,7 +471,7 @@ static int rmnet_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 			p->operation_mode &= ~RMNET_MODE_LLP_IP;
 			p->operation_mode |= RMNET_MODE_LLP_ETH;
 			spin_unlock_irqrestore(&p->lock, flags);
-			pr_info("rmnet_ioctl(): "
+			pr_debug("rmnet_ioctl(): "
 				"set Ethernet protocol mode\n");
 		}
 		break;
@@ -497,7 +497,7 @@ static int rmnet_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 			p->operation_mode &= ~RMNET_MODE_LLP_ETH;
 			p->operation_mode |= RMNET_MODE_LLP_IP;
 			spin_unlock_irqrestore(&p->lock, flags);
-			pr_info("rmnet_ioctl(): set IP protocol mode\n");
+			pr_debug("rmnet_ioctl(): set IP protocol mode\n");
 		}
 		break;
 
@@ -511,14 +511,14 @@ static int rmnet_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 		spin_lock_irqsave(&p->lock, flags);
 		p->operation_mode |= RMNET_MODE_QOS;
 		spin_unlock_irqrestore(&p->lock, flags);
-		pr_info("rmnet_ioctl(): set QMI QOS header enable\n");
+		pr_debug("rmnet_ioctl(): set QMI QOS header enable\n");
 		break;
 
 	case RMNET_IOCTL_SET_QOS_DISABLE:   /* Set QoS header disabled */
 		spin_lock_irqsave(&p->lock, flags);
 		p->operation_mode &= ~RMNET_MODE_QOS;
 		spin_unlock_irqrestore(&p->lock, flags);
-		pr_info("rmnet_ioctl(): set QMI QOS header disable\n");
+		pr_debug("rmnet_ioctl(): set QMI QOS header disable\n");
 		break;
 
 	case RMNET_IOCTL_GET_QOS:           /* Get QoS header state    */
@@ -532,12 +532,12 @@ static int rmnet_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 
 	case RMNET_IOCTL_OPEN:              /* Open transport port     */
 		rc = __rmnet_open(dev);
-		pr_info("rmnet_ioctl(): open transport port\n");
+		pr_debug("rmnet_ioctl(): open transport port\n");
 		break;
 
 	case RMNET_IOCTL_CLOSE:             /* Close transport port    */
 		rc = __rmnet_close(dev);
-		pr_info("rmnet_ioctl(): close transport port\n");
+		pr_debug("rmnet_ioctl(): close transport port\n");
 		break;
 
 	default:
@@ -545,7 +545,7 @@ static int rmnet_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 		return -EINVAL;
 	}
 
-	pr_info("%s: dev=%d name=%s cmd=0x%x opmode old=0x%08x new=0x%08x\n",
+	pr_debug("%s: dev=%d name=%s cmd=0x%x opmode old=0x%08x new=0x%08x\n",
 		__func__, p->ch_id, dev->name, cmd, old_opmode,
 		p->operation_mode);
 	return rc;

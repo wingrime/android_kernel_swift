@@ -178,4 +178,15 @@ int sdio_downloader_setup(struct mmc_card *card,
 			  int func_number,
 			  int(*func)(void));
 
+
+/**
+ * test_channel_init
+ * initializes a test channel
+ *
+ * @card: the channel name.
+ * @return 0 on success or negative value on error.
+ *
+ */
+int test_channel_init(char *name);
+
 #endif /* __SDIO_AL__ */

@@ -109,6 +109,7 @@ struct audio_in {
 	int running;
 	int stopped; /* set when stopped, cleared on flush */
 	int abort; /* set when error, like sample rate mismatch */
+	int dual_mic_config;
 };
 
 static struct audio_in the_audio_in;
@@ -375,7 +376,10 @@ static int audpcm_in_param_config(struct audio_in *audio)
 	cmd.common.stream_id = audio->enc_id;
 
 	cmd.aud_rec_samplerate_idx = audio->samp_rate;
-	cmd.aud_rec_stereo_mode = audio->channel_mode;
+	if (audio->dual_mic_config)
+		cmd.aud_rec_stereo_mode = DUAL_MIC_STEREO_RECORDING;
+	else
+		cmd.aud_rec_stereo_mode = audio->channel_mode;
 
 	if (audio->channel_mode == AUDREC_CMD_MODE_MONO)
 		cmd.aud_rec_frame_size = audio->buffer_size/2;
@@ -548,6 +552,7 @@ static long audpcm_in_ioctl(struct file *file,
 			MM_DBG("msm_snddev_withdraw_freq\n");
 			break;
 		}
+		audio->dual_mic_config = msm_get_dual_mic_config(audio->enc_id);
 		rc = audpcm_in_enable(audio);
 		if (!rc) {
 			rc =

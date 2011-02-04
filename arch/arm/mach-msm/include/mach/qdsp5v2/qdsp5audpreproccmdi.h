@@ -77,6 +77,8 @@ struct audpreproc_audrec_cmd_enc_cfg {
 #define AUDPREPROC_AUDREC_CMD_PARAM_CFG_COMMON_LEN		\
 	sizeof(struct audpreproc_audrec_cmd_param_cfg_common)
 
+#define DUAL_MIC_STEREO_RECORDING      2
+
 struct audpreproc_audrec_cmd_param_cfg_common {
 	unsigned short cmd_id;
 	unsigned short stream_id;

@@ -57,6 +57,7 @@
 #define ACDB_ID_HANDSET_MIC_ENDFIRE			0x2E
 #define ACDB_ID_I2S_TX					0x30
 #define ACDB_ID_HDMI					0x40
+#define ACDB_ID_FM_RX					0x4F
 
 /* ID used for virtual devices */
 #define PSEUDO_ACDB_ID 					0xFFFF

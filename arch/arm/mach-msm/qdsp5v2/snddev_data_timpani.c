@@ -225,6 +225,24 @@ static struct platform_device  msm_snddev_mi2s_fm_tx_device = {
 	.dev = { .platform_data = &snddev_mi2s_fm_tx_data},
 };
 
+static struct snddev_mi2s_data snddev_mi2s_fm_rx_data = {
+	.capability = SNDDEV_CAP_RX ,
+	.name = "fmradio_stereo_rx",
+	.copp_id = 3,
+	.acdb_id = ACDB_ID_FM_RX,
+	.channel_mode = 2,
+	.sd_lines = MI2S_SD_3,
+	.route = NULL,
+	.deroute = NULL,
+	.default_sample_rate = 48000,
+};
+
+static struct platform_device  msm_snddev_mi2s_fm_rx_device = {
+	.name = "snddev_mi2s",
+	.id = 2,
+	.dev = { .platform_data = &snddev_mi2s_fm_rx_data},
+};
+
 static struct snddev_ecodec_data snddev_bt_sco_earpiece_data = {
 	.capability = (SNDDEV_CAP_RX | SNDDEV_CAP_VOICE),
 	.name = "bt_sco_rx",
@@ -882,6 +900,7 @@ static struct platform_device *snd_devices_ffa[] __initdata = {
 	&msm_ispkr_stereo_device,
 	&msm_headset_mic_device,
 	&msm_ihs_ffa_mono_rx_device,
+	&msm_snddev_mi2s_fm_rx_device,
 	&msm_snddev_mi2s_fm_tx_device,
 	&msm_bt_sco_earpiece_device,
 	&msm_bt_sco_mic_device,

@@ -148,6 +148,7 @@ struct marimba_platform_data {
 	u32 (*bahama_setup) (void);
 	u32 (*bahama_shutdown) (int);
 	u32 (*marimba_gpio_config) (int);
+	u32 (*timpani_power_mode) (int);
 };
 
 /*
@@ -183,5 +184,5 @@ bool marimba_get_fm_status(struct marimba *);
 bool marimba_get_bt_status(struct marimba *);
 void marimba_set_fm_status(struct marimba *, bool);
 void marimba_set_bt_status(struct marimba *, bool);
-
+int timpani_vreg_mode(int);
 #endif

@@ -1,7 +1,7 @@
 /* linux/include/asm-arm/arch-msm/msm_smd.h
  *
  * Copyright (C) 2007 Google, Inc.
- * Copyright (c) 2009-2010, Code Aurora Forum. All rights reserved.
+ * Copyright (c) 2009-2011, Code Aurora Forum. All rights reserved.
  * Author: Brian Swetland <swetland@google.com>
  *
  * This software is licensed under the terms of the GNU General Public
@@ -102,5 +102,8 @@ void smd_enable_read_intr(smd_channel_t *ch);
  * called.
  */
 void smd_disable_read_intr(smd_channel_t *ch);
+
+/* cleanup smd ports required during modem restart */
+void smd_channel_reset(void);
 
 #endif

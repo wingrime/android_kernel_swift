@@ -34,6 +34,7 @@ enum {
 	MSM_RPM_VREG_DEBUG_REQUEST = BIT(0),
 	MSM_RPM_VREG_DEBUG_VOTE = BIT(1),
 	MSM_RPM_VREG_DEBUG_DUPLICATE = BIT(2),
+	MSM_RPM_VREG_DEBUG_IGNORE_8058_S0_S1 = BIT(3),
 };
 
 static int msm_rpm_vreg_debug_mask;
@@ -1345,9 +1346,17 @@ static void __exit rpm_vreg_exit(void)
 postcore_initcall(rpm_vreg_init);
 module_exit(rpm_vreg_exit);
 
+#define VREG_ID_IS_8058_S0_OR_S1(id) \
+	((id == RPM_VREG_ID_PM8058_S0) || (id == RPM_VREG_ID_PM8058_S1))
+
 static void print_rpm_request(struct vreg *vreg, int set)
 {
 	int v, ip, fm, pc, pf, pd, ia, freq, clk, state;
+
+	/* Suppress 8058_s0 and 8058_s1 printing. */
+	if ((msm_rpm_vreg_debug_mask & MSM_RPM_VREG_DEBUG_IGNORE_8058_S0_S1)
+	    && VREG_ID_IS_8058_S0_OR_S1(vreg->id))
+		return;
 
 	if (IS_LDO(vreg->id)) {
 		v = (vreg->req[0].value & LDO_VOLTAGE) >> LDO_VOLTAGE_SHIFT;
@@ -1470,6 +1479,11 @@ static void print_rpm_request(struct vreg *vreg, int set)
 static void print_rpm_vote(struct vreg *vreg, enum rpm_vreg_voter voter,
 			int set, int voter_mV, int aggregate_mV)
 {
+	/* Suppress 8058_s0 and 8058_s1 printing. */
+	if ((msm_rpm_vreg_debug_mask & MSM_RPM_VREG_DEBUG_IGNORE_8058_S0_S1)
+	    && VREG_ID_IS_8058_S0_OR_S1(vreg->id))
+		return;
+
 	pr_info("rpm-regulator: vote received %-9s: voter=%d, set=%c, "
 		"v_voter=%4d mV, v_aggregate=%4d mV\n",
 		vreg_descrip[vreg->id].name, voter, (set == 0 ? 'A' : 'S'),
@@ -1478,6 +1492,11 @@ static void print_rpm_vote(struct vreg *vreg, enum rpm_vreg_voter voter,
 
 static void print_rpm_duplicate(struct vreg *vreg, int set, int cnt)
 {
+	/* Suppress 8058_s0 and 8058_s1 printing. */
+	if ((msm_rpm_vreg_debug_mask & MSM_RPM_VREG_DEBUG_IGNORE_8058_S0_S1)
+	    && VREG_ID_IS_8058_S0_OR_S1(vreg->id))
+		return;
+
 	if (cnt == 2)
 		pr_info("rpm-regulator: ignored duplicate request %-9s: set=%c;"
 			" req[0]={%d, 0x%08X}, req[1]={%d, 0x%08X}\n",

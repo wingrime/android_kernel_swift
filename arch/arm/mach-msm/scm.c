@@ -169,17 +169,18 @@ static u32 smc(u32 cmd_addr)
 	register u32 r0 asm("r0") = 1;
 	register u32 r1 asm("r1") = (u32)&context_id;
 	register u32 r2 asm("r2") = cmd_addr;
-	asm(
-		__asmeq("%0", "r0")
-		__asmeq("%1", "r0")
-		__asmeq("%2", "r1")
-		__asmeq("%3", "r2")
-		"1:smc	#0	@ switch to secure world\n"
-		"cmp	r0, #1				\n"
-		"beq	1b				\n"
-		: "=r" (r0)
-		: "r" (r0), "r" (r1), "r" (r2)
-		: "r3", "cc");
+	do {
+		asm(
+			__asmeq("%0", "r0")
+			__asmeq("%1", "r0")
+			__asmeq("%2", "r1")
+			__asmeq("%3", "r2")
+			"smc	#0	@ switch to secure world\n"
+			: "=r" (r0)
+			: "r" (r0), "r" (r1), "r" (r2)
+			: "r3");
+	} while (r0 == SCM_INTERRUPTED);
+
 	return r0;
 }
 
@@ -194,13 +195,9 @@ static int __scm_call(const struct scm_command *cmd)
 	 * side in the buffer.
 	 */
 	flush_cache_all();
-	do {
-		ret = smc(cmd_addr);
-		if (ret < 0) {
-			ret = scm_remap_error(ret);
-			break;
-		}
-	} while (ret == SCM_INTERRUPTED);
+	ret = smc(cmd_addr);
+	if (ret < 0)
+		ret = scm_remap_error(ret);
 
 	return ret;
 }
@@ -262,16 +259,18 @@ u32 scm_get_version(void)
 		return version;
 
 	mutex_lock(&scm_lock);
-	asm(
-		__asmeq("%0", "r1")
-		__asmeq("%1", "r0")
-		__asmeq("%2", "r1")
-		"1:smc	#0	@ switch to secure world\n"
-		"cmp	r0, #1				\n"
-		"beq	1b				\n"
-		: "=r" (r1)
-		: "r" (r0), "r" (r1)
-		: "r2", "r3", "cc");
+	do {
+		asm(
+			__asmeq("%0", "r0")
+			__asmeq("%1", "r1")
+			__asmeq("%2", "r0")
+			__asmeq("%3", "r1")
+			"smc	#0	@ switch to secure world\n"
+			: "=r" (r0), "=r" (r1)
+			: "r" (r0), "r" (r1)
+			: "r2", "r3");
+	} while (r0 == SCM_INTERRUPTED);
+
 	version = r1;
 	mutex_unlock(&scm_lock);
 

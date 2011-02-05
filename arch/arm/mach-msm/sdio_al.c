@@ -846,8 +846,11 @@ static int read_mailbox(struct sdio_al_device *sdio_al_dev, int from_isr)
 
 		/* There is not enough write avail for this channel.
 		   We need to keep reading mailbox to wait for the appropriate
-		   write avail and cannot sleep */
-		any_no_write_avail |= (new_write_avail <= ch->min_write_avail);
+		   write avail and cannot sleep. Ignore SMEM channel that has
+		   only one direction. */
+		if (strcmp(ch->name, "SDIO_SMEM"))
+			any_no_write_avail |=
+				(new_write_avail <= ch->min_write_avail);
 	}
 
 	if ((rx_notify_bitmask == 0) && (tx_notify_bitmask == 0) &&

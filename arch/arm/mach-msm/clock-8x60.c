@@ -925,6 +925,8 @@ static struct clk_freq_tbl clk_tbl_pixel_mdp[] = {
 	F_PIXEL_MDP( 53990000, MM_GPERF, 2, 169, 601, LOW),
 	F_PIXEL_MDP( 64000000, MM_GPERF, 2,   1,   3, LOW),
 	F_PIXEL_MDP( 76800000, MM_GPERF, 1,   1,   5, LOW),
+	F_PIXEL_MDP( 85333000, MM_GPERF, 1,   2,   9, LOW),
+	F_PIXEL_MDP(106500000, MM_GPERF, 1,  71, 256, NOMINAL),
 	F_PIXEL_MDP(109714000, MM_GPERF, 1,   2,   7, NOMINAL),
 	F_END,
 };
@@ -970,7 +972,7 @@ static struct clk_freq_tbl clk_tbl_rot[] = {
 static struct pll_rate mm_pll2_rate[] = {
 	[0] = PLL_RATE( 7, 6301, 13500, 0, 4, 0x4248B), /*  50400500 Hz */
 	[1] = PLL_RATE( 8,    0,     0, 0, 4, 0x4248B), /*  54000000 Hz */
-	[2] = PLL_RATE(16,    2,   125, 0, 4, 0x4248F), /* 108108000 Hz */
+	[2] = PLL_RATE(16,    2,   125, 0, 4, 0x5248F), /* 108108000 Hz */
 	[3] = PLL_RATE(22,    0,     0, 2, 4, 0x6248B), /* 148500000 Hz */
 	[4] = PLL_RATE(44,    0,     0, 2, 4, 0x6248F), /* 297000000 Hz */
 };
@@ -1769,24 +1771,6 @@ int soc_clk_reset(unsigned id, enum clk_reset_action action)
 /*
  * Miscellaneous clock register initializations
  */
-
-/* Return true if PXO is 27MHz. */
-int __init pxo_is_27mhz(void)
-{
-	uint32_t xo_sel;
-	int pll8_ref_is_27mhz = 0;
-
-	/* PLL8 is assumed to be at 384MHz. Check if the 384/(L+M/N) == 27. */
-	if (readl(BB_PLL8_L_VAL_REG) == 14 && readl(BB_PLL8_M_VAL_REG) == 2
-	 && readl(BB_PLL8_N_VAL_REG) == 9)
-		pll8_ref_is_27mhz = 1;
-
-	/* Check which source is used with above L, M, N vals.
-	 * xo_sel: 0=PXO, else MXO */
-	xo_sel = readl(BB_PLL8_MODE_REG) & B(4);
-
-	return (xo_sel == 0 && pll8_ref_is_27mhz);
-}
 
 /* Read, modify, then write-back a register. */
 static void rmwreg(uint32_t val, void *reg, uint32_t mask)

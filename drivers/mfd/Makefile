@@ -87,3 +87,4 @@ obj-$(CONFIG_MFD_JANZ_CMODIO)	+= janz-cmodio.o
 obj-$(CONFIG_PMIC8058)		+= pmic8058.o
 obj-$(CONFIG_PMIC8901)		+= pmic8901.o
 obj-$(CONFIG_MFD_PM8921_CORE) 	+= pm8921-core.o
+obj-$(CONFIG_MFD_PM8XXX_IRQ) 	+= pm8xxx-irq.o

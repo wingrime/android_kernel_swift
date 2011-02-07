@@ -231,12 +231,12 @@ static int kgsl_suspend(struct platform_device *dev, pm_message_t state)
 			INIT_COMPLETION(device->hwaccess_gate);
 			device->ftbl.device_suspend_context(device);
 			device->ftbl.device_stop(device);
+			device->state = KGSL_STATE_SUSPEND;
 			break;
 		default:
 			mutex_unlock(&device->mutex);
 			return KGSL_FAILURE;
 		}
-		device->state = KGSL_STATE_SUSPEND;
 		device->requested_state = KGSL_STATE_NONE;
 		device->pwrctrl.nap_allowed = nap_allowed_saved;
 

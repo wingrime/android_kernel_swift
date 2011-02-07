@@ -276,7 +276,8 @@ static int sdio_read_cis(struct mmc_card *card, struct sdio_func *func)
 			if (card->cis.vendor == 0x70 &&
 				(card->cis.device == 0x2460 ||
 				 card->cis.device == 0x0460 ||
-				 card->cis.device == 0x23F1))
+				 card->cis.device == 0x23F1 ||
+				 card->cis.device == 0x23F0))
 				break;
 			else
 				continue;

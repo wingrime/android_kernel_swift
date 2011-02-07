@@ -3245,7 +3245,7 @@ static struct xoadc_platform_data xoadc_pdata = {
 
 #ifdef CONFIG_MSM_SDIO_AL
 
-static unsigned mdm2ap_status = 77;
+static unsigned mdm2ap_status = 140;
 
 static int configure_mdm2ap_status(int on)
 {

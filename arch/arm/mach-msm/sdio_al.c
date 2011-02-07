@@ -265,9 +265,9 @@ struct peer_sdioc_channel_config {
 #define PEER_SDIOC_SW_MAILBOX_BOOT_SIGNATURE 0xDEADBEEF
 
 /* Identifies if there are new features released */
-#define PEER_SDIOC_VERSION_MINOR	0x0002
+#define PEER_SDIOC_VERSION_MINOR	0x0001
 /* Identifies if there is backward compatibility */
-#define PEER_SDIOC_VERSION_MAJOR	0x0002
+#define PEER_SDIOC_VERSION_MAJOR	0x0003
 
 
 /* Identifies if there are new features released */
@@ -2029,7 +2029,7 @@ static int sdio_al_wake_up(struct sdio_al_device *sdio_al_dev,
 			break;
 		udelay(TIME_TO_WAIT_US);
 	}
-	pr_info(MODULE_NAME ":GPIO mdm2ap_status(77)=%d\n",
+	pr_info(MODULE_NAME ":GPIO mdm2ap_status=%d\n",
 		       sdio_al->pdata->get_mdm2ap_status());
 
 	if (enable_wake_up_func) {

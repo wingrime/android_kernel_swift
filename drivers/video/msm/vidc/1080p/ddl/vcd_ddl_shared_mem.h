@@ -138,7 +138,7 @@ void vidc_sm_set_extradata_addr(struct ddl_buf_addr *shared_mem,
 void vidc_sm_set_pand_b_frame_qp(struct ddl_buf_addr *shared_mem,
 	u32 b_frame_qp, u32 p_frame_qp);
 void vidc_sm_get_profile_info(struct ddl_buf_addr *shared_mem,
-	u32 *pn_disp_profile_info, u32 *pn_disp_level_info);
+	u32 *pn_disp_profile_info, u32 *pn_disp_level_info, u32 *idc_info);
 void vidc_sm_set_encoder_new_bit_rate(struct ddl_buf_addr *shared_mem,
 	u32 new_bit_rate);
 void vidc_sm_set_encoder_new_frame_rate(struct ddl_buf_addr *shared_mem,

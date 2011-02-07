@@ -809,6 +809,15 @@ kgsl_ringbuffer_issueibcmds(struct kgsl_device_private *dev_priv,
 
 	kfree(link);
 
+#ifdef CONFIG_MSM_KGSL_CFF_DUMP
+	/*
+	 * insert wait for idle after every IB1
+	 * this is conservative but works reliably and is ok
+	 * even for performance simulations
+	 */
+	kgsl_yamato_idle(device, KGSL_TIMEOUT_DEFAULT);
+#endif
+
 	return 0;
 }
 

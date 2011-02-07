@@ -195,6 +195,29 @@ kgsl_sharedmem_read(const struct kgsl_memdesc *memdesc, void *dst,
 	return 0;
 }
 
+uint kgsl_get_physaddr(const struct kgsl_memdesc *memdesc)
+{
+	BUG_ON(memdesc == NULL);
+	BUG_ON(memdesc->size == 0);
+
+	if ((memdesc->priv & KGSL_MEMFLAGS_CONPHYS) || memdesc->physaddr) {
+		BUG_ON(memdesc->physaddr == 0);
+		return memdesc->physaddr;
+	}
+#ifdef CONFIG_MSM_KGSL_MMU
+	if ((memdesc->priv & KGSL_MEMFLAGS_HOSTADDR) || memdesc->hostptr) {
+		uint addr;
+		BUG_ON(memdesc->hostptr == NULL);
+		addr = kgsl_virtaddr_to_physaddr((uint)memdesc->hostptr);
+		BUG_ON(addr == 0);
+		return addr;
+	}
+#endif
+	pr_err("kgsl: memdesc ![VMALLOC|CONPHYS|HOSTADDR]: %d", memdesc->priv);
+	BUG();
+	return 0;
+}
+
 int
 kgsl_sharedmem_writel(const struct kgsl_memdesc *memdesc,
 			unsigned int offsetbytes,
@@ -210,7 +233,7 @@ kgsl_sharedmem_writel(const struct kgsl_memdesc *memdesc,
 				offsetbytes, memdesc->size);
 		return -ERANGE;
 	}
-	kgsl_cffdump_setmem(memdesc->gpuaddr + offsetbytes,
+	kgsl_cffdump_setmem(kgsl_get_physaddr(memdesc) + offsetbytes,
 		src, sizeof(uint));
 	writel(src, memdesc->hostptr + offsetbytes);
 	return 0;
@@ -235,8 +258,8 @@ kgsl_sharedmem_write(const struct kgsl_memdesc *memdesc,
 	}
 
 	memcpy(memdesc->hostptr + offsetbytes, src, sizebytes);
-	kgsl_cffdump_syncmem(NULL, memdesc, memdesc->gpuaddr + offsetbytes,
-		sizebytes, false);
+	kgsl_cffdump_syncmem(NULL, memdesc,
+		memdesc->gpuaddr + offsetbytes, sizebytes, false);
 	return 0;
 }
 
@@ -254,8 +277,9 @@ kgsl_sharedmem_set(const struct kgsl_memdesc *memdesc, unsigned int offsetbytes,
 				offsetbytes, sizebytes, memdesc->size);
 		return -ERANGE;
 	}
-	kgsl_cffdump_setmem(memdesc->gpuaddr + offsetbytes,
-			    value, sizebytes);
+
+	kgsl_cffdump_setmem(kgsl_get_physaddr(memdesc) + offsetbytes, value,
+		sizebytes);
 	memset(memdesc->hostptr + offsetbytes, value, sizebytes);
 	return 0;
 }

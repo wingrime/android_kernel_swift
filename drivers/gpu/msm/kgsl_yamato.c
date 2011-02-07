@@ -1189,7 +1189,7 @@ int kgsl_yamato_idle(struct kgsl_device *device, unsigned int timeout)
 
 	KGSL_DRV_VDBG("enter (device=%p)\n", device);
 
-	kgsl_cffdump_regpoll(device->id, REG_RBBM_STATUS,
+	kgsl_cffdump_regpoll(device->id, REG_RBBM_STATUS << 2,
 		0x00000000, 0x80000000);
 	/* first, wait until the CP has consumed all the commands in
 	 * the ring buffer

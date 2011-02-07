@@ -1293,10 +1293,9 @@ static int kgsl_ioctl_map_user_mem(struct kgsl_process_private *private,
 
 	/* Any MMU mapped memory must have a length in multiple of PAGESIZE */
 	entry->memdesc.size = ALIGN(param.len, PAGE_SIZE);
-	/*we shouldn't need to write here from kernel mode */
-	entry->memdesc.hostptr = NULL;
 	/* ensure that MMU mappings are at page boundary */
 	entry->memdesc.physaddr = start + (param.offset & KGSL_PAGEMASK);
+	entry->memdesc.hostptr = __va(entry->memdesc.physaddr);
 	if (param.memtype != KGSL_USER_MEM_TYPE_PMEM) {
 		result = kgsl_mmu_map(private->pagetable,
 				entry->memdesc.physaddr, entry->memdesc.size,

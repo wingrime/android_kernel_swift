@@ -3917,7 +3917,9 @@ static int pm8058_gpios_init(void)
 			}
 	};
 	/* Line_in only for 8660 ffa & surf */
-	if (machine_is_msm8x60_ffa() || machine_is_msm8x60_surf()) {
+	if (machine_is_msm8x60_ffa() || machine_is_msm8x60_surf() ||
+		machine_is_msm8x60_charm_surf() ||
+		machine_is_msm8x60_charm_ffa()) {
 		rc = pm8058_gpio_config(line_in_gpio_cfg.gpio,
 				&line_in_gpio_cfg.cfg);
 		if (rc < 0) {
@@ -4243,7 +4245,8 @@ static void __init msm8x60_init_pm8058_othc(void)
 	int i;
 
 	if (SOCINFO_VERSION_MAJOR(socinfo_get_version()) == 2 ||
-					machine_is_msm8x60_fluid()) {
+		machine_is_msm8x60_fluid() || machine_is_msm8x60_charm_surf() ||
+		machine_is_msm8x60_charm_ffa()) {
 		/* 3-switch headset supported only by V2 FFA and FLUID */
 		hsed_config_1.accessories_adc_support = true,
 		/* ADC based accessory detection works only on V2 and FLUID */

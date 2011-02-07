@@ -952,6 +952,9 @@ static int msm_hsusb_pmic_id_notif_init(void (*callback)(int online), int init)
 	if (!callback)
 		return -EINVAL;
 
+	if (machine_is_msm8x60_fluid())
+		return -ENOTSUPP;
+
 	if (SOCINFO_VERSION_MAJOR(socinfo_get_version()) != 2) {
 		pr_debug("%s: USB_ID pin is not routed to PMIC"
 					"on V1 surf/ffa\n", __func__);
@@ -7963,6 +7966,14 @@ static void __init msm8x60_init(struct msm_board_data *board_data)
 		platform_add_devices(surf_devices,
 				     ARRAY_SIZE(surf_devices));
 #ifdef CONFIG_USB_EHCI_MSM
+	/*
+	 * Drive MPP2 pin HIGH for PHY to generate ID interrupts on 8660
+	 * fluid
+	 */
+	if (machine_is_msm8x60_fluid()) {
+		pm8901_mpp_config_digital_out(1,
+			PM8901_MPP_DIG_LEVEL_L5, 1);
+	}
 		msm_add_host(0, &msm_usb_host_pdata);
 #endif
 	} else {

@@ -6,7 +6,7 @@ endif
 ifeq ($(CONFIG_MSM_CAMERA_V4L2),y)
   obj-$(CONFIG_MSM_CAMERA) += msm_isp.o msm.o
 else
-  obj-$(CONFIG_MSM_CAMERA) += msm_camera.o msm_v4l2.o
+  obj-$(CONFIG_MSM_CAMERA) += msm_camera.o
 endif
 obj-$(CONFIG_MSM_CAMERA) += msm_axi_qos.o
 obj-$(CONFIG_MSM_CAMERA_FLASH) += flash.o

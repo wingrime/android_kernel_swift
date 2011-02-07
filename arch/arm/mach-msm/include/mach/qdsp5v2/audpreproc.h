@@ -63,6 +63,11 @@ struct audpreproc_event_callback {
 	void *private;
 };
 
+/*holds audrec information*/
+struct audrec_session_info {
+	int session_id;
+	int sampling_freq;
+};
 
 /* Exported common api's from audpreproc layer */
 int audpreproc_aenc_alloc(unsigned enc_type, const char **module_name,
@@ -91,11 +96,15 @@ int audpreproc_dsp_set_agc(struct audpreproc_cmd_cfg_agc_params *agc,
 int audpreproc_dsp_set_iir(
 struct audpreproc_cmd_cfg_iir_tuning_filter_params *iir, unsigned int len);
 
+int audpreproc_update_audrec_info(struct audrec_session_info
+						*audrec_session_info);
 int audpreproc_unregister_event_callback(struct audpreproc_event_callback *ecb);
 
 int audpreproc_register_event_callback(struct audpreproc_event_callback *ecb);
 
 int audpreproc_dsp_set_gain_tx(
 	struct audpreproc_cmd_cfg_cal_gain *calib_gain_tx, unsigned len);
+
+void get_audrec_session_info(int id, struct audrec_session_info *info);
 
 #endif /* _MACH_QDSP5_V2_AUDPREPROC_H */

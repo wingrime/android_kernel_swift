@@ -250,6 +250,21 @@ struct audpreproc_audrec_cmd_routing_mode {
 } __attribute__((packed));
 
 /*
+ * Command to configure DSP for topology where resampler moved
+ * in front of pre processing chain
+ */
+#define AUDPREPROC_AUDREC_CMD_ENC_CFG_2		0x0004
+#define	AUDPREPROC_AUDREC_CMD_ENC_CFG_2_LEN	\
+	sizeof(struct audpreproc_audrec_cmd_enc_cfg_2)
+
+
+struct audpreproc_audrec_cmd_enc_cfg_2 {
+	unsigned short	cmd_id;
+	unsigned short  stream_id;
+	unsigned short  audrec_enc_type;
+} __attribute__((packed));
+
+/*
  * AUDIOPREPROC COMMANDS:
  * ARM uses uPAudPreProcCmdQueue to communicate with AUDPREPROCTASK
  * Location : MEMB

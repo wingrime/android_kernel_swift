@@ -15,6 +15,7 @@
  */
 
 #ifndef __ASM_ARCH_MSM_DMA_H
+#define __ASM_ARCH_MSM_DMA_H
 
 #include <linux/list.h>
 #include <mach/msm_iomap.h>

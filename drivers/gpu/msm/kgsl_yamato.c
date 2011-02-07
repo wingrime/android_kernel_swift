@@ -1257,6 +1257,12 @@ static int kgsl_yamato_waittimestamp(struct kgsl_device *device,
 		else if (status == 0) {
 			if (!kgsl_check_timestamp(device, timestamp)) {
 				status = -ETIMEDOUT;
+				KGSL_DRV_ERR(
+				"Device hang detected while waiting for "
+				"timestamp: %x, last submitted(rb->timestamp): "
+				"%x, wptr: %x\n", timestamp,
+				yamato_device->ringbuffer.timestamp,
+				yamato_device->ringbuffer.wptr);
 				kgsl_postmortem_dump(device);
 			}
 		}

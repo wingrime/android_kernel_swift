@@ -1,4 +1,4 @@
-/* Copyright (c) 2010, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2010-2011, Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -459,7 +459,7 @@ int32_t scale_xtern_chgr_cur(int32_t adc_code,
 		if (rawfromoffset >= 1 << adc_properties->bitresolution)
 			rawfromoffset = (1 << adc_properties->bitresolution)
 									- 1;
-		adc_chan_result->measurement = ((int64_t)rawfromoffset << 1)*
+		adc_chan_result->measurement = ((int64_t)rawfromoffset * 5)*
 						chan_properties->adc_graph->dx*
 					chan_properties->gain_denominator;
 		do_div(adc_chan_result->measurement,

@@ -2376,6 +2376,11 @@ config FB_MSM_LCDC_SAMSUNG_WSVGA
 	select FB_MSM_LCDC_PANEL
 	default n
 
+config FB_MSM_LCDC_CHIMEI_WXGA
+	bool
+	select FB_MSM_LCDC_PANEL
+	default n
+
 config FB_MSM_LCDC_GORDON_VGA
 	bool
 	select FB_MSM_LCDC_PANEL
@@ -2428,6 +2433,13 @@ config FB_MSM_LCDC_SAMSUNG_WSVGA_PANEL
 	select FB_MSM_LCDC_SAMSUNG_WSVGA
 	---help---
 	  Support for LCDC Samsung WSVGA (1024x600) panel
+
+config FB_MSM_LCDC_CHIMEI_WXGA_PANEL
+	depends on FB_MSM_LCDC_HW
+	bool "LCDC Chimei WXGA Panel"
+	select FB_MSM_LCDC_CHIMEI_WXGA
+	---help---
+	  Support for LCDC Chimei WXGA (1366x768) panel
 
 config FB_MSM_LCDC_GORDON_VGA_PANEL
 	depends on FB_MSM_LCDC_HW

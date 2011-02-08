@@ -217,8 +217,10 @@ void mdp4_overlay_dmap_cfg(struct msm_fb_data_type *mfd, int lcdc)
 
 	mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_ON, FALSE);
 
+#ifndef CONFIG_FB_MSM_LCDC_CHIMEI_WXGA_PANEL
 	if (lcdc)
 		dma2_cfg_reg |= DMA_PACK_ALIGN_MSB;
+#endif
 
 	/* dma2 config register */
 	MDP_OUTP(MDP_BASE + 0x90000, dma2_cfg_reg);

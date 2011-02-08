@@ -1,7 +1,7 @@
 /* arch/arm/mach-msm/smd.c
  *
  * Copyright (C) 2007 Google, Inc.
- * Copyright (c) 2008-2010, Code Aurora Forum. All rights reserved.
+ * Copyright (c) 2008-2011, Code Aurora Forum. All rights reserved.
  * Author: Brian Swetland <swetland@google.com>
  *
  * This software is licensed under the terms of the GNU General Public
@@ -133,6 +133,7 @@ static unsigned last_heap_free = 0xffffffff;
 #define SMD_LOOPBACK_CID 100
 
 static LIST_HEAD(smd_ch_list_loopback);
+static void smd_fake_irq_handler(unsigned long arg);
 
 static void notify_other_smsm(uint32_t smsm_entry, uint32_t notify_mask)
 {
@@ -328,6 +329,70 @@ static void smd_channel_probe_worker(struct work_struct *work)
 			SMD_INFO("Probe skipping ch %d, not allocated\n", n);
 	}
 	mutex_unlock(&smd_probe_lock);
+}
+
+void smd_channel_reset(void)
+{
+	struct smd_alloc_elm *shared;
+	unsigned n;
+	struct smd_shared_v1 *shared1;
+	struct smd_shared_v2 *shared2;
+	uint32_t type;
+
+	SMD_DBG("%s: starting reset\n", __func__);
+	shared = smem_find(ID_CH_ALLOC_TBL, sizeof(*shared) * 64);
+	if (!shared) {
+		pr_err("%s: allocation table not initialized\n", __func__);
+		return;
+	}
+
+	mutex_lock(&smd_probe_lock);
+	for (n = 0; n < 64; n++) {
+
+		if (!shared[n].ref_count)
+			continue;
+		if (!shared[n].name[0])
+			continue;
+
+		type = SMD_CHANNEL_TYPE(shared[n].type);
+		shared2 = smem_alloc(SMEM_SMD_BASE_ID + n, sizeof(*shared2));
+		if (shared2) {
+			if ((type == SMD_APPS_MODEM) ||
+			    (type == SMD_APPS_QDSP) ||
+			    (type == SMD_APPS_DSPS))
+				shared2->ch0.tail = shared2->ch0.head = 0;
+			else
+				memset(&shared2->ch0, 0,
+				       sizeof(struct smd_half_channel));
+			memset(&shared2->ch1, 0,
+			       sizeof(struct smd_half_channel));
+			continue;
+		}
+
+		shared1 = smem_alloc(SMEM_SMD_BASE_ID + n, sizeof(*shared1));
+		if (shared1) {
+			if ((type == SMD_APPS_MODEM) ||
+			    (type == SMD_APPS_QDSP) ||
+			    (type == SMD_APPS_DSPS))
+				shared1->ch0.tail = shared1->ch0.head = 0;
+			else
+				memset(&shared1->ch0, 0,
+				       sizeof(struct smd_half_channel));
+			memset(&shared1->ch1, 0,
+			       sizeof(struct smd_half_channel));
+			continue;
+		}
+
+	}
+	mutex_unlock(&smd_probe_lock);
+
+	if (smsm_info.state)
+		memset(smsm_info.state, 0,
+		       sizeof(*smsm_info.state) * SMSM_NUM_ENTRIES);
+
+	/* notify clients of state change */
+	smd_fake_irq_handler(0);
+	SMD_DBG("%s: finished reset\n", __func__);
 }
 
 /* how many bytes are available for reading */
@@ -541,6 +606,7 @@ static void smd_state_change(struct smd_channel *ch,
 	case SMD_SS_CLOSED:
 		if (ch->send->state == SMD_SS_OPENED) {
 			ch_set_state(ch, SMD_SS_CLOSING);
+			ch->current_packet = 0;
 			ch->notify(ch->priv, SMD_EVENT_CLOSE);
 		}
 		break;

@@ -1939,7 +1939,7 @@ static void __init msm7x2x_init(void)
 	/* This value has been set to 160000 for power savings. */
 	/* OEMs may modify the value at their discretion for performance */
 	/* The appropriate maximum replacement for 160000 is: */
-	/* clk_get_max_axi_khz() */
+	/* msm7x2x_clock_data.max_axi_khz */
 	kgsl_pdata.pwrlevel_3d[0].gpu_freq = 0;
 	kgsl_pdata.pwrlevel_3d[0].bus_freq = 160000000;
 	kgsl_pdata.init_level_3d = 0;

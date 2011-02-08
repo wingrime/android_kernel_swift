@@ -1018,7 +1018,7 @@ static int msm_fb_register(struct msm_fb_data_type *mfd)
 			    panel_info->yres * mfd->fb_page,
 			    msm_fb_line_length(mfd->index,
 					       panel_info->mode2_xres,
-					       (panel_info->mode2_bpp+7)/8) *
+					       bpp) *
 			    panel_info->mode2_yres * mfd->fb_page), PAGE_SIZE);
 
 

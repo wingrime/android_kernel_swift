@@ -495,9 +495,11 @@ static int ov9726_probe_init_sensor(const struct msm_camera_sensor_info *data)
 		goto init_probe_done;
 	msleep(20);
 	/* 3. Read sensor Model ID: */
-	if (ov9726_i2c_read(OV9726_PIDH_REG, &chipidh, 1) < 0)
+	rc = ov9726_i2c_read(OV9726_PIDH_REG, &chipidh, 1);
+	if (rc < 0)
 		goto init_probe_fail;
-	if (ov9726_i2c_read(OV9726_PIDL_REG, &chipidl, 1) < 0)
+	rc = ov9726_i2c_read(OV9726_PIDL_REG, &chipidl, 1);
+	if (rc < 0)
 		goto init_probe_fail;
 	CDBG("kov9726 model_id = 0x%x  0x%x\n", chipidh, chipidl);
 	/* 4. Compare sensor ID to OV9726 ID: */
@@ -717,7 +719,6 @@ static int ov9726_sensor_release(void)
 {
 	int rc = -EBADF;
 	mutex_lock(&ov9726_mut);
-	ov9726_power_down();
 	gpio_direction_output(ov9726_ctrl->sensordata->sensor_reset,
 		0);
 	gpio_free(ov9726_ctrl->sensordata->sensor_reset);

@@ -263,13 +263,16 @@ u32 scm_get_version(void)
 {
 	int context_id;
 	static u32 version = -1;
-	register u32 r0 asm("r0") = 0x1 << 8;
-	register u32 r1 asm("r1") = (u32)&context_id;
+	register u32 r0 asm("r0");
+	register u32 r1 asm("r1");
 
 	if (version != -1)
 		return version;
 
 	mutex_lock(&scm_lock);
+
+	r0 = 0x1 << 8;
+	r1 = (u32)&context_id;
 	do {
 		asm(
 			__asmeq("%0", "r0")

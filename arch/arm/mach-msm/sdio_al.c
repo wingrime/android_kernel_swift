@@ -1631,6 +1631,8 @@ static int read_sdioc_channel_config(struct sdio_channel *ch)
 
 	ch->def_read_threshold = ch->read_threshold;
 
+	ch->min_write_avail = ch_config->max_packet_size;
+
 	if (ch->min_write_avail > ch->write_threshold)
 		ch->min_write_avail = ch->write_threshold;
 

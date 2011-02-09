@@ -5551,6 +5551,9 @@ static void __init msm8x60_init_uart12dm(void)
 #endif
 }
 
+#define MSM_GSBI9_PHYS		0x19900000
+#define GSBI_DUAL_MODE_CODE	0x60
+
 static void __init msm8x60_init_buses(void)
 {
 #ifdef CONFIG_I2C_QUP
@@ -5565,8 +5568,13 @@ static void __init msm8x60_init_buses(void)
 	msm_gsbi8_qup_i2c_device.dev.platform_data = &msm_gsbi8_qup_i2c_pdata;
 
 #ifdef CONFIG_MSM_GSBI9_UART
-	if (machine_is_msm8x60_charm_surf() || machine_is_msm8x60_charm_ffa())
+	if (machine_is_msm8x60_charm_surf() || machine_is_msm8x60_charm_ffa()) {
+		/* Setting protocol code to 0x60 for dual UART/I2C in GSBI9 */
+		gsbi_mem = ioremap_nocache(MSM_GSBI9_PHYS, 4);
+		writel(GSBI_DUAL_MODE_CODE, gsbi_mem);
+		iounmap(gsbi_mem);
 		msm_gsbi9_qup_i2c_pdata.use_gsbi_shared_mode = 1;
+	}
 #endif
 	msm_gsbi9_qup_i2c_device.dev.platform_data = &msm_gsbi9_qup_i2c_pdata;
 	msm_gsbi12_qup_i2c_device.dev.platform_data = &msm_gsbi12_qup_i2c_pdata;

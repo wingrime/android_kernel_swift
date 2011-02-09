@@ -52,7 +52,6 @@ struct kgsl_g12_device {
 irqreturn_t kgsl_g12_isr(int irq, void *data);
 int kgsl_g12_setstate(struct kgsl_device *device, uint32_t flags);
 int kgsl_g12_idle(struct kgsl_device *device, unsigned int timeout);
-struct kgsl_device *kgsl_get_2d_device(enum kgsl_deviceid);
 int kgsl_g12_regread(struct kgsl_device *device, unsigned int offsetwords,
 				unsigned int *value);
 int kgsl_g12_regwrite(struct kgsl_device *device, unsigned int offsetwords,
@@ -61,10 +60,8 @@ int kgsl_g12_regwrite(struct kgsl_device *device, unsigned int offsetwords,
 int __init kgsl_g12_config(struct kgsl_devconfig *,
 		      struct platform_device *pdev, enum kgsl_deviceid dev_id);
 
-int __init kgsl_g12_init(struct kgsl_device *device);
-int __init kgsl_g12_init_pwrctrl(struct kgsl_device *device);
-
-int kgsl_g12_close(struct kgsl_device *device);
+int __init kgsl_g12_init(struct platform_device *pdev);
+int kgsl_g12_close(void);
 
 int kgsl_g12_getfunctable(struct kgsl_functable *ftbl);
 

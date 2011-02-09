@@ -80,10 +80,9 @@
 
 struct kgsl_driver {
 	struct cdev cdev;
-	dev_t dev_num;
+	dev_t major;
 	struct class *class;
 	struct kgsl_device *devp[KGSL_DEVICE_MAX];
-	int num_devs;
 	struct platform_device *pdev;
 
 	uint32_t flags_debug;
@@ -96,6 +95,9 @@ struct kgsl_driver {
 	struct mutex pt_mutex;
 	/* Mutex for accessing the process list */
 	struct mutex process_mutex;
+
+	/* Mutex for protecting the device list */
+	struct mutex devlock;
 
 	struct kgsl_pagetable *global_pt;
 
@@ -170,6 +172,9 @@ int kgsl_register_ts_notifier(struct kgsl_device *device,
 
 int kgsl_unregister_ts_notifier(struct kgsl_device *device,
 				struct notifier_block *nb);
+
+void kgsl_unregister_device(struct kgsl_device *device);
+int kgsl_register_device(struct kgsl_device *device);
 
 #ifdef CONFIG_MSM_KGSL_DRM
 extern int kgsl_drm_init(struct platform_device *dev);

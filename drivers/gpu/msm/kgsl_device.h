@@ -158,6 +158,7 @@ struct kgsl_device {
 	struct completion suspend_gate;
 
 	struct workqueue_struct *work_queue;
+	struct platform_device *pdev;
 };
 
 struct kgsl_process_private {

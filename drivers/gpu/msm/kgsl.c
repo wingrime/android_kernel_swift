@@ -80,8 +80,34 @@ struct device *kgsl_driver_getdevnode(void)
 
 struct kgsl_device *kgsl_get_device(int dev_idx)
 {
-	BUG_ON(dev_idx >= KGSL_DEVICE_MAX || dev_idx < KGSL_DEVICE_YAMATO);
-	return kgsl_driver.devp[dev_idx];
+	int i;
+	struct kgsl_device *ret = NULL;
+
+	mutex_lock(&kgsl_driver.devlock);
+
+	for (i = 0; i < KGSL_DEVICE_MAX; i++) {
+		if (kgsl_driver.devp[i] && kgsl_driver.devp[i]->id == dev_idx) {
+			ret = kgsl_driver.devp[i];
+			break;
+		}
+	}
+
+	mutex_unlock(&kgsl_driver.devlock);
+	return ret;
+}
+
+struct kgsl_device *kgsl_get_minor(int minor)
+{
+	struct kgsl_device *ret = NULL;
+
+	if (minor < 0 || minor >= KGSL_DEVICE_MAX)
+		return NULL;
+
+	mutex_lock(&kgsl_driver.devlock);
+	ret = kgsl_driver.devp[minor];
+	mutex_unlock(&kgsl_driver.devlock);
+
+	return ret;
 }
 
 int kgsl_register_ts_notifier(struct kgsl_device *device,
@@ -162,7 +188,7 @@ int kgsl_setup_pt(struct kgsl_pagetable *pt)
 	int i = 0;
 	int status = 0;
 
-	for (i = 0; i < kgsl_driver.num_devs; i++) {
+	for (i = 0; i < KGSL_DEVICE_MAX; i++) {
 		struct kgsl_device *device = kgsl_driver.devp[i];
 		if (device) {
 			status = device->ftbl.device_setup_pt(device, pt);
@@ -184,7 +210,7 @@ error_pt:
 int kgsl_cleanup_pt(struct kgsl_pagetable *pt)
 {
 	int i;
-	for (i = 0; i < kgsl_driver.num_devs; i++) {
+	for (i = 0; i < KGSL_DEVICE_MAX; i++) {
 		struct kgsl_device *device = kgsl_driver.devp[i];
 		if (device)
 			device->ftbl.device_cleanup_pt(device, pt);
@@ -407,9 +433,7 @@ static int kgsl_release(struct inode *inodep, struct file *filep)
 
 	kgsl_put_process_private(device, private);
 
-	BUG_ON(kgsl_driver.pdev == NULL);
-	pm_runtime_put(&kgsl_driver.pdev->dev);
-
+	pm_runtime_put(&device->pdev->dev);
 	return result;
 }
 
@@ -421,8 +445,18 @@ static int kgsl_open(struct inode *inodep, struct file *filep)
 	unsigned int minor = iminor(inodep);
 	struct device *dev;
 
-	BUG_ON(kgsl_driver.pdev == NULL);
-	dev = &kgsl_driver.pdev->dev;
+	KGSL_DRV_DBG("file %p pid %d minor %d\n",
+		     filep, task_pid_nr(current), minor);
+
+	device = kgsl_get_minor(minor);
+	BUG_ON(device == NULL);
+
+	if (filep->f_flags & O_EXCL) {
+		KGSL_DRV_ERR("O_EXCL not allowed\n");
+		return -EBUSY;
+	}
+
+	dev = &device->pdev->dev;
 
 	result = pm_runtime_get_sync(dev);
 	if (result < 0) {
@@ -432,17 +466,6 @@ static int kgsl_open(struct inode *inodep, struct file *filep)
 		return result;
 	}
 	result = 0;
-
-	KGSL_DRV_DBG("file %p pid %d minor %d\n",
-		      filep, task_pid_nr(current), minor);
-
-	device = kgsl_get_device(minor);
-	BUG_ON(device == NULL);
-
-	if (filep->f_flags & O_EXCL) {
-		KGSL_DRV_ERR("O_EXCL not allowed\n");
-		return -EBUSY;
-	}
 
 	dev_priv = kzalloc(sizeof(struct kgsl_device_private), GFP_KERNEL);
 	if (dev_priv == NULL) {
@@ -1594,23 +1617,32 @@ static const struct file_operations kgsl_fops = {
 struct kgsl_driver kgsl_driver  = {
 	.process_mutex = __MUTEX_INITIALIZER(kgsl_driver.process_mutex),
 	.pt_mutex = __MUTEX_INITIALIZER(kgsl_driver.pt_mutex),
+	.devlock = __MUTEX_INITIALIZER(kgsl_driver.devlock),
 };
 
-static void kgsl_device_unregister(void)
+void kgsl_unregister_device(struct kgsl_device *device)
 {
-	int j;
+	int minor;
 
-	for (j = 0; j < kgsl_driver.num_devs; j++) {
-		struct kgsl_device *device = kgsl_driver.devp[j];
-
-		device_destroy(kgsl_driver.class,
-					MKDEV(MAJOR(kgsl_driver.dev_num), j));
-		kgsl_pwrctrl_uninit_sysfs(device);
+	mutex_lock(&kgsl_driver.devlock);
+	for (minor = 0; minor < KGSL_DEVICE_MAX; minor++) {
+		if (device == kgsl_driver.devp[minor])
+			break;
 	}
 
-	class_destroy(kgsl_driver.class);
-	cdev_del(&kgsl_driver.cdev);
-	unregister_chrdev_region(kgsl_driver.dev_num, kgsl_driver.num_devs);
+	mutex_unlock(&kgsl_driver.devlock);
+
+	if (minor == KGSL_DEVICE_MAX)
+		return;
+
+	kgsl_pwrctrl_uninit_sysfs(device);
+
+	device_destroy(kgsl_driver.class,
+		       MKDEV(MAJOR(kgsl_driver.major), minor));
+
+	mutex_lock(&kgsl_driver.devlock);
+	kgsl_driver.devp[minor] = NULL;
+	mutex_unlock(&kgsl_driver.devlock);
 }
 
 static void kgsl_driver_cleanup(void)
@@ -1620,119 +1652,10 @@ static void kgsl_driver_cleanup(void)
 		kgsl_driver.global_pt = NULL;
 	}
 
-	kgsl_yamato_close(kgsl_get_yamato_generic_device());
-
-	kgsl_g12_close(kgsl_get_2d_device(KGSL_DEVICE_2D0));
-	kgsl_g12_close(kgsl_get_2d_device(KGSL_DEVICE_2D1));
+	kgsl_yamato_close();
+	kgsl_g12_close();
 
 	kgsl_driver.pdev = NULL;
-}
-
-static int kgsl_add_device(int dev_idx)
-{
-	struct kgsl_device *device;
-	int err = 0;
-
-	switch (dev_idx) {
-	case (KGSL_DEVICE_YAMATO):
-		device = kgsl_get_yamato_generic_device();
-		kgsl_driver.devp[KGSL_DEVICE_YAMATO] = device;
-	break;
-	case (KGSL_DEVICE_2D0):
-		device = kgsl_get_2d_device(KGSL_DEVICE_2D0);
-		kgsl_driver.devp[KGSL_DEVICE_2D0] = device;
-	break;
-	case (KGSL_DEVICE_2D1):
-		device = kgsl_get_2d_device(KGSL_DEVICE_2D1);
-		kgsl_driver.devp[KGSL_DEVICE_2D1] = device;
-	break;
-	default:
-		err = -EINVAL;
-		goto done;
-	break;
-	}
-
-	if (device == NULL) {
-		err = -EINVAL;
-		goto done;
-	}
-
-	atomic_set(&device->open_count, -1);
-
- done:
-	return err;
-}
-
-static int kgsl_register_dev(int num_devs)
-{
-	int err;
-	int j, i;
-	dev_t dev;
-
-	/* alloc major and minor device numbers */
-	err = alloc_chrdev_region(&kgsl_driver.dev_num, 0, num_devs,
-				DRIVER_NAME);
-	if (err < 0) {
-		KGSL_DRV_ERR("alloc_chrdev_region failed err = %d\n", err);
-		return err;
-	}
-
-	/* create sysfs entries */
-	kgsl_driver.class = class_create(THIS_MODULE, CLASS_NAME);
-	if (IS_ERR(kgsl_driver.class)) {
-		err = PTR_ERR(kgsl_driver.class);
-		KGSL_DRV_ERR("failed to create class %s", CLASS_NAME);
-		goto error_class_create;
-	}
-
-	for (i = 0; i < num_devs; i++) {
-		struct kgsl_device *device = kgsl_driver.devp[i];
-
-		dev = MKDEV(MAJOR(kgsl_driver.dev_num), i);
-		device->dev = device_create(kgsl_driver.class,
-					    &kgsl_driver.pdev->dev,
-					    dev, NULL, device->name);
-		if (IS_ERR(device->dev)) {
-			err = PTR_ERR(device->dev);
-			KGSL_DRV_ERR("device_create failed err=%d\n", err);
-			for (j = 0; j < i; j++)
-				device_destroy(kgsl_driver.class,
-					MKDEV(MAJOR(kgsl_driver.dev_num), j));
-			goto error_device_create;
-		}
-
-		err = kgsl_pwrctrl_init_sysfs(device);
-		if (err)
-			goto error_device_create;
-	}
-
-	/* add char dev(s) */
-	cdev_init(&kgsl_driver.cdev, &kgsl_fops);
-	kgsl_driver.cdev.owner = THIS_MODULE;
-	kgsl_driver.cdev.ops = &kgsl_fops;
-	err = cdev_add(&kgsl_driver.cdev, MKDEV(MAJOR(kgsl_driver.dev_num), 0),
-			num_devs);
-	if (err) {
-		KGSL_DRV_ERR("kgsl: cdev_add() failed, dev_num= %d,"
-				" result= %d\n", kgsl_driver.dev_num, err);
-		goto error_cdev_add;
-	}
-
-	KGSL_DRV_DBG("register_dev successful, cdev.dev=0x%x\n",
-						kgsl_driver.cdev.dev);
-	return err;
-
-error_cdev_add:
-	for (j = 0; j < num_devs; j++) {
-		device_destroy(kgsl_driver.class,
-					MKDEV(MAJOR(kgsl_driver.dev_num), j));
-	}
-error_device_create:
-	class_destroy(kgsl_driver.class);
-error_class_create:
-	unregister_chrdev_region(kgsl_driver.dev_num, num_devs);
-
-	return err;
 }
 
 static void
@@ -1791,50 +1714,103 @@ kgsl_ptpool_init(void)
 	return 0;
 }
 
-static int __devinit kgsl_platform_probe(struct platform_device *pdev)
+int
+kgsl_register_device(struct kgsl_device *device)
 {
-	int i, result = 0;
+	int minor, ret;
+	dev_t dev;
+
+	/* Find a minor for the device */
+
+	mutex_lock(&kgsl_driver.devlock);
+	for (minor = 0; minor < KGSL_DEVICE_MAX; minor++) {
+		if (kgsl_driver.devp[minor] == NULL) {
+			kgsl_driver.devp[minor] = device;
+			break;
+		}
+	}
+
+	mutex_unlock(&kgsl_driver.devlock);
+
+	if (minor == KGSL_DEVICE_MAX)
+		return -ENODEV;
+
+	/* Create the device */
+	dev = MKDEV(MAJOR(kgsl_driver.major), minor);
+	device->dev = device_create(kgsl_driver.class,
+				    &device->pdev->dev,
+				    dev, NULL,
+				    device->name);
+
+	if (IS_ERR(device->dev)) {
+		ret = PTR_ERR(device->dev);
+		KGSL_DRV_ERR("device_create failed err=%d\n", ret);
+		goto err_devlist;
+	}
+
+	/* Generic device initialization */
+	atomic_set(&device->open_count, -1);
+
+	ret = kgsl_pwrctrl_init_sysfs(device);
+
+	if (ret)
+		goto err_device;
+
+	return 0;
+
+err_device:
+	device_destroy(kgsl_driver.class,
+		       MKDEV(MAJOR(kgsl_driver.major), minor));
+
+err_devlist:
+	mutex_lock(&kgsl_driver.devlock);
+	kgsl_driver.devp[minor] = NULL;
+	mutex_unlock(&kgsl_driver.devlock);
+
+	return ret;
+}
+
+static int __devinit
+kgsl_core_init(void)
+{
 	struct kgsl_platform_data *pdata = NULL;
-	struct kgsl_device *device = kgsl_get_yamato_generic_device();
-	struct kgsl_device *device_2d0 = kgsl_get_2d_device(KGSL_DEVICE_2D0);
-	struct kgsl_device *device_2d1 = kgsl_get_2d_device(KGSL_DEVICE_2D1);
+	int ret;
+
+	pdata = kgsl_driver.pdev->dev.platform_data;
+
+	/* alloc major and minor device numbers */
+	ret = alloc_chrdev_region(&kgsl_driver.major, 0, KGSL_DEVICE_MAX,
+				  DRIVER_NAME);
+	if (ret < 0) {
+		KGSL_DRV_ERR("alloc_chrdev_region failed err = %d\n", ret);
+		return ret;
+	}
+
+	cdev_init(&kgsl_driver.cdev, &kgsl_fops);
+	kgsl_driver.cdev.owner = THIS_MODULE;
+	kgsl_driver.cdev.ops = &kgsl_fops;
+	ret = cdev_add(&kgsl_driver.cdev, MKDEV(MAJOR(kgsl_driver.major), 0),
+		       KGSL_DEVICE_MAX);
+
+	if (ret) {
+		KGSL_DRV_ERR("kgsl: cdev_add() failed, dev_num= %d,"
+			     " result= %d\n", kgsl_driver.major, ret);
+		goto err;
+	}
+
+	kgsl_driver.class = class_create(THIS_MODULE, CLASS_NAME);
+
+	if (IS_ERR(kgsl_driver.class)) {
+		ret = PTR_ERR(kgsl_driver.class);
+		KGSL_DRV_ERR("failed to create class %s", CLASS_NAME);
+		goto err;
+	}
 
 	kgsl_debug_init();
 	kgsl_cffdump_init();
 
-	for (i = 0; i < KGSL_DEVICE_MAX; i++)
-		kgsl_driver.devp[i] = NULL;
-
-	kgsl_driver.num_devs = 0;
 	INIT_LIST_HEAD(&kgsl_driver.process_list);
-
-	kgsl_driver.pdev = pdev;
-	pdata = pdev->dev.platform_data;
-	BUG_ON(pdata == NULL);
-
-	kgsl_yamato_init_pwrctrl(device);
-
-	if (pdata->grp2d0_clk_name != NULL) {
-		/* 2d0 pwrctrl */
-		result = kgsl_g12_init_pwrctrl(device_2d0);
-		if (result != 0) {
-			KGSL_DRV_ERR(
-				"kgsl_2d0_init_pwrctrl returned error=%d\n",
-				result);
-			goto done;
-		}
-	}
-
-	if (pdata->grp2d1_clk_name != NULL) {
-		/* 2d1 pwrctrl */
-		result = kgsl_g12_init_pwrctrl(device_2d1);
-		if (result != 0) {
-			KGSL_DRV_ERR(
-				"kgsl_2d1_init_pwrctrl returned error=%d\n",
-				result);
-			goto done;
-		}
-	}
+	INIT_LIST_HEAD(&kgsl_driver.pagetable_list);
 
 	kgsl_driver.ptsize = KGSL_PAGETABLE_ENTRIES(pdata->pt_va_size) *
 		KGSL_PAGETABLE_ENTRY_SIZE;
@@ -1843,53 +1819,44 @@ static int __devinit kgsl_platform_probe(struct platform_device *pdev)
 	kgsl_driver.pt_va_size = pdata->pt_va_size;
 	kgsl_driver.ptpool.entries = pdata->pt_max_count;
 
-	result = kgsl_ptpool_init();
+	ret = kgsl_ptpool_init();
 
-	if (result != 0)
-		goto done;
+	if (ret)
+		goto err;
 
-	result = kgsl_drm_init(pdev);
+	ret = kgsl_drm_init(kgsl_driver.pdev);
 
-	INIT_LIST_HEAD(&kgsl_driver.pagetable_list);
+	if (ret)
+		goto err;
+
+	return 0;
+
+err:
+	unregister_chrdev_region(kgsl_driver.major, KGSL_DEVICE_MAX);
+	return ret;
+}
+
+static int __devinit kgsl_platform_probe(struct platform_device *pdev)
+{
+	int result = 0;
+	struct kgsl_device *device;
+
+	kgsl_driver.pdev = pdev;
 	pm_runtime_enable(&pdev->dev);
 
-	result = kgsl_yamato_init(device);
+	kgsl_core_init();
+
+	result = kgsl_yamato_init(pdev);
 
 	if (result) {
-		KGSL_DRV_ERR("yamato_init failed %d", result);
+		KGSL_DRV_ERR("3D initalization failed: %d", result);
 		goto done;
 	}
 
-	if (kgsl_add_device(KGSL_DEVICE_YAMATO) == KGSL_FAILURE) {
-		result = -EINVAL;
+	result = kgsl_g12_init(pdev);
+	if (result) {
+		KGSL_DRV_ERR("2D initalization failed: %d", result);
 		goto done;
-	}
-	kgsl_driver.num_devs++;
-
-	if (pdata->grp2d0_clk_name) {
-		result = kgsl_g12_init(device_2d0);
-		if (result) {
-			KGSL_DRV_ERR("2d0_init failed %d", result);
-			goto done;
-		}
-		if (kgsl_add_device(KGSL_DEVICE_2D0) == KGSL_FAILURE) {
-			result = -EINVAL;
-			goto done;
-		}
-		kgsl_driver.num_devs++;
-	}
-
-	if (pdata->grp2d1_clk_name) {
-		result = kgsl_g12_init(device_2d1);
-		if (result) {
-			KGSL_DRV_ERR("2d1_init failed %d", result);
-			goto done;
-		}
-		if (kgsl_add_device(KGSL_DEVICE_2D1) == KGSL_FAILURE) {
-			result = -EINVAL;
-			goto done;
-		}
-		kgsl_driver.num_devs++;
 	}
 
 	device = kgsl_get_device(KGSL_DEVICE_YAMATO);
@@ -1902,12 +1869,7 @@ static int __devinit kgsl_platform_probe(struct platform_device *pdev)
 done:
 	if (result)
 		kgsl_driver_cleanup();
-	else
-		result = kgsl_register_dev(kgsl_driver.num_devs);
 
-	if (!result)
-		KGSL_DRV_DBG("platform probe successful, numdevs=%d\n",
-						kgsl_driver.num_devs);
 	return result;
 }
 
@@ -1918,7 +1880,6 @@ static int kgsl_platform_remove(struct platform_device *pdev)
 	kgsl_ptpool_cleanup();
 	kgsl_driver_cleanup();
 	kgsl_drm_exit();
-	kgsl_device_unregister();
 	kgsl_cffdump_destroy();
 
 	return 0;

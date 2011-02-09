@@ -49,17 +49,14 @@ struct kgsl_yamato_device {
 
 irqreturn_t kgsl_yamato_isr(int irq, void *data);
 
-int __init kgsl_yamato_init(struct kgsl_device *device);
-int __init kgsl_yamato_init_pwrctrl(struct kgsl_device *device);
-
-int kgsl_yamato_close(struct kgsl_device *device);
+int __init kgsl_yamato_init(struct platform_device *pdev);
+int kgsl_yamato_close(void);
 
 int kgsl_yamato_idle(struct kgsl_device *device, unsigned int timeout);
 int kgsl_yamato_regread(struct kgsl_device *device, unsigned int offsetwords,
 				unsigned int *value);
 int kgsl_yamato_regwrite(struct kgsl_device *device, unsigned int offsetwords,
 				unsigned int value);
-struct kgsl_device *kgsl_get_yamato_generic_device(void);
 int kgsl_yamato_getfunctable(struct kgsl_functable *ftbl);
 
 #endif /*_KGSL_YAMATO_H */

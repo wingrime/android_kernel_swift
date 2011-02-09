@@ -96,7 +96,7 @@
 	_IOW(MSM_CAM_IOCTL_MAGIC, 16, struct msm_camera_vfe_cfg_cmd *)
 
 #define MSM_CAM_IOCTL_GET_PICTURE \
-	_IOW(MSM_CAM_IOCTL_MAGIC, 17, struct msm_camera_ctrl_cmd *)
+	_IOW(MSM_CAM_IOCTL_MAGIC, 17, struct msm_frame *)
 
 #define MSM_CAM_IOCTL_SET_CROP \
 	_IOW(MSM_CAM_IOCTL_MAGIC, 18, struct crop_info *)
@@ -154,6 +154,12 @@
 
 #define MSM_CAM_IOCTL_GET_CAMERA_INFO \
 	_IOR(MSM_CAM_IOCTL_MAGIC, 36, struct msm_camera_info *)
+
+#define MSM_CAM_IOCTL_UNBLOCK_POLL_PIC_FRAME \
+	_IO(MSM_CAM_IOCTL_MAGIC, 37)
+
+#define MSM_CAM_IOCTL_RELEASE_PIC_BUFFER \
+	_IOW(MSM_CAM_IOCTL_MAGIC, 38, struct camera_enable_cmd *)
 
 #define MSM_CAMERA_LED_OFF  0
 #define MSM_CAMERA_LED_LOW  1

@@ -25,6 +25,7 @@ mac80211-y := \
 	wme.o \
 	event.o \
 	chan.o
+CFLAGS_REMOVE_scan.o := -Werror
 
 mac80211-$(CONFIG_MAC80211_LEDS) += led.o
 mac80211-$(CONFIG_MAC80211_DEBUGFS) += \

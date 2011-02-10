@@ -28,12 +28,106 @@
 #include <linux/mtd/nand.h>
 #include <linux/mtd/partitions.h>
 #include <asm/mach/mmc.h>
+#include <linux/i2c.h>
+#include <linux/i2c/sx150x.h>
 #include <linux/gpio.h>
 #include "devices.h"
 #include "timer.h"
 #include "devices-msm7x2xa.h"
 
 #define MSM_EBI2_PHYS 0xa0d00000
+
+enum {
+	GPIO_EXPANDER_IRQ_BASE	= NR_MSM_IRQS + NR_GPIO_IRQS,
+	GPIO_EXPANDER_GPIO_BASE	= NR_MSM_GPIOS,
+	/* SURF expander */
+	GPIO_SURF_EXPANDER_BASE	= GPIO_EXPANDER_GPIO_BASE,
+	GPIO_BT_SYS_REST_EN	= GPIO_SURF_EXPANDER_BASE,
+	GPIO_WLAN_EXT_POR_N,
+	GPIO_DISPLAY_PWR_EN,
+	GPIO_BACKLIGHT_EN,
+	GPIO_PRESSURE_XCLR,
+	GPIO_VREG_S3_EXP,
+	GPIO_UBM2M_PWRDWN,
+	GPIO_ETM_MODE_CS_N,
+	GPIO_HOST_VBUS_EN,
+	GPIO_SPI_MOSI,
+	GPIO_SPI_MISO,
+	GPIO_SPI_CLK,
+	GPIO_SPI_CS0_N,
+	GPIO_SURF_EXPANDER_IO13,
+	GPIO_SURF_EXPANDER_IO14,
+	GPIO_SURF_EXPANDER_IO15,
+	/* Camera expander on SURF */
+	GPIO_SURF_CAM_EXPANDER_BASE	= GPIO_SURF_EXPANDER_BASE + 16,
+	GPIO_SURF_CAM_GP_STROBE_READY	= GPIO_SURF_CAM_EXPANDER_BASE,
+	GPIO_SURF_CAM_GP_AFBUSY,
+	GPIO_SURF_CAM_GP_CAM_PWDN,
+	GPIO_SURF_CAM_GP_CAM1MP_XCLR,
+	GPIO_SURF_CAM_GP_CAMIF_RESET_N,
+	GPIO_SURF_CAM_GP_STROBE_CE,
+	GPIO_SURF_CAM_GP_LED_EN1,
+	GPIO_SURF_CAM_GP_LED_EN2,
+};
+
+#if defined(CONFIG_GPIO_SX150X)
+enum {
+	SX150X_SURF,
+	SX150X_SURF_CAM,
+};
+
+static struct sx150x_platform_data sx150x_data[] __initdata = {
+	[SX150X_SURF]	= {
+		.gpio_base		= GPIO_SURF_EXPANDER_BASE,
+		.oscio_is_gpo		= false,
+		.io_pullup_ena		= 0,
+		.io_pulldn_ena		= 0,
+		.io_open_drain_ena	= 0,
+		.irq_summary		= -1,
+		.irq_base		= GPIO_EXPANDER_IRQ_BASE,
+	},
+	[SX150X_SURF_CAM]	= {
+		.gpio_base		= GPIO_SURF_CAM_EXPANDER_BASE,
+		.oscio_is_gpo		= false,
+		.io_pullup_ena		= 0,
+		.io_pulldn_ena		= 0,
+		.io_open_drain_ena	= 0,
+		.irq_summary		= -1,
+		.irq_base		= GPIO_EXPANDER_IRQ_BASE +
+					  GPIO_SURF_CAM_EXPANDER_BASE -
+					  GPIO_EXPANDER_GPIO_BASE,
+	},
+};
+#endif
+
+#if defined(CONFIG_I2C) && defined(CONFIG_GPIO_SX150X)
+static struct i2c_board_info surf_core_exp_i2c_info[] __initdata = {
+	{
+		I2C_BOARD_INFO("sx1509q", 0x3e),
+		.platform_data =  &sx150x_data[SX150X_SURF],
+	},
+};
+static struct i2c_board_info surf_cam_exp_i2c_info[] __initdata = {
+	{
+		I2C_BOARD_INFO("sx1508q", 0x22),
+		.platform_data	= &sx150x_data[SX150X_SURF_CAM],
+	},
+};
+#endif
+
+#if defined(CONFIG_I2C) && defined(CONFIG_GPIO_SX150X)
+static void __init register_i2c_devices(void)
+{
+	if (machine_is_msm7x27a_surf()) {
+		i2c_register_board_info(MSM_GSBI1_QUP_I2C_BUS_ID,
+				surf_core_exp_i2c_info,
+				ARRAY_SIZE(surf_core_exp_i2c_info));
+		i2c_register_board_info(MSM_GSBI0_QUP_I2C_BUS_ID,
+				surf_cam_exp_i2c_info,
+				ARRAY_SIZE(surf_cam_exp_i2c_info));
+	}
+}
+#endif
 
 static struct msm_gpio qup_i2c_gpios_io[] = {
 	{ GPIO_CFG(60, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_8MA),
@@ -378,6 +472,9 @@ static void __init msm7x2x_init(void)
 	}
 
 	msm_clock_init(msm_clocks_7x27a, msm_num_clocks_7x27a);
+#if defined(CONFIG_I2C) && defined(CONFIG_GPIO_SX150X)
+	register_i2c_devices();
+#endif
 }
 
 #ifdef CONFIG_CACHE_L2X0

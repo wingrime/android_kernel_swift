@@ -465,6 +465,7 @@ static int32_t q6asm_callback(struct apr_client_data *data, void *priv)
 			}
 			spin_lock_irqsave(&port->dsp_lock, dsp_flags);
 			token = data->token;
+			port->buf[token].used = 0;
 			if (port->buf[token].phys !=
 				payload[READDONE_IDX_BUFFER]) {
 				pr_err("Buf expected[%p]rxed[%p]\n",\
@@ -1666,7 +1667,7 @@ int q6asm_read(struct audio_client *ac)
 
 		dsp_buf = port->dsp_buf;
 		ab = &port->buf[dsp_buf];
-		port->buf[dsp_buf].used = 0;
+
 		pr_debug("%s:session[%d]dsp-buf[%d][%p]cpu_buf[%d][%p]\n",
 					__func__,
 					ac->session,
@@ -1921,7 +1922,7 @@ int q6asm_cmd(struct audio_client *ac, int cmd)
 		}
 		if (ac->port[OUT].buf) {
 			for (cnt = 0; cnt < ac->port[OUT].max_buf_cnt; cnt++) {
-				if (ac->port[OUT].buf[cnt].used == (OUT ^ 1)) {
+				if (ac->port[OUT].buf[cnt].used == OUT) {
 					pr_err("Read Buf[%d] not returned\n",
 									cnt);
 				}

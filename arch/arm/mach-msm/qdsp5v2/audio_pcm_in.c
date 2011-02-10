@@ -34,6 +34,7 @@
 #include <mach/qdsp5v2/audpreproc.h>
 #include <mach/qdsp5v2/audio_dev_ctl.h>
 #include <mach/debug_mm.h>
+#include <mach/qdsp5v2/audio_acdbi.h>
 
 /* FRAME_NUM must be a power of two */
 #define FRAME_NUM		(8)
@@ -554,6 +555,18 @@ static long audpcm_in_ioctl(struct file *file,
 			break;
 		}
 		audio->dual_mic_config = msm_get_dual_mic_config(audio->enc_id);
+		/*DSP supports fluence block and by default ACDB layer will
+		applies the fluence pre-processing feature, if dual MIC config
+		is enabled implies client want to record pure dual MIC sample
+		for this we need to over ride the fluence pre processing
+		feature at ACDB layer to not to apply if fluence preprocessing
+		feature supported*/
+		if (audio->dual_mic_config) {
+			MM_INFO("dual MIC config = %d, over ride the fluence "
+			"feature\n", audio->dual_mic_config);
+			fluence_feature_update(audio->dual_mic_config,
+							audio->enc_id);
+		}
 		/*update aurec session info in audpreproc layer*/
 		audio->session_info.session_id = audio->enc_id;
 		audio->session_info.sampling_freq = audio->samp_rate;

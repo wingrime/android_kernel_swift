@@ -47,6 +47,7 @@
 #define ACDB_CPU			SMD_APPS_MODEM
 #define ACDB_BUF_SIZE			4096
 #define PBE_BUF_SIZE                    (33*1024)
+#define FLUENCE_BUF_SIZE	498
 
 #define ACDB_VALUES_NOT_FILLED  	0
 #define ACDB_VALUES_FILLED      	1
@@ -87,6 +88,7 @@ struct acdb_data {
 	struct audpreproc_cmd_cfg_iir_tuning_filter_params *preproc_iir;
 	struct audpreproc_cmd_cfg_cal_gain *calib_gain_tx;
 	struct acdb_mbadrc_block mbadrc_block;
+	struct audpreproc_cmd_cfg_lvnv_param preproc_lvnv;
 
 	wait_queue_head_t wait;
 	struct mutex acdb_mutex;
@@ -100,12 +102,17 @@ struct acdb_data {
 	struct acdb_result acdb_result;
 	u16 *pbe_extbuff;
 	u16 *pbe_enable_flag;
+	u32 fluence_extbuff;
+	u8 *fluence_extbuff_virt;
+
 	struct acdb_pbe_block *pbe_blk;
 
 	spinlock_t dsp_lock;
 	int dec_id;
 	struct audpp_cmd_cfg_object_params_eqalizer eq;
-
+	 /*status to enable or disable the fluence*/
+	int fleuce_feature_status[MAX_AUDREC_SESSIONS];
+	struct audrec_session_info session_info;
 	/*pmem info*/
 	int pmem_fd;
 	unsigned long paddr;
@@ -1175,6 +1182,60 @@ static struct acdb_rmc_block *get_rmc_blk(void)
 	return NULL;
 }
 
+struct acdb_fluence_block *get_audpp_fluence_block(void)
+{
+	struct header *prs_hdr;
+	u32 index = 0;
+
+	while (index < acdb_data.acdb_result.used_bytes) {
+		prs_hdr = (struct header *)(acdb_data.virt_addr + index);
+
+		if (prs_hdr->dbor_signature == DBOR_SIGNATURE) {
+			if (prs_hdr->abid == ABID_AUDIO_FLUENCE_TX) {
+				if (prs_hdr->iid == IID_AUDIO_FLUENCE_TX) {
+					MM_DBG("got fluence block\n");
+					return (struct acdb_fluence_block *)
+						(acdb_data.virt_addr + index
+						+ sizeof(struct header));
+				}
+			} else {
+				index += prs_hdr->data_len +
+					sizeof(struct header);
+			}
+		} else {
+			break;
+		}
+	}
+	return NULL;
+}
+
+static s32 acdb_fill_audpreproc_fluence(void)
+{
+	struct acdb_fluence_block *fluence_block = NULL;
+	fluence_block = get_audpp_fluence_block();
+	if (!fluence_block) {
+		MM_ERR("error in finding fluence block\n");
+		return -EPERM;
+	}
+	memset(&acdb_data.preproc_lvnv, 0, sizeof(
+				struct audpreproc_cmd_cfg_lvnv_param));
+	memcpy(acdb_data.fluence_extbuff_virt,
+			&fluence_block->cs_tuningMode,
+			(sizeof(struct acdb_fluence_block) -
+					sizeof(fluence_block->csmode)));
+	acdb_data.preproc_lvnv.cmd_id = AUDPREPROC_CMD_CFG_LVNV_PARMS;
+	acdb_data.preproc_lvnv.stream_id = acdb_data.preproc_stream_id;
+	acdb_data.preproc_lvnv.cs_mode = fluence_block->csmode;
+	acdb_data.preproc_lvnv.lvnv_ext_buf_size = FLUENCE_BUF_SIZE;
+	acdb_data.preproc_lvnv.lvnv_ext_buf_start_lsw =\
+				((u32)(acdb_data.fluence_extbuff)\
+						& 0x0000FFFF);
+	acdb_data.preproc_lvnv.lvnv_ext_buf_start_msw =\
+				(((u32)acdb_data.fluence_extbuff\
+					& 0xFFFF0000) >> 16);
+	return 0;
+}
+
 s32 acdb_calibrate_audpreproc(void)
 {
 	s32	result = 0;
@@ -1234,7 +1295,25 @@ s32 acdb_calibrate_audpreproc(void)
 			MM_DBG("AFE is calibrated with rmc params\n");
 	} else
 		MM_DBG("RMC block was not found\n");
-
+	if (!acdb_data.fleuce_feature_status[acdb_data.preproc_stream_id]) {
+		result = acdb_fill_audpreproc_fluence();
+		if (!(IS_ERR_VALUE(result))) {
+			result = audpreproc_dsp_set_lvnv(
+					&acdb_data.preproc_lvnv,
+					sizeof(struct\
+					audpreproc_cmd_cfg_lvnv_param));
+			if (result) {
+				MM_ERR("ACDB=> Failed to send lvnv "
+						"data to preproc\n");
+				result = -EINVAL;
+				goto done;
+			} else
+				MM_DBG("AUDPREPROC is calibrated"
+						" with lvnv parameters\n");
+		} else
+			MM_ERR("fluence block is not found\n");
+	} else
+		MM_DBG("fluence block override\n");
 done:
 	return result;
 }
@@ -1658,6 +1737,47 @@ static s32 initialize_memory(void)
 		result = -ENOMEM;
 		goto done;
 	}
+	acdb_data.fluence_extbuff = pmem_kalloc(FLUENCE_BUF_SIZE,
+							(PMEM_MEMTYPE_EBI1 |
+							PMEM_ALIGNMENT_4K));
+	if (IS_ERR((void *)acdb_data.fluence_extbuff)) {
+		MM_ERR("ACDB=> cannot allocate physical memory for "
+					"fluence block\n");
+		free_memory_acdb_get_blk();
+		free_memory_acdb_cache_rx();
+		free_memory_acdb_cache_tx();
+		kfree(acdb_data.pp_iir);
+		kfree(acdb_data.pp_mbadrc);
+		kfree(acdb_data.calib_gain_rx);
+		kfree(acdb_data.preproc_agc);
+		kfree(acdb_data.preproc_iir);
+		kfree(acdb_data.calib_gain_tx);
+		kfree(acdb_data.pbe_block);
+		pmem_kfree((int32_t)acdb_data.pbe_extbuff);
+		result = -ENOMEM;
+		goto done;
+	}
+	acdb_data.fluence_extbuff_virt =
+					ioremap(
+					acdb_data.fluence_extbuff,
+						FLUENCE_BUF_SIZE);
+	if (acdb_data.fluence_extbuff_virt == NULL) {
+		MM_ERR("ACDB=> Could not map physical address\n");
+		free_memory_acdb_get_blk();
+		free_memory_acdb_cache_rx();
+		free_memory_acdb_cache_tx();
+		kfree(acdb_data.pp_iir);
+		kfree(acdb_data.pp_mbadrc);
+		kfree(acdb_data.calib_gain_rx);
+		kfree(acdb_data.preproc_agc);
+		kfree(acdb_data.preproc_iir);
+		kfree(acdb_data.calib_gain_tx);
+		kfree(acdb_data.pbe_block);
+		pmem_kfree((int32_t)acdb_data.pbe_extbuff);
+		pmem_kfree((int32_t)acdb_data.fluence_extbuff);
+		result = -ENOMEM;
+		goto done;
+	}
 done:
 	return result;
 }
@@ -1862,6 +1982,13 @@ static s8 handle_audpreproc_cb(void)
 	return result;
 }
 
+void fluence_feature_update(int enable, int stream_id)
+{
+	MM_INFO("Fluence feature over ride with = %d\n", enable);
+	acdb_data.fleuce_feature_status[stream_id] = enable;
+}
+EXPORT_SYMBOL(fluence_feature_update);
+
 static void audpreproc_cb(void *private, u32 id, void *msg)
 {
 	struct audpreproc_cmd_enc_cfg_done_msg *tmp;
@@ -1887,6 +2014,7 @@ static void audpreproc_cb(void *private, u32 id, void *msg)
 			acdb_data.acdb_state &= ~AUDREC2_READY;
 			acdb_data.audrec_applied &= ~AUDREC2_READY;
 		}
+		acdb_data.fleuce_feature_status[stream_id] = 0;
 		acdb_cache_tx[tmp->stream_id].node_status =\
 						ACDB_VALUES_NOT_FILLED;
 		acdb_data.acdb_state &= ~CAL_DATA_READY;
@@ -2143,6 +2271,8 @@ static void __exit acdb_exit(void)
 	kfree(acdb_data.preproc_agc);
 	kfree(acdb_data.preproc_iir);
 	pmem_kfree((int32_t)acdb_data.pbe_extbuff);
+	iounmap(acdb_data.fluence_extbuff_virt);
+	pmem_kfree((int32_t)acdb_data.fluence_extbuff);
 	mutex_destroy(&acdb_data.acdb_mutex);
 	memset(&acdb_data, 0, sizeof(acdb_data));
 }

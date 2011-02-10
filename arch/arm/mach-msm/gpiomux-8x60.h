@@ -23,5 +23,6 @@ extern struct msm_gpiomux_configs msm8x60_qrdc_gpiomux_cfgs[] __initdata;
 extern struct msm_gpiomux_configs msm8x60_surf_ffa_gpiomux_cfgs[] __initdata;
 extern struct msm_gpiomux_configs msm8x60_fluid_gpiomux_cfgs[] __initdata;
 extern struct msm_gpiomux_configs msm8x60_charm_gpiomux_cfgs[] __initdata;
+extern struct msm_gpiomux_configs msm8x60_qt_gpiomux_cfgs[] __initdata;
 
 #endif

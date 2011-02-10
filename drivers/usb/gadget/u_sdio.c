@@ -513,7 +513,7 @@ void gsdio_ctrl_wq(struct work_struct *w)
 		return;
 	}
 
-	if (port->ctrl_ch_err)
+	if (!port->sdio_open || port->ctrl_ch_err)
 		return;
 
 	sdio_cmux_tiocmset(port->sport_info->ctrl_ch_id,

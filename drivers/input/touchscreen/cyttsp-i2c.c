@@ -68,7 +68,6 @@ struct cyttsp {
 	u16 prv_mt_tch[CY_NUM_MT_TCH_ID];
 	u16 prv_mt_pos[CY_NUM_TRK_ID][2];
 	atomic_t irq_enabled;
-	char cyttsp_fw_ver[10];
 	bool cyttsp_update_fw;
 	bool cyttsp_fwloader_mode;
 	bool is_suspended;
@@ -196,8 +195,8 @@ static DEVICE_ATTR(irq_enable, 0777, cyttsp_irq_status, cyttsp_irq_enable);
 static ssize_t cyttsp_fw_show(struct device *dev,
 				struct device_attribute *attr, char *buf)
 {
-	struct cyttsp *ts = dev_get_drvdata(dev);
-	return sprintf(buf, "%s\n", ts->cyttsp_fw_ver);
+	return sprintf(buf, "%d.%d.%d\n", g_bl_data.appid_lo,
+				g_bl_data.appver_hi, g_bl_data.appver_lo);
 }
 
 static DEVICE_ATTR(cyttsp_fw_ver, 0777, cyttsp_fw_show, NULL);
@@ -297,9 +296,6 @@ static int cyttsp_soft_reset(struct cyttsp *ts)
 	} while (g_bl_data.bl_status != 0x10 &&
 		g_bl_data.bl_status != 0x11 &&
 		tries++ < 100);
-
-	pr_debug("%s: g_bl_data.bl_status=0x%02x tries=%d\n", __func__,
-					g_bl_data.bl_status, tries);
 
 	if (g_bl_data.bl_status != 0x11 && g_bl_data.bl_status != 0x10)
 		return -EINVAL;
@@ -690,25 +686,9 @@ static void cyttspfw_flash_start(struct cyttsp *ts, const u8 *data,
 	}
 
 
-	pr_err("%s: hex_ttspver_hi=0x%02x glob_ttspver_hi=0x%02x\n", __func__,
-					ttspver_hi, g_bl_data.ttspver_hi);
-	pr_err("%s: hex_ttspver_lo=0x%02x glob_ttspver_lo=0x%02x\n", __func__,
-					ttspver_lo, g_bl_data.ttspver_lo);
-	pr_err("%s: hex_appid_hi=0x%02x glob_appid_hi=0x%02x\n", __func__,
-					appid_hi, g_bl_data.appid_hi);
-	pr_err("%s: hex_appid_lo=0x%02x glob_appid_lo=0x%02x\n", __func__,
-					appid_lo, g_bl_data.appid_lo);
-	pr_err("%s: hex_appver_hi=0x%02x glob_appver_hi=0x%02x\n", __func__,
-					appver_hi, g_bl_data.appver_hi);
-	pr_err("%s: hex_appver_lo=0x%02x glob_appver_lo=0x%02x\n", __func__,
-					appver_lo, g_bl_data.appver_lo);
-	pr_err("%s: hex_cid_0=0x%02x glob_cid_0=0x%02x\n", __func__,
-					cid_0, g_bl_data.cid_0);
-	pr_err("%s: hex_cid_1=0x%02x glob_cid_1=0x%02x\n", __func__,
-					cid_1, g_bl_data.cid_1);
-	pr_err("%s: hex_cid_2=0x%02x glob_cid_2=0x%02x\n", __func__,
-					cid_2, g_bl_data.cid_2);
-
+	pr_info("Current firmware: %d.%d.%d", g_bl_data.appid_lo,
+				g_bl_data.appver_hi, g_bl_data.appver_lo);
+	pr_info("New firmware: %d.%d.%d", appid_lo, appver_hi, appver_lo);
 
 	if (force || ttspver_hi != g_bl_data.ttspver_hi ||
 			ttspver_lo != g_bl_data.ttspver_lo ||
@@ -2462,9 +2442,6 @@ static int cyttsp_initialize(struct i2c_client *client, struct cyttsp *ts)
 		retval = -ENODEV;
 		goto error_free_irq;
 	}
-
-	sprintf(ts->cyttsp_fw_ver, "%d.%d.%d", g_bl_data.appid_lo,
-				g_bl_data.appver_hi, g_bl_data.appver_lo);
 
 	retval = device_create_file(&client->dev, &dev_attr_cyttsp_fw_ver);
 	if (retval) {

@@ -101,6 +101,7 @@
 #define BQ27520_SUBCMD_CAL_MODE  0x0040
 #define BQ27520_SUBCMD_RESET   0x0041
 #define ZERO_DEGREE_CELSIUS_IN_TENTH_KELVIN   (-2731)
+#define BQ27520_INIT_DELAY   ((HZ)*1)
 
 /* If the system has several batteries we need a different name for each
  * of them...
@@ -124,7 +125,7 @@ struct bq27520_device_info {
 	struct work_struct counter;
 	/*300ms delay is needed after bq27520 is powered up
 and before any successful I2C transaction*/
-	struct work_struct hw_config;
+	struct  delayed_work   hw_config;
 };
 
 static int coulomb_counter;
@@ -465,7 +466,7 @@ static void bq27520_hw_config(struct work_struct *work)
 	int ret = 0, flags = 0, type = 0, fw_ver = 0;
 	struct bq27520_device_info *di;
 
-	di  = container_of(work, struct bq27520_device_info, hw_config);
+	di  = container_of(work, struct bq27520_device_info, hw_config.work);
 	ret = bq27520_chip_config(di);
 	if (ret) {
 		dev_err(di->dev, "Failed to config Bq27520\n");
@@ -809,8 +810,8 @@ static int bq27520_battery_probe(struct i2c_client *client,
 	spin_lock_init(&lock);
 
 	INIT_WORK(&di->counter, bq27520_coulomb_counter_work);
-	INIT_WORK(&di->hw_config, bq27520_hw_config);
-	schedule_work(&di->hw_config);
+	INIT_DELAYED_WORK(&di->hw_config, bq27520_hw_config);
+	schedule_delayed_work(&di->hw_config, BQ27520_INIT_DELAY);
 	return 0;
 
 batt_failed_4:
@@ -838,7 +839,7 @@ static int bq27520_battery_remove(struct i2c_client *client)
 	bq27520_cntl_cmd(di, BQ27520_SUBCMD_DISABLE_DLOG);
 	udelay(66);
 	bq27520_cntl_cmd(di, BQ27520_SUBCMD_DISABLE_IT);
-	cancel_work_sync(&di->hw_config);
+	cancel_delayed_work_sync(&di->hw_config);
 
 	bq27520_dev_setup(false, di);
 	bq27520_power(false, di);

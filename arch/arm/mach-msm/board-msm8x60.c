@@ -3734,25 +3734,12 @@ static int smb137b_detection_setup(void)
 {
 	int ret = 0;
 
-	ret = gpio_request(GPIO_BATT_GAUGE_EN, "disable for charger");
-	if (ret) {
-		pr_err("%s gpio_request %d failed ret=%d\n",
-			__func__, GPIO_BATT_GAUGE_EN, ret);
-		goto out;
-	}
-	ret = gpio_direction_output(GPIO_BATT_GAUGE_EN, 0);
-	if (ret) {
-		pr_err("%s gpio_direction_output %d failed ret=%d\n",
-			__func__, GPIO_BATT_GAUGE_EN, ret);
-		goto out;
-	}
-	ret |= pm8058_mpp_config_digital_in(EXT_CHG_VALID_MPP,
+	ret = pm8058_mpp_config_digital_in(EXT_CHG_VALID_MPP,
 					PM8058_MPP_DIG_LEVEL_S3,
 					PM_MPP_DIN_TO_INT);
 	ret |=  pm8058_mpp_config_bi_dir(EXT_CHG_VALID_MPP_2,
 					PM8058_MPP_DIG_LEVEL_S3,
 					PM_MPP_BI_PULLUP_10KOHM);
-out:
 	return ret;
 }
 

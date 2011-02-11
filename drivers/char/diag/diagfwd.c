@@ -842,7 +842,7 @@ static int diag_smd_probe(struct platform_device *pdev)
 #endif
 	pm_runtime_set_active(&pdev->dev);
 	pm_runtime_enable(&pdev->dev);
-	printk(KERN_INFO "diag opened SMD port ; r = %d\n", r);
+	pr_debug("diag opened SMD port ; r = %d\n", r);
 
 	return 0;
 }

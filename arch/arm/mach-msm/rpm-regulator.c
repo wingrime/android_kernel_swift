@@ -652,6 +652,7 @@ static int smps_set_mode(struct regulator_dev *dev, unsigned int mode)
 	unsigned pc_vote = vreg->pc_vote;
 	unsigned mode_initialized = vreg->mode_initialized;
 	unsigned mask0 = 0, val0 = 0, mask1 = 0, val1 = 0;
+	int set_hpm = -1, set_pin_control = -1;
 	int peak_uA;
 	int rc = 0;
 
@@ -660,40 +661,19 @@ static int smps_set_mode(struct regulator_dev *dev, unsigned int mode)
 
 	switch (mode) {
 	case REGULATOR_MODE_FAST:
-		if (peak_uA < vreg_hpm_min_uA(vreg)) {
-			mask0 = SMPS_PEAK_CURRENT;
-			mask1 = SMPS_AVG_CURRENT;
-			val0 = (MICRO_TO_MILLI(vreg_hpm_min_uA(vreg)) <<
-				SMPS_PEAK_CURRENT_SHIFT) & SMPS_PEAK_CURRENT;
-			val1 = (MICRO_TO_MILLI(vreg_hpm_min_uA(vreg)) <<
-				SMPS_AVG_CURRENT_SHIFT) & SMPS_AVG_CURRENT;
-		}
-		/* clear pin control */
-		mask0 |= SMPS_PIN_CTRL | SMPS_PIN_FN;
-		val0 |= RPM_VREG_PIN_FN_NONE << SMPS_PIN_FN_SHIFT;
-		optimum = mode;
+		set_hpm = 1;
+		set_pin_control = 0;
+		optimum = REGULATOR_MODE_FAST;
 		mode_initialized = 1;
 		break;
 
 	case REGULATOR_MODE_STANDBY:
-		if (peak_uA > vreg_lpm_max_uA(vreg)) {
-			mask0 = SMPS_PEAK_CURRENT;
-			mask1 = SMPS_AVG_CURRENT;
-			val0 = (MICRO_TO_MILLI(vreg_lpm_max_uA(vreg)) <<
-			   SMPS_PEAK_CURRENT_SHIFT) & SMPS_PEAK_CURRENT;
-			val1 = (MICRO_TO_MILLI(vreg_lpm_max_uA(vreg)) <<
-			     SMPS_AVG_CURRENT_SHIFT) & SMPS_AVG_CURRENT;
-		}
-		if (pc_vote) {
-			mask0 |= SMPS_PIN_CTRL | SMPS_PIN_FN;
-			val0 |= vreg->pdata->pin_ctrl << SMPS_PIN_CTRL_SHIFT
-				| vreg->pdata->pin_fn << SMPS_PIN_FN_SHIFT;
-		} else {
-			/* clear pin control */
-			mask0 |= SMPS_PIN_CTRL | SMPS_PIN_FN;
-			val0 |= RPM_VREG_PIN_FN_NONE << SMPS_PIN_FN_SHIFT;
-		}
-		optimum = mode;
+		set_hpm = 0;
+		if (pc_vote)
+			set_pin_control = 1;
+		else
+			set_pin_control = 0;
+		optimum = REGULATOR_MODE_STANDBY;
 		mode_initialized = 1;
 		break;
 
@@ -702,21 +682,10 @@ static int smps_set_mode(struct regulator_dev *dev, unsigned int mode)
 			goto done; /* already taken care of */
 
 		if (mode_initialized && optimum == REGULATOR_MODE_FAST) {
-			if (peak_uA < vreg_hpm_min_uA(vreg)) {
-				mask0 = SMPS_PEAK_CURRENT;
-				mask1 = SMPS_AVG_CURRENT;
-				val0 = (MICRO_TO_MILLI(vreg_hpm_min_uA(vreg)) <<
-				   SMPS_PEAK_CURRENT_SHIFT) & SMPS_PEAK_CURRENT;
-				val1 = (MICRO_TO_MILLI(vreg_hpm_min_uA(vreg)) <<
-				     SMPS_AVG_CURRENT_SHIFT) & SMPS_AVG_CURRENT;
-			}
-			/* clear pin control */
-			mask0 |= SMPS_PIN_CTRL | SMPS_PIN_FN;
-			val0 |= RPM_VREG_PIN_FN_NONE << SMPS_PIN_FN_SHIFT;
+			set_hpm = 1;
+			set_pin_control = 0;
 		} else {
-			mask0 |= SMPS_PIN_CTRL | SMPS_PIN_FN;
-			val0 |= vreg->pdata->pin_ctrl << SMPS_PIN_CTRL_SHIFT
-				| vreg->pdata->pin_fn << SMPS_PIN_FN_SHIFT;
+			set_pin_control = 1;
 		}
 		break;
 
@@ -724,32 +693,49 @@ static int smps_set_mode(struct regulator_dev *dev, unsigned int mode)
 		if (pc_vote && --pc_vote)
 			goto done; /* already taken care of */
 
-		if (optimum == REGULATOR_MODE_STANDBY) {
-			if (peak_uA > vreg_lpm_max_uA(vreg)) {
-				mask0 = SMPS_PEAK_CURRENT;
-				mask1 = SMPS_AVG_CURRENT;
-				val0 = (MICRO_TO_MILLI(vreg_lpm_max_uA(vreg)) <<
-				   SMPS_PEAK_CURRENT_SHIFT) & SMPS_PEAK_CURRENT;
-				val1 = (MICRO_TO_MILLI(vreg_lpm_max_uA(vreg)) <<
-				     SMPS_AVG_CURRENT_SHIFT) & SMPS_AVG_CURRENT;
-			}
-		} else {
-			if (peak_uA < vreg_hpm_min_uA(vreg)) {
-				mask0 = SMPS_PEAK_CURRENT;
-				mask1 = SMPS_AVG_CURRENT;
-				val0 = (MICRO_TO_MILLI(vreg_hpm_min_uA(vreg)) <<
-				   SMPS_PEAK_CURRENT_SHIFT) & SMPS_PEAK_CURRENT;
-				val1 = (MICRO_TO_MILLI(vreg_hpm_min_uA(vreg)) <<
-				     SMPS_AVG_CURRENT_SHIFT) & SMPS_AVG_CURRENT;
-			}
-		}
-		/* clear pin control */
-		mask0 |= SMPS_PIN_CTRL | SMPS_PIN_FN;
-		val0 |= RPM_VREG_PIN_FN_NONE << SMPS_PIN_FN_SHIFT;
+		if (optimum == REGULATOR_MODE_STANDBY)
+			set_hpm = 0;
+		else
+			set_hpm = 1;
+		set_pin_control = 0;
 		break;
 
 	default:
 		return -EINVAL;
+	}
+
+	if (set_hpm == 1) {
+		/* Make sure that request currents are at HPM level. */
+		if (peak_uA < vreg_hpm_min_uA(vreg)) {
+			mask0 = SMPS_PEAK_CURRENT;
+			mask1 = SMPS_AVG_CURRENT;
+			val0 = (MICRO_TO_MILLI(vreg_hpm_min_uA(vreg)) <<
+			   SMPS_PEAK_CURRENT_SHIFT) & SMPS_PEAK_CURRENT;
+			val1 = (MICRO_TO_MILLI(vreg_hpm_min_uA(vreg)) <<
+			     SMPS_AVG_CURRENT_SHIFT) & SMPS_AVG_CURRENT;
+		}
+	} else if (set_hpm == 0) {
+		/* Make sure that request currents are at LPM level. */
+		if (peak_uA > vreg_lpm_max_uA(vreg)) {
+			mask0 = SMPS_PEAK_CURRENT;
+			mask1 = SMPS_AVG_CURRENT;
+			val0 = (MICRO_TO_MILLI(vreg_lpm_max_uA(vreg)) <<
+			   SMPS_PEAK_CURRENT_SHIFT) & SMPS_PEAK_CURRENT;
+			val1 = (MICRO_TO_MILLI(vreg_lpm_max_uA(vreg)) <<
+			     SMPS_AVG_CURRENT_SHIFT) & SMPS_AVG_CURRENT;
+		}
+	}
+
+	if (set_pin_control == 1) {
+		/* Enable pin control and pin function. */
+		mask0 |= SMPS_PIN_CTRL | SMPS_PIN_FN;
+		val0 |= vreg->pdata->pin_ctrl << SMPS_PIN_CTRL_SHIFT
+			| vreg->pdata->pin_fn << SMPS_PIN_FN_SHIFT;
+	} else if (set_pin_control == 0) {
+		/* Clear pin control and pin function*/
+		mask0 |= SMPS_PIN_CTRL | SMPS_PIN_FN;
+		val0 |= RPM_VREG_PIN_CTRL_NONE << SMPS_PIN_CTRL_SHIFT
+			| RPM_VREG_PIN_FN_NONE << SMPS_PIN_FN_SHIFT;
 	}
 
 	if (smps_is_enabled(dev)) {
@@ -903,6 +889,7 @@ static int ldo_set_mode(struct regulator_dev *dev, unsigned int mode)
 	unsigned pc_vote = vreg->pc_vote;
 	unsigned mode_initialized = vreg->mode_initialized;
 	unsigned mask0 = 0, val0 = 0, mask1 = 0, val1 = 0;
+	int set_hpm = -1, set_pin_control = -1;
 	int peak_uA;
 	int rc = 0;
 
@@ -911,40 +898,19 @@ static int ldo_set_mode(struct regulator_dev *dev, unsigned int mode)
 
 	switch (mode) {
 	case REGULATOR_MODE_FAST:
-		if (peak_uA < vreg_hpm_min_uA(vreg)) {
-			mask0 = LDO_PEAK_CURRENT;
-			mask1 = LDO_AVG_CURRENT;
-			val0 = (MICRO_TO_MILLI(vreg_hpm_min_uA(vreg)) <<
-				LDO_PEAK_CURRENT_SHIFT) & LDO_PEAK_CURRENT;
-			val1 = (MICRO_TO_MILLI(vreg_hpm_min_uA(vreg)) <<
-				LDO_AVG_CURRENT_SHIFT) & LDO_AVG_CURRENT;
-		}
-		/* clear pin control */
-		mask0 |= LDO_PIN_CTRL | LDO_PIN_FN;
-		val0 |= RPM_VREG_PIN_FN_NONE << LDO_PIN_FN_SHIFT;
-		optimum = mode;
+		set_hpm = 1;
+		set_pin_control = 0;
+		optimum = REGULATOR_MODE_FAST;
 		mode_initialized = 1;
 		break;
 
 	case REGULATOR_MODE_STANDBY:
-		if (peak_uA > vreg_lpm_max_uA(vreg)) {
-			mask0 = LDO_PEAK_CURRENT;
-			mask1 = LDO_AVG_CURRENT;
-			val0 = (MICRO_TO_MILLI(vreg_lpm_max_uA(vreg)) <<
-				LDO_PEAK_CURRENT_SHIFT) & LDO_PEAK_CURRENT;
-			val1 = (MICRO_TO_MILLI(vreg_lpm_max_uA(vreg)) <<
-				LDO_AVG_CURRENT_SHIFT) & LDO_AVG_CURRENT;
-		}
-		if (pc_vote) {
-			mask0 |= LDO_PIN_CTRL | LDO_PIN_FN;
-			val0 |= vreg->pdata->pin_ctrl << LDO_PIN_CTRL_SHIFT
-				| vreg->pdata->pin_fn << LDO_PIN_FN_SHIFT;
-		} else {
-			/* clear pin control */
-			mask0 |= LDO_PIN_CTRL | LDO_PIN_FN;
-			val0 |= RPM_VREG_PIN_FN_NONE << LDO_PIN_FN_SHIFT;
-		}
-		optimum = mode;
+		set_hpm = 0;
+		if (pc_vote)
+			set_pin_control = 1;
+		else
+			set_pin_control = 0;
+		optimum = REGULATOR_MODE_STANDBY;
 		mode_initialized = 1;
 		break;
 
@@ -953,21 +919,10 @@ static int ldo_set_mode(struct regulator_dev *dev, unsigned int mode)
 			goto done; /* already taken care of */
 
 		if (mode_initialized && optimum == REGULATOR_MODE_FAST) {
-			if (peak_uA < vreg_hpm_min_uA(vreg)) {
-				mask0 = LDO_PEAK_CURRENT;
-				mask1 = LDO_AVG_CURRENT;
-				val0 = (MICRO_TO_MILLI(vreg_hpm_min_uA(vreg)) <<
-				   LDO_PEAK_CURRENT_SHIFT) & LDO_PEAK_CURRENT;
-				val1 = (MICRO_TO_MILLI(vreg_hpm_min_uA(vreg)) <<
-				     LDO_AVG_CURRENT_SHIFT) & LDO_AVG_CURRENT;
-			}
-			/* clear pin control */
-			mask0 |= LDO_PIN_CTRL | LDO_PIN_FN;
-			val0 |= RPM_VREG_PIN_FN_NONE << LDO_PIN_FN_SHIFT;
+			set_hpm = 1;
+			set_pin_control = 0;
 		} else {
-			mask0 |= LDO_PIN_CTRL | LDO_PIN_FN;
-			val0 |= vreg->pdata->pin_ctrl << LDO_PIN_CTRL_SHIFT
-				| vreg->pdata->pin_fn << LDO_PIN_FN_SHIFT;
+			set_pin_control = 1;
 		}
 		break;
 
@@ -975,32 +930,49 @@ static int ldo_set_mode(struct regulator_dev *dev, unsigned int mode)
 		if (pc_vote && --pc_vote)
 			goto done; /* already taken care of */
 
-		if (optimum == REGULATOR_MODE_STANDBY) {
-			if (peak_uA > vreg_lpm_max_uA(vreg)) {
-				mask0 = LDO_PEAK_CURRENT;
-				mask1 = LDO_AVG_CURRENT;
-				val0 = (MICRO_TO_MILLI(vreg_lpm_max_uA(vreg)) <<
-				   LDO_PEAK_CURRENT_SHIFT) & LDO_PEAK_CURRENT;
-				val1 = (MICRO_TO_MILLI(vreg_lpm_max_uA(vreg)) <<
-				     LDO_AVG_CURRENT_SHIFT) & LDO_AVG_CURRENT;
-			}
-		} else {
-			if (peak_uA < vreg_hpm_min_uA(vreg)) {
-				mask0 = LDO_PEAK_CURRENT;
-				mask1 = LDO_AVG_CURRENT;
-				val0 = (MICRO_TO_MILLI(vreg_hpm_min_uA(vreg)) <<
-				   LDO_PEAK_CURRENT_SHIFT) & LDO_PEAK_CURRENT;
-				val1 = (MICRO_TO_MILLI(vreg_hpm_min_uA(vreg)) <<
-				     LDO_AVG_CURRENT_SHIFT) & LDO_AVG_CURRENT;
-			}
-		}
-		/* clear pin control */
-		mask0 |= LDO_PIN_CTRL | LDO_PIN_FN;
-		val0 |= RPM_VREG_PIN_FN_NONE << LDO_PIN_FN_SHIFT;
+		if (optimum == REGULATOR_MODE_STANDBY)
+			set_hpm = 0;
+		else
+			set_hpm = 1;
+		set_pin_control = 0;
 		break;
 
 	default:
 		return -EINVAL;
+	}
+
+	if (set_hpm == 1) {
+		/* Make sure that request currents are at HPM level. */
+		if (peak_uA < vreg_hpm_min_uA(vreg)) {
+			mask0 = LDO_PEAK_CURRENT;
+			mask1 = LDO_AVG_CURRENT;
+			val0 = (MICRO_TO_MILLI(vreg_hpm_min_uA(vreg)) <<
+				LDO_PEAK_CURRENT_SHIFT) & LDO_PEAK_CURRENT;
+			val1 = (MICRO_TO_MILLI(vreg_hpm_min_uA(vreg)) <<
+				LDO_AVG_CURRENT_SHIFT) & LDO_AVG_CURRENT;
+		}
+	} else if (set_hpm == 0) {
+		/* Make sure that request currents are at LPM level. */
+		if (peak_uA > vreg_lpm_max_uA(vreg)) {
+			mask0 = LDO_PEAK_CURRENT;
+			mask1 = LDO_AVG_CURRENT;
+			val0 = (MICRO_TO_MILLI(vreg_lpm_max_uA(vreg)) <<
+				LDO_PEAK_CURRENT_SHIFT) & LDO_PEAK_CURRENT;
+			val1 = (MICRO_TO_MILLI(vreg_lpm_max_uA(vreg)) <<
+				LDO_AVG_CURRENT_SHIFT) & LDO_AVG_CURRENT;
+		}
+	}
+
+	if (set_pin_control == 1) {
+		/* Enable pin control and pin function. */
+		mask0 |= LDO_PIN_CTRL | LDO_PIN_FN;
+		val0 |= vreg->pdata->pin_ctrl << LDO_PIN_CTRL_SHIFT
+			| vreg->pdata->pin_fn << LDO_PIN_FN_SHIFT;
+	} else if (set_pin_control == 0) {
+		/* Clear pin control and pin function*/
+		mask0 |= LDO_PIN_CTRL | LDO_PIN_FN;
+		val0 |= RPM_VREG_PIN_CTRL_NONE << LDO_PIN_CTRL_SHIFT
+			| RPM_VREG_PIN_FN_NONE << LDO_PIN_FN_SHIFT;
 	}
 
 	if (ldo_is_enabled(dev)) {

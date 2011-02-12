@@ -433,12 +433,12 @@ void mdp_pipe_kickoff(uint32 term, struct msm_fb_data_type *mfd)
 			jiffies_to_timeval(jiffies, &now);
 			mdp_ppp_timeval.tv_usec =
 			    now.tv_usec - mdp_ppp_timeval.tv_usec;
-			MSM_FB_INFO("MDP-PPP: %d\n",
+			MSM_FB_DEBUG("MDP-PPP: %d\n",
 				    (int)mdp_ppp_timeval.tv_usec);
 		}
 	} else if (term == MDP_DMA2_TERM) {
 		if (mdp_debug[MDP_DMA2_BLOCK]) {
-			MSM_FB_INFO("MDP-DMA2: %d\n",
+			MSM_FB_DEBUG("MDP-DMA2: %d\n",
 				    (int)mdp_dma2_timeval.tv_usec);
 			jiffies_to_timeval(jiffies, &mdp_dma2_timeval);
 		}
@@ -970,7 +970,7 @@ void mdp_hw_version(void)
 	mdp_hw_revision >>= 28;	/* bit 31:28 */
 	mdp_hw_revision &= 0x0f;
 
-	printk(KERN_INFO "%s: mdp_hw_revision=%x\n",
+	MSM_FB_DEBUG("%s: mdp_hw_revision=%x\n",
 				__func__, mdp_hw_revision);
 }
 
@@ -1057,7 +1057,7 @@ static int mdp_irq_clk_setup(void)
 		clk_set_rate(mdp_clk, mdp_pdata->mdp_core_clk_rate);
 		mutex_unlock(&mdp_clk_lock);
 	}
-	printk(KERN_INFO "mdp_clk: mdp_clk=%d\n", (int)clk_get_rate(mdp_clk));
+	MSM_FB_DEBUG("mdp_clk: mdp_clk=%d\n", (int)clk_get_rate(mdp_clk));
 #endif
 
 	return 0;
@@ -1082,7 +1082,7 @@ static int mdp_probe(struct platform_device *pdev)
 		size =  resource_size(&pdev->resource[0]);
 		msm_mdp_base = ioremap(pdev->resource[0].start, size);
 
-		MSM_FB_INFO("MDP HW Base phy_Address = 0x%x virt = 0x%x\n",
+		MSM_FB_DEBUG("MDP HW Base phy_Address = 0x%x virt = 0x%x\n",
 			(int)pdev->resource[0].start, (int)msm_mdp_base);
 
 		if (unlikely(!msm_mdp_base))

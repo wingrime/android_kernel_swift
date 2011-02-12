@@ -65,7 +65,7 @@ void mdp4_sw_reset(ulong bits)
 	/* MDP cmd block disable */
 	mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_OFF, FALSE);
 
-	MSM_FB_INFO("mdp4_sw_reset: 0x%x\n", (int)bits);
+	MSM_FB_DEBUG("mdp4_sw_reset: 0x%x\n", (int)bits);
 }
 
 void mdp4_overlay_cfg(int overlayer, int blt_mode, int refresh, int direct_out)
@@ -87,7 +87,8 @@ void mdp4_overlay_cfg(int overlayer, int blt_mode, int refresh, int direct_out)
 	else
 		outpdw(MDP_BASE + 0x18004, bits); /* MDP_OVERLAY1_CFG */
 
-	MSM_FB_INFO("mdp4_overlay_cfg: 0x%x\n", (int)inpdw(MDP_BASE + 0x10004));
+	MSM_FB_DEBUG("mdp4_overlay_cfg: 0x%x\n",
+		(int)inpdw(MDP_BASE + 0x10004));
 	/* MDP cmd block disable */
 	mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_OFF, FALSE);
 }
@@ -104,14 +105,14 @@ void mdp4_display_intf_sel(int output, ulong intf)
 		data = 0x40;	/* bit 6 */
 		intf = MDDI_LCDC_INTF;
 		if (output == SECONDARY_INTF_SEL) {
-			printk(KERN_INFO "%s: Illegal INTF selected, output=%d \
+			MSM_FB_INFO("%s: Illegal INTF selected, output=%d \
 				intf=%d\n", __func__, output, (int)intf);
 		}
 	} else if (intf == DSI_CMD_INTF) {
 		data = 0x80;	/* bit 7 */
 		intf = MDDI_INTF;
 		if (output == EXTERNAL_INTF_SEL) {
-			printk(KERN_INFO "%s: Illegal INTF selected, output=%d \
+			MSM_FB_INFO("%s: Illegal INTF selected, output=%d \
 				intf=%d\n", __func__, output, (int)intf);
 		}
 	} else
@@ -144,7 +145,7 @@ void mdp4_display_intf_sel(int output, ulong intf)
 	/* MDP cmd block disable */
 	mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_OFF, FALSE);
 
-  MSM_FB_INFO("mdp4_display_intf_sel: 0x%x\n", (int)inpdw(MDP_BASE + 0x0038));
+  MSM_FB_DEBUG("mdp4_display_intf_sel: 0x%x\n", (int)inpdw(MDP_BASE + 0x0038));
 }
 
 unsigned long mdp4_display_status(void)
@@ -224,7 +225,7 @@ void mdp4_fetch_cfg(uint32 core_clk)
 		vg_data = 0x43; /* 16 bytes-burst x 4 req */
 	}
 
-	printk(KERN_INFO "mdp4_fetch_cfg: dmap=%x vg=%x\n",
+	MSM_FB_DEBUG("mdp4_fetch_cfg: dmap=%x vg=%x\n",
 			dmap_data, vg_data);
 
 	/* dma_p fetch config */

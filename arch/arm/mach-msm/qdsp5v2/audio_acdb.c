@@ -1966,6 +1966,10 @@ static s8 handle_audpreproc_cb(void)
 		return -EPERM;
 	}
 	update_acdb_data_struct(acdb_cached_values);
+	if (acdb_data.device_info->dev_id == PSEUDO_ACDB_ID) {
+		MM_INFO("audpreproc is routed to pseudo device\n");
+		return result;
+	}
 	acdb_data.device_info->sample_rate =
 					session_info[stream_id].sampling_freq;
 	if (!(acdb_data.acdb_state & CAL_DATA_READY)) {
@@ -2020,14 +2024,22 @@ static void audpreproc_cb(void *private, u32 id, void *msg)
 		acdb_data.acdb_state &= ~CAL_DATA_READY;
 		goto done;
 	}
-	acdb_data.device_info->sample_rate =
+	/*Following check is added to make sure that device info
+	  is updated. audpre proc layer enabled without device
+	  callback at this scenario we should not access
+	  device information
+	 */
+	if (acdb_data.device_info) {
+		acdb_data.device_info->sample_rate =
 					session_info[stream_id].sampling_freq;
-	result = check_tx_acdb_values_cached();
-	if (!result) {
-		MM_INFO("acdb values for the stream is querried from modem");
-		acdb_data.acdb_state |= CAL_DATA_READY;
-	} else {
-		acdb_data.acdb_state &= ~CAL_DATA_READY;
+		result = check_tx_acdb_values_cached();
+		if (!result) {
+			MM_INFO("acdb values for the stream is" \
+						" querried from modem");
+			acdb_data.acdb_state |= CAL_DATA_READY;
+		} else {
+			acdb_data.acdb_state &= ~CAL_DATA_READY;
+		}
 	}
 	if (acdb_data.preproc_stream_id == 0)
 		acdb_data.acdb_state |= AUDREC0_READY;

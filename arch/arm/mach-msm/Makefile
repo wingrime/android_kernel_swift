@@ -40,6 +40,8 @@ obj-$(CONFIG_CPU_V6) += idle-v6.o
 obj-$(CONFIG_CPU_V7) += idle-v7.o
 obj-$(CONFIG_MSM_JTAG_V7) += jtag-v7.o
 
+msm-etm-objs := cp14.o etm.o
+obj-$(CONFIG_MSM_ETM) += msm-etm.o
 
 quiet_cmd_mkrpcsym = MKCAP   $@
       cmd_mkrpcsym = $(PERL) $(srctree)/$(src)/mkrpcsym.pl $< $@

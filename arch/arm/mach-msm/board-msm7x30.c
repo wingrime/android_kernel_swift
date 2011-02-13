@@ -3964,7 +3964,8 @@ static struct msm_gpio fluid_vee_reset_gpio[] = {
 	{ GPIO_CFG(20, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA), "vee_reset" },
 };
 
-static unsigned char quickvx_mddi_client = 1;
+static unsigned char quickvx_mddi_client = 1, other_mddi_client = 1;
+static unsigned char quickvx_ldo_enabled;
 
 static unsigned quickvx_vlp_gpio =
 	GPIO_CFG(97, 0, GPIO_CFG_OUTPUT,  GPIO_CFG_NO_PULL,	GPIO_CFG_2MA);
@@ -3983,7 +3984,7 @@ static int display_common_power(int on)
 {
 	int rc = 0, flag_on = !!on;
 	static int display_common_power_save_on;
-	struct vreg *vreg_ldo12, *vreg_ldo15 = NULL;
+	struct vreg *vreg_ldo12, *vreg_ldo15 = NULL, *vreg_ldo6;
 	struct vreg *vreg_ldo20, *vreg_ldo16, *vreg_ldo8 = NULL;
 
 	if (display_common_power_save_on == flag_on)
@@ -4057,7 +4058,17 @@ static int display_common_power(int on)
 	if (IS_ERR(vreg_ldo16)) {
 		rc = PTR_ERR(vreg_ldo16);
 		pr_err("%s: gp10 vreg get failed (%d)\n",
-		       __func__, rc);
+			   __func__, rc);
+		return rc;
+	}
+
+	/* 3.075V -- LDO6 */
+	vreg_ldo6 = vreg_get(NULL, "usb");
+
+	if (IS_ERR(vreg_ldo6)) {
+		rc = PTR_ERR(vreg_ldo6);
+		pr_err("%s: usb vreg get failed (%d)\n",
+			   __func__, rc);
 		return rc;
 	}
 
@@ -4103,11 +4114,22 @@ static int display_common_power(int on)
 		return rc;
 	}
 
-	rc = vreg_set_level(vreg_ldo16, 2600);
-	if (rc) {
-		pr_err("%s: vreg LDO16 set level failed (%d)\n",
-		       __func__, rc);
-		return rc;
+	if (other_mddi_client) {
+		rc = vreg_set_level(vreg_ldo16, 2600);
+		if (rc) {
+			pr_err("%s: vreg LDO16 set level failed (%d)\n",
+				   __func__, rc);
+			return rc;
+		}
+	}
+
+	if (quickvx_mddi_client) {
+		rc = vreg_set_level(vreg_ldo6, 3075);
+		if (rc) {
+			pr_err("%s: vreg LDO6 set level failed (%d)\n",
+				   __func__, rc);
+			return rc;
+		}
 	}
 
 	if (machine_is_msm7x30_fluid()) {
@@ -4141,11 +4163,24 @@ static int display_common_power(int on)
 			return rc;
 		}
 
-		rc = vreg_enable(vreg_ldo16);
-		if (rc) {
-			pr_err("%s: LDO16 vreg enable failed (%d)\n",
-			       __func__, rc);
-			return rc;
+		if (other_mddi_client) {
+			rc = vreg_enable(vreg_ldo16);
+			if (rc) {
+				pr_err("%s: LDO16 vreg enable failed (%d)\n",
+					   __func__, rc);
+				return rc;
+			}
+		}
+
+		if (quickvx_mddi_client && quickvx_ldo_enabled) {
+			/* Disable LDO6 during display ON */
+			rc = vreg_disable(vreg_ldo6);
+			if (rc) {
+				pr_err("%s: LDO6 vreg disable failed (%d)\n",
+					   __func__, rc);
+				return rc;
+			}
+			quickvx_ldo_enabled = 0;
 		}
 
 		if (machine_is_msm7x30_fluid()) {
@@ -4202,17 +4237,31 @@ static int display_common_power(int on)
 	} else {
 		rc = vreg_disable(vreg_ldo20);
 		if (rc) {
-			pr_err("%s: LDO20 vreg enable failed (%d)\n",
+			pr_err("%s: LDO20 vreg disable failed (%d)\n",
 			       __func__, rc);
 			return rc;
 		}
 
 
-		rc = vreg_disable(vreg_ldo16);
-		if (rc) {
-			pr_err("%s: LDO16 vreg enable failed (%d)\n",
-			       __func__, rc);
-			return rc;
+		if (other_mddi_client) {
+			rc = vreg_disable(vreg_ldo16);
+			if (rc) {
+				pr_err("%s: LDO16 vreg disable failed (%d)\n",
+					   __func__, rc);
+				return rc;
+			}
+		}
+
+		if (quickvx_mddi_client && !quickvx_ldo_enabled) {
+			/* Enable LDO6 during display OFF for
+			   Quicklogic chip to sleep with data retention */
+			rc = vreg_enable(vreg_ldo6);
+			if (rc) {
+				pr_err("%s: LDO6 vreg enable failed (%d)\n",
+					   __func__, rc);
+				return rc;
+			}
+			quickvx_ldo_enabled = 1;
 		}
 
 		gpio_set_value(180, 0); /* bring reset line low */
@@ -4226,14 +4275,14 @@ static int display_common_power(int on)
 		if (machine_is_msm7x30_fluid()) {
 			rc = vreg_disable(vreg_ldo8);
 			if (rc) {
-				pr_err("%s: LDO8 vreg enable failed (%d)\n",
+				pr_err("%s: LDO8 vreg disable failed (%d)\n",
 					__func__, rc);
 				return rc;
 			}
 		} else {
 			rc = vreg_disable(vreg_ldo15);
 			if (rc) {
-				pr_err("%s: LDO15 vreg enable failed (%d)\n",
+				pr_err("%s: LDO15 vreg disable failed (%d)\n",
 					__func__, rc);
 				return rc;
 			}
@@ -4243,7 +4292,7 @@ static int display_common_power(int on)
 
 		rc = vreg_disable(vreg_ldo12);
 		if (rc) {
-			pr_err("%s: LDO12 vreg enable failed (%d)\n",
+			pr_err("%s: LDO12 vreg disable failed (%d)\n",
 			       __func__, rc);
 			return rc;
 		}
@@ -4272,14 +4321,30 @@ static int msm_fb_mddi_sel_clk(u32 *clk_rate)
 
 static int msm_fb_mddi_client_power(u32 client_id)
 {
-	struct vreg *vreg_ldo20;
+	struct vreg *vreg_ldo20, *vreg_ldo16;
 	int rc;
 
 	printk(KERN_NOTICE "\n client_id = 0x%x", client_id);
 	/* Check if it is Quicklogic client */
-	if (client_id == 0xc5835800)
+	if (client_id == 0xc5835800) {
 		printk(KERN_NOTICE "\n Quicklogic MDDI client");
-	else {
+		other_mddi_client = 0;
+		vreg_ldo16 = vreg_get(NULL, "gp10");
+
+		if (IS_ERR(vreg_ldo16)) {
+			rc = PTR_ERR(vreg_ldo16);
+			pr_err("%s: gp10 vreg get failed (%d)\n",
+				   __func__, rc);
+			return rc;
+		}
+
+		rc = vreg_disable(vreg_ldo16);
+		if (rc) {
+			pr_err("%s: LDO16 vreg enable failed (%d)\n",
+				   __func__, rc);
+			return rc;
+		}
+	} else {
 		printk(KERN_NOTICE "\n Non-Quicklogic MDDI client");
 		quickvx_mddi_client = 0;
 		gpio_set_value(97, 0);

@@ -273,7 +273,7 @@ struct peer_sdioc_channel_config {
 /* Identifies if there are new features released */
 #define PEER_SDIOC_BOOT_VERSION_MINOR	0x0001
 /* Identifies if there is backward compatibility */
-#define PEER_SDIOC_BOOT_VERSION_MAJOR	0x0001
+#define PEER_SDIOC_BOOT_VERSION_MAJOR	0x0002
 
 #define PEER_CHANNEL_NAME_SIZE		4
 

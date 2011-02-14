@@ -535,7 +535,39 @@ static struct platform_device smsc911x_device = {
 #define QCE_SHARE_CE_RESOURCE	2
 #define QCE_CE_SHARED		1
 
-static struct resource qce_resources[] = {
+static struct resource qcrypto_resources[] = {
+	[0] = {
+		.start = QCE_0_BASE,
+		.end = QCE_0_BASE + QCE_SIZE - 1,
+		.flags = IORESOURCE_MEM,
+	},
+	[1] = {
+		.name = "crypto_channels",
+		.start = DMOV_CE_IN_CHAN,
+		.end = DMOV_CE_OUT_CHAN,
+		.flags = IORESOURCE_DMA,
+	},
+	[2] = {
+		.name = "crypto_crci_in",
+		.start = DMOV_CE_IN_CRCI,
+		.end = DMOV_CE_IN_CRCI,
+		.flags = IORESOURCE_DMA,
+	},
+	[3] = {
+		.name = "crypto_crci_out",
+		.start = DMOV_CE_OUT_CRCI,
+		.end = DMOV_CE_OUT_CRCI,
+		.flags = IORESOURCE_DMA,
+	},
+	[4] = {
+		.name = "crypto_crci_hash",
+		.start = DMOV_CE_HASH_CRCI,
+		.end = DMOV_CE_HASH_CRCI,
+		.flags = IORESOURCE_DMA,
+	},
+};
+
+static struct resource qcedev_resources[] = {
 	[0] = {
 		.start = QCE_0_BASE,
 		.end = QCE_0_BASE + QCE_SIZE - 1,
@@ -581,8 +613,8 @@ static struct msm_ce_hw_support qcrypto_ce_hw_suppport = {
 static struct platform_device qcrypto_device = {
 	.name		= "qcrypto",
 	.id		= 0,
-	.num_resources	= ARRAY_SIZE(qce_resources),
-	.resource	= qce_resources,
+	.num_resources	= ARRAY_SIZE(qcrypto_resources),
+	.resource	= qcrypto_resources,
 	.dev		= {
 		.coherent_dma_mask = DMA_BIT_MASK(32),
 		.platform_data = &qcrypto_ce_hw_suppport,
@@ -602,8 +634,8 @@ static struct msm_ce_hw_support qcedev_ce_hw_suppport = {
 static struct platform_device qcedev_device = {
 	.name		= "qce",
 	.id		= 0,
-	.num_resources	= ARRAY_SIZE(qce_resources),
-	.resource	= qce_resources,
+	.num_resources	= ARRAY_SIZE(qcedev_resources),
+	.resource	= qcedev_resources,
 	.dev		= {
 		.coherent_dma_mask = DMA_BIT_MASK(32),
 		.platform_data = &qcedev_ce_hw_suppport,

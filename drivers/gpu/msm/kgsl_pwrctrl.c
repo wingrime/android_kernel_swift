@@ -17,12 +17,77 @@
  */
 #include <linux/interrupt.h>
 #include <linux/err.h>
+#include <linux/kernel.h>
 #include <mach/clk.h>
 #include <mach/dal_axi.h>
 #include <mach/msm_bus.h>
 
 #include "kgsl.h"
 #include "kgsl_log.h"
+
+static int kgsl_pwrctrl_gpuclk_store(struct device *dev,
+				     struct device_attribute *attr,
+				     const char *buf, size_t count)
+{
+	char temp[20];
+	int i, delta = 5000000;
+	unsigned long val;
+	struct kgsl_device *device = kgsl_device_from_dev(dev);
+	struct kgsl_pwrctrl *pwr = &device->pwrctrl;
+
+	snprintf(temp, sizeof(temp), "%.*s",
+			 (int)min(count, sizeof(temp) - 1), buf);
+	strict_strtoul(temp, 0, &val);
+
+	mutex_lock(&device->mutex);
+	/* Find the best match for the requested freq, if it exists */
+
+	for (i = 0; i < pwr->num_pwrlevels; i++)
+		if (abs(pwr->pwrlevels[i].gpu_freq - val) < delta) {
+			pwr->requested_pwrlevel = i;
+			break;
+	}
+
+	if (i < pwr->num_pwrlevels &&
+	    pwr->requested_pwrlevel != pwr->active_pwrlevel) {
+		device->ftbl.device_idle(device, KGSL_TIMEOUT_DEFAULT);
+		kgsl_pwrctrl_axi(device, KGSL_PWRFLAGS_AXI_OFF);
+		kgsl_pwrctrl_clk(device, KGSL_PWRFLAGS_CLK_OFF);
+		pwr->active_pwrlevel = pwr->requested_pwrlevel;
+		kgsl_pwrctrl_clk(device, KGSL_PWRFLAGS_CLK_ON);
+		kgsl_pwrctrl_axi(device, KGSL_PWRFLAGS_AXI_ON);
+	}
+	pwr->requested_pwrlevel = -1;
+	mutex_unlock(&device->mutex);
+
+	return count;
+}
+
+static int kgsl_pwrctrl_gpuclk_show(struct device *dev,
+				    struct device_attribute *attr,
+				    char *buf)
+{
+	struct kgsl_device *device = kgsl_device_from_dev(dev);
+	struct kgsl_pwrctrl *pwr = &device->pwrctrl;
+	return sprintf(buf, "%d\n",
+			pwr->pwrlevels[pwr->active_pwrlevel].gpu_freq);
+}
+
+static struct device_attribute gpuclk_attr = {
+	.attr = { .name = "gpuclk", .mode = 0644, },
+	.show = kgsl_pwrctrl_gpuclk_show,
+	.store = kgsl_pwrctrl_gpuclk_store,
+};
+
+int kgsl_pwrctrl_init_sysfs(struct kgsl_device *device)
+{
+	return device_create_file(device->dev, &gpuclk_attr);
+}
+
+void kgsl_pwrctrl_uninit_sysfs(struct kgsl_device *device)
+{
+	device_remove_file(device->dev, &gpuclk_attr);
+}
 
 int kgsl_pwrctrl_clk(struct kgsl_device *device, unsigned int pwrflag)
 {
@@ -40,7 +105,7 @@ int kgsl_pwrctrl_clk(struct kgsl_device *device, unsigned int pwrflag)
 				clk_disable(pwr->imem_pclk);
 			if (pwr->pwrlevels[0].gpu_freq > 0)
 				clk_set_rate(pwr->grp_src_clk,
-					pwr->pwrlevels[KGSL_DEFAULT_PWRLEVEL].
+					pwr->pwrlevels[pwr->num_pwrlevels - 1].
 						gpu_freq);
 			pwr->power_flags &=
 					~(KGSL_PWRFLAGS_CLK_ON);

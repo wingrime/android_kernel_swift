@@ -22,7 +22,7 @@
 #ifndef DEV_DBG_PREFIX
 #define DEV_DBG_PREFIX "EXT_INTERFACE: "
 #endif
-#define DEV_DBG(args...)	pr_info(DEV_DBG_PREFIX args)
+#define DEV_DBG(args...)	pr_debug(DEV_DBG_PREFIX args)
 #else
 #define DEV_DBG(args...)	(void)0
 #endif /* DEBUG */

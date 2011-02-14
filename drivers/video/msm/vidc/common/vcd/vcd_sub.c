@@ -915,8 +915,7 @@ void vcd_flush_buffers_in_err_fatal(struct vcd_clnt_ctxt *cctxt)
 	vcd_flush_in_use_buffer_pool_entries(cctxt,
 		&cctxt->in_buf_pool, VCD_EVT_RESP_INPUT_FLUSHED);
 	vcd_flush_in_use_buffer_pool_entries(cctxt,
-		&cctxt->out_buf_pool,	VCD_EVT_RESP_OUTPUT_FLUSHED);
-	cctxt->status.mask |= VCD_FLUSH_ALL;
+		&cctxt->out_buf_pool, VCD_EVT_RESP_OUTPUT_FLUSHED);
 	vcd_send_flush_done(cctxt, VCD_S_SUCCESS);
 }
 

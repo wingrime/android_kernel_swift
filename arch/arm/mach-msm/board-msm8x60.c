@@ -1346,6 +1346,12 @@ static struct msm_otg_platform_data msm_otg_pdata = {
 };
 #endif
 
+#ifdef CONFIG_USB_GADGET_MSM_72K
+static struct msm_hsusb_gadget_platform_data msm_gadget_pdata = {
+	.is_phy_status_timer_on = 1,
+};
+#endif
+
 
 #ifdef CONFIG_USB_ANDROID
 static char *usb_functions_default[] = {
@@ -5643,6 +5649,10 @@ static void __init msm8x60_init_buses(void)
 			pmic_id_notif_supported)))
 		msm_otg_pdata.phy_can_powercollapse = 1;
 	msm_device_otg.dev.platform_data = &msm_otg_pdata;
+#endif
+
+#ifdef CONFIG_USB_GADGET_MSM_72K
+	msm_device_gadget_peripheral.dev.platform_data = &msm_gadget_pdata;
 #endif
 
 #ifdef CONFIG_USB_F_SERIAL_SDIO

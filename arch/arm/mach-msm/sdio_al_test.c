@@ -43,6 +43,8 @@
 
 #define CHANNEL_NAME_SIZE 9
 
+#define TEST_DBG(x...) if (test_ctx->runtime_debug) pr_info(x)
+
 struct test_config_msg {
   u32 signature;
   u32 is_loopback_in_9k;
@@ -123,6 +125,8 @@ struct test_context {
 	int exit_flag;
 
 	u32 signature;
+
+	int runtime_debug;
 };
 
 static struct test_context *test_ctx;
@@ -209,7 +213,7 @@ static void loopback_test(struct test_channel *test_ch)
 			return;
 		}
 
-		pr_info(TEST_MODULE_NAME "--LOOPBACK WAIT FOR EVENT--.\n");
+		TEST_DBG(TEST_MODULE_NAME "--LOOPBACK WAIT FOR EVENT--.\n");
 		/* wait for data ready event */
 		wait_event(test_ch->wait_q,
 			   atomic_read(&test_ch->rx_notify_count));
@@ -235,7 +239,7 @@ static void loopback_test(struct test_channel *test_ch)
 		}
 		test_ch->rx_bytes += read_avail;
 
-		pr_info(TEST_MODULE_NAME ":worker total rx bytes = 0x%x.\n",
+		TEST_DBG(TEST_MODULE_NAME ":worker total rx bytes = 0x%x.\n",
 			 test_ch->rx_bytes);
 
 
@@ -249,7 +253,7 @@ static void loopback_test(struct test_channel *test_ch)
 		}
 		test_ch->tx_bytes += read_avail;
 
-		pr_debug(TEST_MODULE_NAME
+		TEST_DBG(TEST_MODULE_NAME
 			 ":loopback total tx bytes = 0x%x.\n",
 			 test_ch->tx_bytes);
 	} /* end of while */
@@ -275,6 +279,10 @@ static void sender_test(struct test_channel *test_ch)
 	for (i = 0 ; i < size / 2 ; i++)
 		buf16[i] = (u16) (i & 0xFFFF);
 
+
+	pr_info(TEST_MODULE_NAME
+		 ":SENDER TEST START for chan %s\n", test_ch->name);
+
 	while (packet_count < max_packet_count) {
 
 		if (test_ctx->exit_flag) {
@@ -285,12 +293,12 @@ static void sender_test(struct test_channel *test_ch)
 		random_num = get_random_int();
 		size = (random_num % test_ch->config_msg.packet_length) + 1;
 
-		pr_debug(TEST_MODULE_NAME "SENDER WAIT FOR EVENT for chan %s\n",
+		TEST_DBG(TEST_MODULE_NAME "SENDER WAIT FOR EVENT for chan %s\n",
 			test_ch->name);
 
 		/* wait for data ready event */
 		write_avail = sdio_write_avail(test_ch->ch);
-		pr_debug(TEST_MODULE_NAME ":write_avail=%d\n", write_avail);
+		TEST_DBG(TEST_MODULE_NAME ":write_avail=%d\n", write_avail);
 		if (write_avail < size) {
 			wait_event(test_ch->wait_q,
 				   atomic_read(&test_ch->tx_notify_count));
@@ -298,7 +306,7 @@ static void sender_test(struct test_channel *test_ch)
 		}
 
 		write_avail = sdio_write_avail(test_ch->ch);
-		pr_debug(TEST_MODULE_NAME ":write_avail=%d\n", write_avail);
+		TEST_DBG(TEST_MODULE_NAME ":write_avail=%d\n", write_avail);
 		if (write_avail < size) {
 			pr_info(TEST_MODULE_NAME ":not enough write avail.\n");
 			continue;
@@ -314,7 +322,7 @@ static void sender_test(struct test_channel *test_ch)
 		}
 
 		/* wait for read data ready event */
-		pr_debug(TEST_MODULE_NAME ":sender wait for rx data for "
+		TEST_DBG(TEST_MODULE_NAME ":sender wait for rx data for "
 					  "chan %s\n",
 			 test_ch->name);
 		read_avail = sdio_read_avail(test_ch->ch);
@@ -345,8 +353,8 @@ static void sender_test(struct test_channel *test_ch)
 
 		if ((test_ch->buf[0] != packet_count) && (size != 1)) {
 			pr_info(TEST_MODULE_NAME ":sender sdio_read WRONG DATA"
-						 " for chan %s.\n",
-				test_ch->name);
+						 " for chan %s, size=%d\n",
+				test_ch->name, size);
 			goto exit_err;
 		}
 
@@ -354,11 +362,11 @@ static void sender_test(struct test_channel *test_ch)
 		test_ch->rx_bytes += size;
 		packet_count++;
 
-		pr_debug(TEST_MODULE_NAME
+		TEST_DBG(TEST_MODULE_NAME
 			 ":sender total rx bytes = 0x%x , packet#=%d, size=%d"
 			 " for chan %s\n",
 			 test_ch->rx_bytes, packet_count, size, test_ch->name);
-		pr_debug(TEST_MODULE_NAME
+		TEST_DBG(TEST_MODULE_NAME
 			 ":sender total tx bytes = 0x%x , packet#=%d, size=%d"
 			 " for chan %s\n",
 			 test_ch->tx_bytes, packet_count, size, test_ch->name);
@@ -366,8 +374,8 @@ static void sender_test(struct test_channel *test_ch)
 	} /* end of while */
 
 	pr_info(TEST_MODULE_NAME
-		 ":sender total rx bytes = 0x%x, total tx bytes = 0x%x"
-		 " for chan %s\n",
+		 ":SENDER TEST END: total rx bytes = 0x%x, "
+		 " total tx bytes = 0x%x for chan %s\n",
 		 test_ch->rx_bytes, test_ch->tx_bytes, test_ch->name);
 
 	pr_info(TEST_MODULE_NAME ": TEST PASS for chan %s.\n",
@@ -388,7 +396,7 @@ int wait_any_notify(struct test_channel *test_ch)
 
 	test_ch->wait_counter++;
 
-	pr_debug(TEST_MODULE_NAME ":Waiting for event %d ...\n",
+	TEST_DBG(TEST_MODULE_NAME ":Waiting for event %d ...\n",
 		 test_ch->wait_counter);
 	while (time_before(jiffies, expire_time)) {
 		if (atomic_read(&test_ch->tx_notify_count) > 0)
@@ -448,7 +456,7 @@ static void a2_performance_test(struct test_channel *test_ch)
 		/* use a func to avoid compiler optimizations */
 		write_avail = sdio_write_avail(test_ch->ch);
 		read_avail = sdio_read_avail(test_ch->ch);
-		pr_debug(TEST_MODULE_NAME ":channel %s, write_avail=%d, "
+		TEST_DBG(TEST_MODULE_NAME ":channel %s, write_avail=%d, "
 					 "read_avail=%d for chan %s\n",
 			test_ch->name, write_avail, read_avail,
 			test_ch->name);
@@ -459,7 +467,7 @@ static void a2_performance_test(struct test_channel *test_ch)
 		}
 
 		write_avail = sdio_write_avail(test_ch->ch);
-		pr_debug(TEST_MODULE_NAME ":channel %s, write_avail=%d\n",
+		TEST_DBG(TEST_MODULE_NAME ":channel %s, write_avail=%d\n",
 			 test_ch->name, write_avail);
 		if (write_avail > 0) {
 			size = min(packet_size, write_avail) ;
@@ -482,14 +490,13 @@ static void a2_performance_test(struct test_channel *test_ch)
 		}
 
 		read_avail = sdio_read_avail(test_ch->ch);
-		pr_debug(TEST_MODULE_NAME ":channel %s, read_avail=%d\n",
+		TEST_DBG(TEST_MODULE_NAME ":channel %s, read_avail=%d\n",
 			 test_ch->name, read_avail);
 		if (read_avail > 0) {
 			size = min(packet_size, read_avail);
 			pr_debug(TEST_MODULE_NAME ":rx size = %d.\n", size);
 			if (atomic_read(&test_ch->rx_notify_count) > 0)
 				atomic_dec(&test_ch->rx_notify_count);
-
 			ret = sdio_read(test_ch->ch, test_ch->buf, size);
 			if (ret) {
 				pr_info(TEST_MODULE_NAME ": sdio_read err=%d"
@@ -501,11 +508,11 @@ static void a2_performance_test(struct test_channel *test_ch)
 			test_ch->rx_bytes += size;
 		}
 
-		pr_debug(TEST_MODULE_NAME
+		TEST_DBG(TEST_MODULE_NAME
 			 ":total rx bytes = %d , rx_packet#=%d"
 			 " for chan %s\n",
 			 test_ch->rx_bytes, rx_packet_count, test_ch->name);
-		pr_debug(TEST_MODULE_NAME
+		TEST_DBG(TEST_MODULE_NAME
 			 ":total tx bytes = %d , tx_packet#=%d"
 			 " for chan %s\n",
 			 test_ch->tx_bytes, tx_packet_count, test_ch->name);
@@ -764,6 +771,14 @@ ssize_t test_write(struct file *filp, const char __user *buf, size_t size,
 		set_params_loopback_9k(test_ctx->test_ch_arr[SDIO_RPC]);
 		set_params_a2_perf(test_ctx->test_ch_arr[SDIO_RMNT]);
 		break;
+	case 98:
+		pr_info(TEST_MODULE_NAME " set runtime debug on");
+		test_ctx->runtime_debug = 1;
+		return size;
+	case 99:
+		pr_info(TEST_MODULE_NAME " set runtime debug off");
+		test_ctx->runtime_debug = 0;
+		return size;
 	default:
 		pr_info(TEST_MODULE_NAME ":Bad Test number = %d.\n",
 			(int)test_ctx->testcase);

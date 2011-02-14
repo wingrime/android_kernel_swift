@@ -24,6 +24,7 @@
 #include "devices.h"
 #include <linux/platform_device.h>
 #include <linux/io.h>
+#include <asm/hardware/cache-l2x0.h>
 #include "timer.h"
 #include <linux/mtd/nand.h>
 #include <linux/mtd/partitions.h>
@@ -192,9 +193,26 @@ static void __init msm7x2x_init(void)
 	msm_clock_init(msm_clocks_7x27a, msm_num_clocks_7x27a);
 }
 
+#ifdef CONFIG_CACHE_L2X0
+static void msm7x27x_l2_cache_init(void)
+{
+	int aux_ctrl = 0;
+
+	/* Way Size 010(0x2) 32KB */
+	aux_ctrl = (0x1 << L2X0_AUX_CTRL_SHARE_OVERRIDE_SHIFT) | \
+		   (0x2 << L2X0_AUX_CTRL_WAY_SIZE_SHIFT) | \
+		   (0x1 << L2X0_AUX_CTRL_EVNT_MON_BUS_EN_SHIFT);
+
+	l2x0_init(MSM_L2CC_BASE, aux_ctrl, L2X0_AUX_CTRL_MASK);
+}
+#endif
+
 static void __init msm7x2x_map_io(void)
 {
 	msm_map_common_io();
+#ifdef CONFIG_CACHE_L2X0
+	msm7x27x_l2_cache_init();
+#endif
 }
 
 MACHINE_START(MSM7X27A_RUMI3, "QCT MSM7x27a RUMI3")

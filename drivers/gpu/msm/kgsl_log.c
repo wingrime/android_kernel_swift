@@ -180,7 +180,7 @@ static ssize_t kgsl_ib_dump_read(
 	loff_t *ppos)
 {
 	int i, count = kgsl_ib_size, remaining, pos = 0, tot = 0, ss;
-	struct kgsl_device *device = kgsl_get_yamato_generic_device();
+	struct kgsl_device *device = kgsl_get_device(KGSL_DEVICE_YAMATO);
 	const int rowc = 32;
 	unsigned int pt_base, ib_memsize;
 	uint8_t *base_addr;
@@ -290,7 +290,7 @@ static ssize_t kgsl_istore_read(
 	loff_t *ppos)
 {
 	int i, count = KGSL_ISTORE_LENGTH, remaining, pos = 0, tot = 0;
-	struct kgsl_device *device = kgsl_get_yamato_generic_device();
+	struct kgsl_device *device = kgsl_get_device(KGSL_DEVICE_YAMATO);
 	const int rowc = 8;
 
 	if (!ppos || !device)
@@ -343,7 +343,7 @@ static ssize_t kgsl_reg_read(int count, reg_read_init_t reg_read_init,
 	loff_t *ppos)
 {
 	int i, remaining;
-	struct kgsl_device *device = kgsl_get_yamato_generic_device();
+	struct kgsl_device *device = kgsl_get_device(KGSL_DEVICE_YAMATO);
 	const int rowc = 8;
 
 	if (!ppos || *ppos || !device)

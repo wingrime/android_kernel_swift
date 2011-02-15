@@ -747,13 +747,13 @@ pm8058_configure_accessory(struct pm8058_othc *dd)
 							"othc_acc_gpio_", i);
 			rc = gpio_request(dd->accessory_info[i].gpio, name);
 			if (rc) {
-				pr_err("Unable to request GPIO [%d]\n",
+				pr_debug("Unable to request GPIO [%d]\n",
 						dd->accessory_info[i].gpio);
 				continue;
 			}
 			rc = gpio_direction_input(dd->accessory_info[i].gpio);
 			if (rc) {
-				pr_err("Unable to set-direction GPIO [%d]\n",
+				pr_debug("Unable to set-direction GPIO [%d]\n",
 						dd->accessory_info[i].gpio);
 				gpio_free(dd->accessory_info[i].gpio);
 				continue;

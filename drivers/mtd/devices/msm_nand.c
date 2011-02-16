@@ -1538,7 +1538,8 @@ static int msm_nand_read_oob_dualnandc(struct mtd_info *mtd, loff_t from,
 			/* read data block
 			 * (only valid if status says success)
 			 */
-			if (ops->datbuf) {
+			if (ops->datbuf || (ops->oobbuf &&
+						 ops->mode != MTD_OOB_AUTO)) {
 				if (ops->mode != MTD_OOB_RAW)
 					sectordatasize = (n < (cwperpage - 1))
 					? 516 : (512 - ((cwperpage - 1) << 2));
@@ -1593,12 +1594,19 @@ static int msm_nand_read_oob_dualnandc(struct mtd_info *mtd, loff_t from,
 					cmd->len = 4;
 					cmd++;
 
-					cmd->cmd = 0;
-					cmd->src = NC01(MSM_NAND_FLASH_BUFFER);
-					cmd->dst = data_dma_addr_curr;
-					data_dma_addr_curr += sectordatasize;
-					cmd->len = sectordatasize;
-					cmd++;
+					/* Read only when there is data
+					 * buffer
+					 */
+					if (ops->datbuf) {
+						cmd->cmd = 0;
+						cmd->src =
+						NC01(MSM_NAND_FLASH_BUFFER);
+						cmd->dst = data_dma_addr_curr;
+						data_dma_addr_curr +=
+						sectordatasize;
+						cmd->len = sectordatasize;
+						cmd++;
+					}
 				} else {
 					/* MASK DATA ACK/REQ -->
 					 * NC01 (0xA3C)
@@ -1655,12 +1663,20 @@ static int msm_nand_read_oob_dualnandc(struct mtd_info *mtd, loff_t from,
 						cmd->len = 4;
 						cmd++;
 					}
-					cmd->cmd = 0;
-					cmd->src = NC10(MSM_NAND_FLASH_BUFFER);
-					cmd->dst = data_dma_addr_curr;
-					data_dma_addr_curr += sectordatasize;
-					cmd->len = sectordatasize;
-					cmd++;
+
+					/* Read only when there is data
+					 * buffer
+					 */
+					if (ops->datbuf) {
+						cmd->cmd = 0;
+						cmd->src =
+						NC10(MSM_NAND_FLASH_BUFFER);
+						cmd->dst = data_dma_addr_curr;
+						data_dma_addr_curr +=
+						sectordatasize;
+						cmd->len = sectordatasize;
+						cmd++;
+					}
 				}
 			}
 

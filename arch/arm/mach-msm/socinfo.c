@@ -22,7 +22,9 @@
 
 #include <linux/types.h>
 #include <linux/sysdev.h>
+#include <asm/mach-types.h>
 #include <mach/socinfo.h>
+
 #include "smd_private.h"
 
 #define BUILD_ID_LENGTH 32
@@ -182,12 +184,21 @@ static enum msm_cpu cpu_of_id[] = {
 	[71] = MSM_CPU_8X60,
 	[86] = MSM_CPU_8X60,
 
+	/* 8960 IDs */
+	[87] = MSM_CPU_8960,
+
 	/* Uninitialized IDs are not known to run Linux.
 	   MSM_CPU_UNKNOWN is set to 0 to ensure these IDs are
 	   considered as unknown CPU. */
 };
 
 static enum msm_cpu cur_cpu;
+
+static struct socinfo_v1 dummy_socinfo = {
+	.format = 1,
+	.version = 1,
+	.build_id = "Dummy socinfo placeholder"
+};
 
 uint32_t socinfo_get_id(void)
 {
@@ -481,6 +492,11 @@ static int __init socinfo_init_sysdev(void)
 {
 	int err;
 
+	if (!socinfo) {
+		pr_err("%s: No socinfo found!\n", __func__);
+		return -ENODEV;
+	}
+
 	err = sysdev_class_register(&soc_sysdev_class);
 	if (err) {
 		pr_err("%s: sysdev_class_register fail (%d)\n",
@@ -528,6 +544,13 @@ static int __init socinfo_init_sysdev(void)
 
 arch_initcall(socinfo_init_sysdev);
 
+void *setup_dummy_socinfo(void)
+{
+	if (machine_is_msm8960_rumi3() || machine_is_msm8960_sim())
+		dummy_socinfo.id = 87;
+	return (void *) &dummy_socinfo;
+}
+
 int __init socinfo_init(void)
 {
 	socinfo = smem_alloc(SMEM_HW_SW_BUILD_ID, sizeof(struct socinfo_v6));
@@ -553,9 +576,9 @@ int __init socinfo_init(void)
 				sizeof(struct socinfo_v1));
 
 	if (!socinfo) {
-		pr_err("%s: Can't find SMEM_HW_SW_BUILD_ID\n",
-		       __func__);
-		return -EIO;
+		pr_warn("%s: Can't find SMEM_HW_SW_BUILD_ID; falling back on "
+			"dummy values.\n", __func__);
+		socinfo = setup_dummy_socinfo();
 	}
 
 	WARN(!socinfo_get_id(), "Unknown SOC ID!\n");

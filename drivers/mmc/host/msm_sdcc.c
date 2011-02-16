@@ -1866,6 +1866,18 @@ msmsdcc_runtime_suspend(struct device *dev)
 	if (mmc) {
 		host->sdcc_suspending = 1;
 
+		/*
+		 * If the clocks are already turned off by SDIO clients (as
+		 * part of LPM), then clocks should be turned on before
+		 * calling mmc_suspend_host() because mmc_suspend_host might
+		 * send some commands to the card. The clocks will be turned
+		 * off again after mmc_suspend_host. Thus for SD/MMC/SDIO
+		 * cards, clocks will be turned on before mmc_suspend_host
+		 * and turned off after mmc_suspend_host.
+		 */
+		mmc->ios.clock = host->clk_rate;
+		mmc->ops->set_ios(host->mmc, &host->mmc->ios);
+
 		rc = mmc_suspend_host(mmc);
 		if (!rc) {
 			/*

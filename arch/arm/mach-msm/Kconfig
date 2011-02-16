@@ -1208,9 +1208,6 @@ config SCORPION_Uni_45nm_BUG
 
 	  This bug is not applicable to any ScorpionMP or Scorpion Uni 65nm(SC65U) cores.
 
-config SMMU_8X60
-	bool
-
 config MSM_RPM_LOG
 	tristate "MSM Resource Power Manager Log Driver"
 	depends on DEBUG_FS
@@ -1222,19 +1219,21 @@ config MSM_RPM_LOG
 	  information about RPM operation. The driver outputs the messages
 	  via a debugfs node.
 
-config SMMU
-	bool "System MMU support"
-	depends on MMU
+config MSM_IOMMU
+	bool "MSM IOMMU Support"
+	depends on ARCH_MSM8X60 || ARCH_MSM8960
 	select IOMMU_API
-	select SMMU_8X60 if ARCH_MSM8X60
-	depends on ARCH_MSM8X60
 	default n
 	help
-	  This is the System MMU driver for 8x60.
+	  Support for the IOMMUs found on certain Qualcomm SOCs.
+	  These IOMMUs allow virtualization of the address space used by most
+	  cores within the multimedia subsystem.
+
+	  If unsure, say N here.
 
 config IOMMU_PGTABLES_L2
 	bool "Allow SMMU page tables in the L2 cache (Experimental)"
-	depends on SMMU=y
+	depends on MSM_IOMMU=y
 	depends on MMU
 	depends on CPU_DCACHE_DISABLE=n
 	depends on SMP

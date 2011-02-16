@@ -1067,7 +1067,7 @@ static void boot_worker(struct work_struct *work)
 		   sdio_al_dev->bootloader_done);
 	pr_info(MODULE_NAME ":Got bootloader_done event..\n");
 	/* Do polling until MDM is up */
-	for (i = 0; i < 50 ; ++i) {
+	for (i = 0; i < 5000; ++i) {
 		sdio_claim_host(func1);
 		if (is_user_irq_enabled(sdio_al_dev, func_num)) {
 			sdio_release_host(func1);

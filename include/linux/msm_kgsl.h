@@ -157,6 +157,8 @@ struct kgsl_platform_data {
 	struct msm_bus_scale_pdata *grp2d0_bus_scale_table;
 	struct msm_bus_scale_pdata *grp2d1_bus_scale_table;
 	unsigned int nap_allowed;
+	/* pt_va_base is currently shared between kgsl devices */
+	unsigned int pt_va_base;
 	unsigned int pt_va_size;
 	unsigned int pt_max_count;
 };

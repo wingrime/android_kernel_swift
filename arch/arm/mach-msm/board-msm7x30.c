@@ -3903,6 +3903,8 @@ static struct kgsl_platform_data kgsl_pdata = {
 	.idle_timeout_2d = HZ/10,
 	.nap_allowed = true,
 
+	/* pt_va_base is currently shared between kgsl devices */
+	.pt_va_base = 0x66000000,
 #ifdef CONFIG_KGSL_PER_PROCESS_PAGE_TABLE
 	.pt_va_size = SZ_32M,
 #else

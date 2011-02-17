@@ -298,13 +298,12 @@ void kgsl_mh_intrcallback(struct kgsl_device *device)
 }
 
 static struct kgsl_pagetable *kgsl_mmu_createpagetableobject(
-				struct kgsl_mmu *mmu,
 				unsigned int name)
 {
 	int status = 0;
 	struct kgsl_pagetable *pagetable = NULL;
 
-	KGSL_MEM_VDBG("enter (mmu=%p)\n", mmu);
+	KGSL_MEM_VDBG("enter (pt_name=%d)\n", name);
 
 	pagetable = kzalloc(sizeof(struct kgsl_pagetable), GFP_KERNEL);
 	if (pagetable == NULL) {
@@ -317,12 +316,12 @@ static struct kgsl_pagetable *kgsl_mmu_createpagetableobject(
 	spin_lock_init(&pagetable->lock);
 	pagetable->tlb_flags = 0;
 	pagetable->name = name;
-	pagetable->va_base = mmu->va_base;
-	pagetable->va_range = mmu->va_range;
+	pagetable->va_base = kgsl_driver.pt_va_base;
+	pagetable->va_range = kgsl_driver.pt_va_size;
 	pagetable->last_superpte = 0;
-	pagetable->max_entries = KGSL_PAGETABLE_ENTRIES(mmu->va_range);
+	pagetable->max_entries = KGSL_PAGETABLE_ENTRIES(pagetable->va_range);
 
-	pagetable->tlbflushfilter.size = (mmu->va_range /
+	pagetable->tlbflushfilter.size = (pagetable->va_range /
 				(PAGE_SIZE * GSL_PT_SUPER_PTE * 8)) + 1;
 	pagetable->tlbflushfilter.base = (unsigned int *)
 			kzalloc(pagetable->tlbflushfilter.size, GFP_KERNEL);
@@ -406,13 +405,9 @@ static void kgsl_mmu_destroypagetable(struct kgsl_pagetable *pagetable)
 	kfree(pagetable);
 }
 
-struct kgsl_pagetable *kgsl_mmu_getpagetable(struct kgsl_mmu *mmu,
-					     unsigned long name)
+struct kgsl_pagetable *kgsl_mmu_getpagetable(unsigned long name)
 {
 	struct kgsl_pagetable *pt;
-
-	if (mmu == NULL)
-		return NULL;
 
 	mutex_lock(&kgsl_driver.pt_mutex);
 
@@ -425,7 +420,7 @@ struct kgsl_pagetable *kgsl_mmu_getpagetable(struct kgsl_mmu *mmu,
 		goto done;
 	}
 
-	pt = kgsl_mmu_createpagetableobject(mmu, name);
+	pt = kgsl_mmu_createpagetableobject(name);
 
 done:
 	mutex_unlock(&kgsl_driver.pt_mutex);

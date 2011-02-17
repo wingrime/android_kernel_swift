@@ -432,7 +432,6 @@ kgsl_get_process_private(struct kgsl_device_private *cur_dev_priv)
 
 #ifdef CONFIG_MSM_KGSL_MMU
 	{
-		struct kgsl_device *device;
 		unsigned long pt_name;
 
 #ifdef CONFIG_KGSL_PER_PROCESS_PAGE_TABLE
@@ -440,9 +439,7 @@ kgsl_get_process_private(struct kgsl_device_private *cur_dev_priv)
 #else
 		pt_name = KGSL_MMU_GLOBAL_PT;
 #endif
-		device = kgsl_get_device(KGSL_DEVICE_YAMATO);
-		private->pagetable = kgsl_mmu_getpagetable(&device->mmu,
-							   pt_name);
+		private->pagetable = kgsl_mmu_getpagetable(pt_name);
 		if (private->pagetable == NULL) {
 			KGSL_DRV_ERR("Error: Unable to get the page table\n");
 			kfree(private);
@@ -1878,6 +1875,33 @@ err_devlist:
 }
 
 static int __devinit
+kgsl_ptdata_init(void)
+{
+	int ret = 0;
+	struct kgsl_platform_data *pdata =
+		kgsl_driver.pdev->dev.platform_data;
+
+	INIT_LIST_HEAD(&kgsl_driver.pagetable_list);
+
+	kgsl_driver.ptsize = KGSL_PAGETABLE_ENTRIES(pdata->pt_va_size) *
+		KGSL_PAGETABLE_ENTRY_SIZE;
+	kgsl_driver.ptsize = ALIGN(kgsl_driver.ptsize, KGSL_PAGESIZE);
+
+	kgsl_driver.pt_va_size = pdata->pt_va_size;
+	kgsl_driver.pt_va_base = pdata->pt_va_base;
+
+	kgsl_driver.ptpool = dma_pool_create("kgsl-ptpool", NULL,
+					     kgsl_driver.ptsize,
+					     4096, 0);
+	if (kgsl_driver.ptpool == NULL) {
+		KGSL_DRV_ERR("failed to create dma_pool kgsl-ptpool");
+		ret = -ENOMEM;
+	}
+
+	return ret;
+}
+
+static int __devinit
 kgsl_core_init(void)
 {
 	struct kgsl_platform_data *pdata = NULL;
@@ -1925,22 +1949,10 @@ kgsl_core_init(void)
 	kgsl_cffdump_init();
 
 	INIT_LIST_HEAD(&kgsl_driver.process_list);
-	INIT_LIST_HEAD(&kgsl_driver.pagetable_list);
 
-	kgsl_driver.ptsize = KGSL_PAGETABLE_ENTRIES(pdata->pt_va_size) *
-		KGSL_PAGETABLE_ENTRY_SIZE;
-	kgsl_driver.ptsize = ALIGN(kgsl_driver.ptsize, KGSL_PAGESIZE);
-
-	kgsl_driver.pt_va_size = pdata->pt_va_size;
-
-	kgsl_driver.ptpool = dma_pool_create("kgsl-ptpool", NULL,
-					     kgsl_driver.ptsize,
-					     4096, 0);
-	if (kgsl_driver.ptpool == NULL) {
-		ret = -ENOMEM;
-		KGSL_DRV_ERR("failed to create dma_pool kgsl-ptpool");
+	ret = kgsl_ptdata_init();
+	if (ret)
 		goto err;
-	}
 
 	ret = kgsl_drm_init(kgsl_driver.pdev);
 
@@ -1957,12 +1969,15 @@ err:
 static int __devinit kgsl_platform_probe(struct platform_device *pdev)
 {
 	int result = 0;
-	struct kgsl_device *device;
 
 	kgsl_driver.pdev = pdev;
 	pm_runtime_enable(&pdev->dev);
 
-	kgsl_core_init();
+	result = kgsl_core_init();
+	if (result) {
+		KGSL_DRV_ERR("kgsl core init failed: %d", result);
+		goto done;
+	}
 
 	result = kgsl_yamato_init(pdev);
 
@@ -1977,9 +1992,8 @@ static int __devinit kgsl_platform_probe(struct platform_device *pdev)
 		goto done;
 	}
 
-	device = kgsl_get_device(KGSL_DEVICE_YAMATO);
-	kgsl_driver.global_pt = kgsl_mmu_getpagetable(&device->mmu,
-						      KGSL_MMU_GLOBAL_PT);
+	/* The global_pt needs to be setup after all devices are loaded */
+	kgsl_driver.global_pt = kgsl_mmu_getpagetable(KGSL_MMU_GLOBAL_PT);
 	if (kgsl_driver.global_pt == NULL) {
 		result = -ENOMEM;
 		goto done;

@@ -96,8 +96,7 @@ static struct kgsl_g12_device device_2d0 = {
 			   all pages. */
 			.mpu_base = 0x00000000,
 			.mpu_range =  0xFFFFF000,
-			.va_base = 0x66000000,
-			/* va_range is set by the platform driver */
+			/* va_range and va_base are set by the platform file */
 			.reg = {
 				.config = ADDR_MH_MMU_CONFIG,
 				.mpu_base = ADDR_MH_MMU_MPU_BASE,

@@ -658,6 +658,8 @@ struct kgsl_platform_data kgsl_pdata = {
 	.grp2d1_bus_scale_table = &grp2d1_bus_scale_pdata,
 	.nap_allowed = true,
 #endif
+	/* pt_va_base is currently shared between kgsl devices */
+	.pt_va_base = 0x66000000,
 	/* The maximum possible range for any individual pagetable
 	   is 256MB - 64K (0xfff0000) */
 

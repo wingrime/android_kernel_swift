@@ -109,6 +109,10 @@ struct kgsl_driver {
 	   platform */
 
 	unsigned int pt_va_size;
+
+	/* Base virtual address shared across devices */
+	unsigned int pt_va_base;
+
 	struct dma_pool *ptpool;
 };
 

@@ -1955,6 +1955,8 @@ static void __init msm7x2x_init(void)
 	kgsl_pdata.idle_timeout_3d = HZ/5;
 	kgsl_pdata.idle_timeout_2d = 0;
 
+	/* pt_va_base is currently shared between kgsl devices */
+	kgsl_pdata.pt_va_base = 0x66000000,
 #ifdef CONFIG_KGSL_PER_PROCESS_PAGE_TABLE
 	kgsl_pdata.pt_va_size = SZ_32M;
 #else

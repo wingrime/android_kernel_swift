@@ -1871,6 +1871,7 @@ msmsdcc_runtime_suspend(struct device *dev)
 
 	if (mmc) {
 		host->sdcc_suspending = 1;
+		mmc->suspend_task = current;
 
 		/*
 		 * If the clocks are already turned off by SDIO clients (as
@@ -1920,6 +1921,7 @@ msmsdcc_runtime_suspend(struct device *dev)
 			}
 		}
 		host->sdcc_suspending = 0;
+		mmc->suspend_task = NULL;
 	}
 	return rc;
 }

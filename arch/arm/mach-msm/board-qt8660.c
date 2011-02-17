@@ -38,6 +38,7 @@
 #include <linux/i2c.h>
 #include <linux/spi/spi.h>
 #include <linux/dma-mapping.h>
+#include <linux/gpio_keys.h>
 
 #ifdef CONFIG_ANDROID_PMEM
 #include <linux/android_pmem.h>
@@ -2048,6 +2049,33 @@ static struct xoadc_platform_data xoadc_pdata = {
 };
 #endif
 
+#define LOCK_KEY_GPIO		67
+
+static struct gpio_keys_button gpio_keys_buttons[] = {
+	{
+		.code           = KEY_SCREENLOCK,
+		.gpio           = LOCK_KEY_GPIO,
+		.desc           = "lock_key",
+		.active_low     = 1,
+		.type		= EV_KEY,
+		.wakeup		= 1
+	},
+};
+
+static struct gpio_keys_platform_data gpio_keys_data = {
+	.buttons        = gpio_keys_buttons,
+	.nbuttons       = ARRAY_SIZE(gpio_keys_buttons),
+	.rep		= 0,
+};
+
+static struct platform_device qt_gpio_keys = {
+	.name           = "gpio-keys",
+	.id             = -1,
+	.dev            = {
+		.platform_data  = &gpio_keys_data,
+	},
+};
+
 static struct platform_device *qt_devices[] __initdata = {
 	&msm_device_smd,
 	&msm_device_uart_dm12,
@@ -2202,6 +2230,7 @@ static struct platform_device *qt_devices[] __initdata = {
 #endif
 
 	&msm_tsens_device,
+	&qt_gpio_keys,
 
 };
 

@@ -567,13 +567,15 @@ static void rmnet_data_write_done(void *priv, struct sk_buff *skb)
 
 	dev_kfree_skb_any(skb);
 
+	spin_lock_irqsave(&dev->lock, flags);
+	dev->dmux_write_done = 1;
+
 	if (!atomic_read(&dev->online)) {
 		DBG(cdev, "USB disconnected\n");
+		spin_unlock_irqrestore(&dev->lock, flags);
 		return;
 	}
 
-	spin_lock_irqsave(&dev->lock, flags);
-	dev->dmux_write_done = 1;
 	if (!list_empty(&dev->rx_queue)) {
 		dev->dmux_write_done = 0;
 		queue_work(dev->wq, &dev->data_rx_work);

@@ -40,9 +40,8 @@ struct marimba marimba_modules[ADIE_ARRY_SIZE];
 #define MARIMBA_MODE_REG		0x00
 
 struct marimba_platform_data *marimba_pdata;
-struct marimba_platform_data *timpani_pdata;
 
-static uint32_t marimba_gpio_count, timpani_vreg_pwr;
+static uint32_t marimba_gpio_count;
 static bool fm_status;
 static bool bt_status;
 
@@ -370,38 +369,6 @@ static int marimba_add_child(struct marimba_platform_data *pdata,
 	return 0;
 }
 
-int timpani_vreg_mode(int vreg_value)
-{
-	struct marimba *timpani = &marimba_modules[MARIMBA_SLAVE_ID_MARIMBA];
-	struct marimba_platform_data *pdata = timpani_pdata;
-	int rc = 0;
-
-	if (pdata->timpani_power_mode == NULL) {
-		pr_err("Timpani power mode not supported\n");
-		return -EIO;
-	}
-
-	mutex_lock(&timpani->xfer_lock);
-	if (vreg_value) {
-		timpani_vreg_pwr++;
-		if (timpani_vreg_pwr == 1)
-			rc = pdata->timpani_power_mode(1);
-	} else {
-		if (timpani_vreg_pwr)
-			timpani_vreg_pwr--;
-		else {
-			mutex_unlock(&timpani->xfer_lock);
-			return -EINVAL;
-		}
-
-		if (timpani_vreg_pwr == 0)
-			rc = pdata->timpani_power_mode(0);
-	}
-	mutex_unlock(&timpani->xfer_lock);
-
-	return rc;
-}
-
 int marimba_gpio_config(int gpio_value)
 {
 	struct marimba *marimba = &marimba_modules[MARIMBA_SLAVE_ID_MARIMBA];
@@ -632,9 +599,6 @@ static int marimba_probe(struct i2c_client *client,
 	status = marimba_add_child(pdata, id->driver_data);
 
 	marimba_pdata = pdata;
-
-	if (rc == TIMPANI_ID)
-		timpani_pdata = pdata;
 
 	return 0;
 

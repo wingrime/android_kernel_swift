@@ -1,4 +1,4 @@
-/* Copyright (c) 2010, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2010-2011, Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -18,9 +18,8 @@
 
 #include "vcd_ddl.h"
 #include "vcd_ddl_metadata.h"
-#ifdef DDL_PROFILE
+
 static unsigned int first_time;
-#endif
 
 u32 ddl_device_init(struct ddl_init_config *ddl_init_config,
 	void *client_data)
@@ -233,15 +232,14 @@ u32 ddl_encode_start(u32 *ddl_handle, void *client_data)
 	struct ddl_encoder_data *encoder;
 	void *ptr;
 	u32 status = VCD_S_SUCCESS;
-
 	DDL_MSG_HIGH("ddl_encode_start");
-#ifdef DDL_PROFILE
-	if (first_time < 2) {
-		ddl_reset_time_variables(1);
-		first_time++;
-	 }
-	ddl_get_core_start_time(1);
-#endif
+	if (vidc_msg_timing) {
+		if (first_time < 2) {
+			ddl_reset_core_time_variables(ENC_OP_TIME);
+			first_time++;
+		 }
+		ddl_set_core_start_time(__func__, ENC_OP_TIME);
+	}
 	ddl_context = ddl_get_context();
 	if (!DDL_IS_INITIALIZED(ddl_context)) {
 		DDL_MSG_ERROR("ddl_enc_start:Not_inited");
@@ -302,9 +300,10 @@ u32 ddl_decode_start(u32 *ddl_handle, struct vcd_sequence_hdr *header,
 	u32 status = VCD_S_SUCCESS;
 
 	DDL_MSG_HIGH("ddl_decode_start");
-#ifdef DDL_PROFILE
-	ddl_reset_time_variables(0);
-#endif
+	if (vidc_msg_timing) {
+		ddl_reset_core_time_variables(DEC_OP_TIME);
+		ddl_reset_core_time_variables(DEC_IP_TIME);
+	}
 	ddl_context = ddl_get_context();
 	if (!DDL_IS_INITIALIZED(ddl_context)) {
 		DDL_MSG_ERROR("ddl_dec_start:Not_inited");
@@ -360,11 +359,7 @@ u32 ddl_decode_frame(u32 *ddl_handle,
 		(struct ddl_client_context *) ddl_handle;
 	struct ddl_context *ddl_context;
 	struct ddl_decoder_data *decoder;
-
 	DDL_MSG_HIGH("ddl_decode_frame");
-#ifdef DDL_PROFILE
-	ddl_get_core_start_time(0);
-#endif
 	ddl_context = ddl_get_context();
 	if (!DDL_IS_INITIALIZED(ddl_context)) {
 		DDL_MSG_ERROR("ddl_dec_frame:Not_inited");
@@ -443,9 +438,8 @@ u32 ddl_encode_frame(u32 *ddl_handle,
 	u32 vcd_status = VCD_S_SUCCESS;
 
 	DDL_MSG_HIGH("ddl_encode_frame");
-#ifdef DDL_PROFILE
-	ddl_get_core_start_time(1);
-#endif
+	if (vidc_msg_timing)
+		ddl_set_core_start_time(__func__, ENC_OP_TIME);
 	ddl_context = ddl_get_context();
 	if (!DDL_IS_INITIALIZED(ddl_context)) {
 		DDL_MSG_ERROR("ddl_enc_frame:Not_inited");
@@ -516,9 +510,10 @@ u32 ddl_decode_end(u32 *ddl_handle, void *client_data)
 	struct ddl_context *ddl_context;
 
 	DDL_MSG_HIGH("ddl_decode_end");
-#ifdef DDL_PROFILE
-	ddl_reset_time_variables(0);
-#endif
+	if (vidc_msg_timing) {
+		ddl_reset_core_time_variables(DEC_OP_TIME);
+		ddl_reset_core_time_variables(DEC_IP_TIME);
+	}
 	ddl_context = ddl_get_context();
 	if (!DDL_IS_INITIALIZED(ddl_context)) {
 		DDL_MSG_ERROR("ddl_dec_end:Not_inited");
@@ -552,9 +547,8 @@ u32 ddl_encode_end(u32 *ddl_handle, void *client_data)
 	struct ddl_context *ddl_context;
 
 	DDL_MSG_HIGH("ddl_encode_end");
-#ifdef DDL_PROFILE
-	ddl_reset_time_variables(1);
-#endif
+	if (vidc_msg_timing)
+		ddl_reset_core_time_variables(ENC_OP_TIME);
 	ddl_context = ddl_get_context();
 	if (!DDL_IS_INITIALIZED(ddl_context)) {
 		DDL_MSG_ERROR("ddl_enc_end:Not_inited");

@@ -22,7 +22,6 @@
 #include <linux/irq.h>
 #include <linux/io.h>
 #include <linux/mfd/pmic8058.h>
-#include <linux/mfd/bahama.h>
 #include <linux/input/pmic8058-keypad.h>
 #include <linux/pmic8058-pwrkey.h>
 #include <linux/pmic8058-vibrator.h>

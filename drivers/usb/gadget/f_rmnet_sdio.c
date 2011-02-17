@@ -420,7 +420,7 @@ rmnet_setup(struct usb_function *f, const struct usb_ctrlrequest *ctrl)
 	struct rmnet_sdio_qmi_buf *resp;
 
 	if (!atomic_read(&dev->sdio_open))
-		return -ENOTSUPP;
+		return 0;
 
 	if (!atomic_read(&dev->online))
 		return -ENOTCONN;

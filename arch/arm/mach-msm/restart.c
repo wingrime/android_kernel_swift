@@ -39,7 +39,7 @@
 
 #define PSHOLD_CTL_SU (MSM_TLMM_BASE + 0x820)
 
-#define RESTART_REASON_ADDR 0x2A05F010
+#define RESTART_REASON_ADDR 0x2A05F65C
 
 static int restart_mode;
 

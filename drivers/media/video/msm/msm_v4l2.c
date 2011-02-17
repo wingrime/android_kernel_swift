@@ -1,4 +1,4 @@
-/* Copyright (c) 2009, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2009-2011, Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -131,6 +131,7 @@ static long msm_v4l2_ioctl(struct file *filep,
 			   unsigned int cmd, unsigned long arg)
 {
 	struct msm_ctrl_cmd *ctrlcmd;
+	struct msm_frame *frame;
 	int rc;
 
 	D("msm_v4l2_ioctl, cmd = %d, %d\n", cmd, __LINE__);
@@ -159,9 +160,9 @@ static long msm_v4l2_ioctl(struct file *filep,
 
 	case MSM_V4L2_GET_PICTURE:
 		D("msm_v4l2_ioctl,  MSM_V4L2_GET_PICTURE v4l2 ioctl %d\n", cmd);
-		ctrlcmd = (struct msm_ctrl_cmd *)arg;
+		frame = (struct msm_frame *)arg;
 		return g_pmsm_v4l2_dev->drv->get_pict(
-				g_pmsm_v4l2_dev->drv->sync, ctrlcmd);
+				g_pmsm_v4l2_dev->drv->sync, frame);
 
 	default:
 		D("msm_v4l2_ioctl, standard v4l2 ioctl %d\n", cmd);

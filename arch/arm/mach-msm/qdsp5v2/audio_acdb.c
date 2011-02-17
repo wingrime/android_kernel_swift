@@ -53,6 +53,10 @@
 #define ACDB_VALUES_FILLED      	1
 #define MAX_RETRY			10
 
+/*below macro is used to align the session info received from
+Devctl driver with the state mentioned as not to alter the
+Existing code*/
+#define AUDREC_OFFSET	2
 /* rpc table index */
 enum {
 	ACDB_DalACDB_ioctl = DALDEVICE_FIRST_DEVICE_API_IDX
@@ -313,12 +317,15 @@ static s32 acdb_get_calibration(void)
 	u32 iterations = 0;
 
 	MM_DBG("acdb state = %d\n", acdb_data.acdb_state);
+
 	acdb_cmd.command_id = ACDB_GET_DEVICE_TABLE;
 	acdb_cmd.device_id = acdb_data.device_info->acdb_id;
 	acdb_cmd.network_id = 0x0108B153;
 	acdb_cmd.sample_rate_id = acdb_data.device_info->sample_rate;
 	acdb_cmd.total_bytes = ACDB_BUF_SIZE;
 	acdb_cmd.phys_buf = (u32 *)acdb_data.phys_addr;
+	MM_DBG("device_id = %d, sampling_freq = %d\n",
+				acdb_cmd.device_id, acdb_cmd.sample_rate_id);
 
 	do {
 		result = dalrpc_fcn_8(ACDB_DalACDB_ioctl, acdb_data.handle,
@@ -1336,7 +1343,8 @@ static s32 acdb_send_calibration(void)
 			acdb_data.audrec_applied |= AUDREC1_READY;
 		else if (acdb_data.preproc_stream_id == 2)
 			acdb_data.audrec_applied |= AUDREC2_READY;
-
+		MM_DBG("acdb_data.audrec_applied = %x\n",
+					acdb_data.audrec_applied);
 	}
 done:
 	return result;
@@ -1403,7 +1411,8 @@ static void handle_tx_device_ready_callback(void)
 		acdb_value_apply |= AUDREC2_READY;
 	}
 	if (acdb_value_apply) {
-		acdb_data.device_info->sample_rate =
+		if (session_info[stream_id].sampling_freq)
+			acdb_data.device_info->sample_rate =
 					session_info[stream_id].sampling_freq;
 		result = check_tx_acdb_values_cached();
 		if (result) {
@@ -1847,6 +1856,14 @@ static void device_cb(u32 evt_id, union auddev_evt_data *evt, void *private)
 					evt->audcal_info.dev_id);
 		acdb_data.acdb_state &= ~CAL_DATA_READY;
 		free_acdb_cache_node(evt);
+		/*reset the applied flag for the session routed to the device*/
+		acdb_data.audrec_applied &= ~(evt->audcal_info.sessions
+							<< AUDREC_OFFSET);
+		goto done;
+	}
+	if (((evt->audcal_info.dev_type & RX_DEVICE) == 1) &&
+			(evt->audcal_info.acdb_id == PSEUDO_ACDB_ID)) {
+		MM_INFO("device cb is for rx device with pseudo acdb id\n");
 		goto done;
 	}
 	audcal_info = evt->audcal_info;
@@ -1868,11 +1885,10 @@ static void device_cb(u32 evt_id, union auddev_evt_data *evt, void *private)
 				acdb_data.acdb_state &= ~CAL_DATA_READY;
 				goto update_cache;
 		}
-	} else {
+	} else
 		/* state is updated to querry the modem for values */
 		acdb_data.acdb_state &= ~CAL_DATA_READY;
-		acdb_data.audrec_applied = 0;
-	}
+
 update_cache:
 	if ((audcal_info.dev_type & TX_DEVICE) == 2) {
 		/*loop is to take care of use case:- multiple Audrec
@@ -1970,7 +1986,8 @@ static s8 handle_audpreproc_cb(void)
 		MM_INFO("audpreproc is routed to pseudo device\n");
 		return result;
 	}
-	acdb_data.device_info->sample_rate =
+	if (session_info[stream_id].sampling_freq)
+		acdb_data.device_info->sample_rate =
 					session_info[stream_id].sampling_freq;
 	if (!(acdb_data.acdb_state & CAL_DATA_READY)) {
 		result = check_tx_acdb_values_cached();
@@ -2029,7 +2046,8 @@ static void audpreproc_cb(void *private, u32 id, void *msg)
 	  callback at this scenario we should not access
 	  device information
 	 */
-	if (acdb_data.device_info) {
+	if (acdb_data.device_info &&
+		session_info[stream_id].sampling_freq) {
 		acdb_data.device_info->sample_rate =
 					session_info[stream_id].sampling_freq;
 		result = check_tx_acdb_values_cached();

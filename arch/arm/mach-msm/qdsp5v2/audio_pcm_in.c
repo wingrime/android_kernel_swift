@@ -587,6 +587,9 @@ static long audpcm_in_ioctl(struct file *file,
 		break;
 	}
 	case AUDIO_STOP: {
+		/*reset the sampling frequency information at audpreproc layer*/
+		audio->session_info.sampling_freq = 0;
+		audpreproc_update_audrec_info(&audio->session_info);
 		rc = audpcm_in_disable(audio);
 		rc = msm_snddev_withdraw_freq(audio->enc_id,
 					SNDDEV_CAP_TX, AUDDEV_CLNT_ENC);
@@ -790,6 +793,9 @@ static int audpcm_in_release(struct inode *inode, struct file *file)
 	msm_snddev_withdraw_freq(audio->enc_id, SNDDEV_CAP_TX,
 					AUDDEV_CLNT_ENC);
 	auddev_unregister_evt_listner(AUDDEV_CLNT_ENC, audio->enc_id);
+	/*reset the sampling frequency information at audpreproc layer*/
+	audio->session_info.sampling_freq = 0;
+	audpreproc_update_audrec_info(&audio->session_info);
 	audpcm_in_disable(audio);
 	audpcm_in_flush(audio);
 	msm_adsp_put(audio->audrec);

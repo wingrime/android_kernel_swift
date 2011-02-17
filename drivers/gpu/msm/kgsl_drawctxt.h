@@ -47,6 +47,8 @@
 #define CTXT_FLAGS_SHADER_SAVE		0x00002000
 /* shader can be restored from shadow */
 #define CTXT_FLAGS_SHADER_RESTORE	0x00004000
+/* Context has caused a GPU hang */
+#define CTXT_FLAGS_GPU_HANG		0x00008000
 
 #include <linux/msm_kgsl.h>
 #include "kgsl_sharedmem.h"

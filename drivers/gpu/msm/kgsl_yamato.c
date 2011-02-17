@@ -27,6 +27,7 @@
 #include <linux/notifier.h>
 
 #include <mach/msm_bus.h>
+#include <linux/vmalloc.h>
 
 #include "kgsl_drawctxt.h"
 #include "kgsl.h"
@@ -693,6 +694,7 @@ kgsl_yamato_init(struct platform_device *pdev)
 
 	init_completion(&device->hwaccess_gate);
 	init_completion(&device->suspend_gate);
+	init_completion(&device->recovery_gate);
 
 	ATOMIC_INIT_NOTIFIER_HEAD(&device->ts_notifier_list);
 	INIT_LIST_HEAD(&device->memqueue);
@@ -947,6 +949,133 @@ static int kgsl_yamato_stop(struct kgsl_device *device)
 	return 0;
 }
 
+static int
+kgsl_yamato_recover_hang(struct kgsl_device *device)
+{
+	int ret;
+	unsigned int *rb_buffer;
+	struct kgsl_yamato_device *yamato_device =
+			(struct kgsl_yamato_device *)device;
+	struct kgsl_ringbuffer *rb = &yamato_device->ringbuffer;
+	unsigned int timestamp;
+	unsigned int num_rb_contents;
+	unsigned int bad_context;
+	unsigned int reftimestamp;
+	unsigned int enable_ts;
+	unsigned int soptimestamp;
+	unsigned int eoptimestamp;
+	int i;
+
+	KGSL_DRV_ERR("Starting recovery from 3D GPU hang....\n");
+	rb_buffer = vmalloc(rb->buffer_desc.size);
+	if (!rb_buffer) {
+		KGSL_MEM_ERR("Failed to allocate memory for recovery: %x\n",
+				rb->buffer_desc.size);
+		return -ENOMEM;
+	}
+	/* Extract valid contents from rb which can stil be executed after
+	 * hang */
+	ret = kgsl_ringbuffer_extract(rb, rb_buffer, &num_rb_contents);
+	if (ret)
+		goto done;
+	timestamp = rb->timestamp;
+	KGSL_DRV_ERR("Last issued timestamp: %x\n", timestamp);
+	kgsl_sharedmem_readl(&device->memstore, &bad_context,
+				KGSL_DEVICE_MEMSTORE_OFFSET(current_context));
+	kgsl_sharedmem_readl(&device->memstore, &reftimestamp,
+				KGSL_DEVICE_MEMSTORE_OFFSET(ref_wait_ts));
+	kgsl_sharedmem_readl(&device->memstore, &enable_ts,
+				KGSL_DEVICE_MEMSTORE_OFFSET(ts_cmp_enable));
+	kgsl_sharedmem_readl(&device->memstore, &soptimestamp,
+				KGSL_DEVICE_MEMSTORE_OFFSET(soptimestamp));
+	kgsl_sharedmem_readl(&device->memstore, &eoptimestamp,
+				KGSL_DEVICE_MEMSTORE_OFFSET(eoptimestamp));
+	rmb();
+	KGSL_CTXT_ERR("Context that caused a GPU hang: %x\n", bad_context);
+	/* restart device */
+	ret = kgsl_yamato_stop(device);
+	if (ret)
+		goto done;
+	ret = kgsl_yamato_start(device, KGSL_TRUE);
+	if (ret)
+		goto done;
+	KGSL_DRV_ERR("Device has been restarted after hang\n");
+	/* Restore timestamp states */
+	kgsl_sharedmem_writel(&device->memstore,
+			KGSL_DEVICE_MEMSTORE_OFFSET(soptimestamp),
+			soptimestamp);
+	kgsl_sharedmem_writel(&device->memstore,
+			KGSL_DEVICE_MEMSTORE_OFFSET(eoptimestamp),
+			eoptimestamp);
+	kgsl_sharedmem_writel(&device->memstore,
+			KGSL_DEVICE_MEMSTORE_OFFSET(soptimestamp),
+			soptimestamp);
+	if (num_rb_contents) {
+		kgsl_sharedmem_writel(&device->memstore,
+			KGSL_DEVICE_MEMSTORE_OFFSET(ref_wait_ts),
+			reftimestamp);
+		kgsl_sharedmem_writel(&device->memstore,
+			KGSL_DEVICE_MEMSTORE_OFFSET(ts_cmp_enable),
+			enable_ts);
+	}
+	wmb();
+	/* Mark the invalid context so no more commands are accepted from
+	 * that context */
+	for (i = 0; i < yamato_device->drawctxt_count; i++)
+		if (bad_context == (unsigned int)yamato_device->drawctxt[i]) {
+			KGSL_CTXT_ERR("Context that caused a GPU hang: %x,"
+					" index: %d\n", bad_context, i);
+			yamato_device->drawctxt[i]->flags |=
+						CTXT_FLAGS_GPU_HANG;
+			break;
+		}
+
+	/* Restore valid commands in ringbuffer */
+	kgsl_ringbuffer_restore(rb, rb_buffer, num_rb_contents);
+	rb->timestamp = timestamp;
+done:
+	vfree(rb_buffer);
+	return ret;
+}
+
+static int
+kgsl_yamato_dump_and_recover(struct kgsl_device *device)
+{
+	static int recovery;
+	int result = -ETIMEDOUT;
+
+	if (device->state == KGSL_STATE_HUNG)
+		goto done;
+	if (device->state == KGSL_STATE_DUMP_AND_RECOVER && !recovery) {
+		mutex_unlock(&device->mutex);
+		wait_for_completion(&device->recovery_gate);
+		mutex_lock(&device->mutex);
+		if (!(device->state & KGSL_STATE_HUNG))
+			/* recovery success */
+			result = 0;
+	} else {
+		INIT_COMPLETION(device->recovery_gate);
+		kgsl_postmortem_dump(device);
+		if (!recovery) {
+			recovery = 1;
+			result = kgsl_yamato_recover_hang(device);
+			if (result)
+				device->state = KGSL_STATE_HUNG;
+			recovery = 0;
+			complete_all(&device->recovery_gate);
+		} else
+			KGSL_DRV_ERR("Cannot recover from another hang while "
+					"recovering from a hang\n");
+	}
+done:
+	return result;
+}
+
+struct kgsl_device *kgsl_get_yamato_generic_device(void)
+{
+	return &yamato_device.dev;
+}
+
 static int kgsl_yamato_getproperty(struct kgsl_device *device,
 				enum kgsl_property_type type,
 				void *value,
@@ -1065,11 +1194,15 @@ int kgsl_yamato_idle(struct kgsl_device *device, unsigned int timeout)
 	/* first, wait until the CP has consumed all the commands in
 	 * the ring buffer
 	 */
+retry:
 	if (rb->flags & KGSL_FLAGS_STARTED) {
 		do {
 			GSL_RB_GET_READPTR(rb, &rb->rptr);
-			if (time_after(jiffies, wait_time))
+			if (time_after(jiffies, wait_time)) {
+				KGSL_DRV_ERR("rptr: %x, wptr: %x\n",
+						rb->rptr, rb->wptr);
 				goto err;
+			}
 		} while (rb->rptr != rb->wptr);
 	}
 
@@ -1085,7 +1218,10 @@ int kgsl_yamato_idle(struct kgsl_device *device, unsigned int timeout)
 
 err:
 	KGSL_DRV_ERR("spun too long waiting for RB to idle\n");
-	kgsl_postmortem_dump(device);
+	if (!kgsl_yamato_dump_and_recover(device)) {
+		wait_time = jiffies + MAX_WAITGPU_SECS;
+		goto retry;
+	}
 	return -ETIMEDOUT;
 }
 
@@ -1259,6 +1395,15 @@ static int kgsl_yamato_waittimestamp(struct kgsl_device *device,
 	long status = 0;
 	struct kgsl_yamato_device *yamato_device = KGSL_YAMATO_DEVICE(device);
 
+	if (timestamp != yamato_device->ringbuffer.timestamp &&
+		timestamp_cmp(timestamp,
+		yamato_device->ringbuffer.timestamp)) {
+		KGSL_DRV_ERR("Cannot wait for invalid ts: %x, "
+			"rb->timestamp: %x\n",
+			timestamp, yamato_device->ringbuffer.timestamp);
+		status = -EINVAL;
+		goto done;
+	}
 	if (!kgsl_check_timestamp(device, timestamp)) {
 		mutex_unlock(&device->mutex);
 		/* We need to make sure that the process is placed in wait-q
@@ -1280,11 +1425,19 @@ static int kgsl_yamato_waittimestamp(struct kgsl_device *device,
 				"%x, wptr: %x\n", timestamp,
 				yamato_device->ringbuffer.timestamp,
 				yamato_device->ringbuffer.wptr);
-				kgsl_postmortem_dump(device);
+				if (!kgsl_yamato_dump_and_recover(device)) {
+					/* wait for idle after recovery as the
+					 * timestamp that this process wanted
+					 * to wait on may be invalid */
+					if (!kgsl_yamato_idle(device,
+						KGSL_TIMEOUT_DEFAULT))
+						status = 0;
+				}
 			}
 		}
 	}
 
+done:
 	return (int)status;
 }
 

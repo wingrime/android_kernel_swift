@@ -1754,7 +1754,7 @@ kgsl_drawctxt_switch(struct kgsl_yamato_device *yamato_device,
 {
 	struct kgsl_drawctxt *active_ctxt = yamato_device->drawctxt_active;
 	struct kgsl_device *device = &yamato_device->dev;
-	unsigned int cmds[2];
+	unsigned int cmds[5];
 
 	if (drawctxt) {
 		if (flags & KGSL_CONTEXT_SAVE_GMEM)
@@ -1772,6 +1772,9 @@ kgsl_drawctxt_switch(struct kgsl_yamato_device *yamato_device,
 	KGSL_CTXT_INFO("from %p to %p flags %d\n",
 			yamato_device->drawctxt_active, drawctxt, flags);
 	/* save old context*/
+	if (active_ctxt && active_ctxt->flags & CTXT_FLAGS_GPU_HANG)
+		KGSL_CTXT_WARN("Current active context has caused gpu hang\n");
+
 	if (active_ctxt != NULL) {
 		KGSL_CTXT_INFO("active_ctxt flags %08x\n", active_ctxt->flags);
 		/* save registers and constants. */
@@ -1846,6 +1849,13 @@ kgsl_drawctxt_switch(struct kgsl_yamato_device *yamato_device,
 			REG_SHADOW_SIZE + CMD_BUFFER_SIZE + TEX_SHADOW_SIZE,
 			false);
 #endif
+		cmds[0] = pm4_nop_packet(1);
+		cmds[1] = KGSL_CONTEXT_TO_MEM_IDENTIFIER;
+		cmds[2] = pm4_type3_packet(PM4_MEM_WRITE, 2);
+		cmds[3] = device->memstore.gpuaddr +
+				KGSL_DEVICE_MEMSTORE_OFFSET(current_context);
+		cmds[4] = (unsigned int)yamato_device->drawctxt_active;
+		kgsl_ringbuffer_issuecmds(device, 0, cmds, 5);
 
 		/* restore gmem.
 		 *  (note: changes shader. shader must not already be restored.)

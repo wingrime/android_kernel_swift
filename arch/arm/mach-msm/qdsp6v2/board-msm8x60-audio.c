@@ -321,10 +321,12 @@ static int msm_snddev_poweramp_on(void)
 		pr_err("%s: d0 gpio configuration failed\n", __func__);
 		goto config_gpio_fail;
 	}
-	rc = config_class_d1_gpio(1);
-	if (rc) {
-		pr_err("%s: d0 gpio configuration failed\n", __func__);
-		config_class_d0_gpio(0);
+	if (!machine_is_msm8x60_qt()) {
+		rc = config_class_d1_gpio(1);
+		if (rc) {
+			pr_err("%s: d1 gpio configuration failed\n", __func__);
+			config_class_d0_gpio(0);
+		}
 	}
 config_gpio_fail:
 	return rc;
@@ -334,7 +336,10 @@ static void msm_snddev_poweramp_off(void)
 {
 	pr_debug("%s: disable stereo spkr amp\n", __func__);
 	config_class_d0_gpio(0);
-	config_class_d1_gpio(0);
+
+	if (!machine_is_msm8x60_qt())
+		config_class_d1_gpio(0);
+
 	msleep(30);
 }
 

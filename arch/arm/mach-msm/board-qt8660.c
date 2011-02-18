@@ -1200,12 +1200,12 @@ static struct msm_ssbi_platform_data msm_ssbi3_pdata = {
 #endif
 
 #ifdef CONFIG_FB_MSM_HDMI_MSM_PANEL
-/* prim = 1024 x 600 x 4(bpp) x 2(pages)
+/* prim = 1376 x 768 x 4(bpp) x 2(pages)
  * hdmi = 1920 x 1080 x 2(bpp) x 1(page)
  * Note: must be multiple of 4096 */
-#define MSM_FB_SIZE roundup(0x4B0000 + 0x3F4800 + MSM_FB_DSUB_PMEM_ADDER, 4096)
+#define MSM_FB_SIZE roundup(0x810000 + 0x3F4800 + MSM_FB_DSUB_PMEM_ADDER, 4096)
 #else /* CONFIG_FB_MSM_HDMI_MSM_PANEL */
-#define MSM_FB_SIZE roundup(0x4B0000 + MSM_FB_DSUB_PMEM_ADDER, 4096)
+#define MSM_FB_SIZE roundup(0x810000 + MSM_FB_DSUB_PMEM_ADDER, 4096)
 #endif /* CONFIG_FB_MSM_HDMI_MSM_PANEL */
 #define MSM_PMEM_SF_SIZE 0x4000000 /* 64 Mbytes */
 
@@ -1280,7 +1280,7 @@ static struct resource msm_fb_resources[] = {
 
 static int msm_fb_detect_panel(const char *name)
 {
-	if (!strcmp(name, "lcdc_samsung_wsvga"))
+	if (!strcmp(name, "lcdc_chimei_lvds_wxga"))
 		return 0;
 	pr_warning("%s: not supported '%s'", __func__, name);
 	return -ENODEV;
@@ -1375,6 +1375,28 @@ static struct platform_device android_pmem_smipool_device = {
 };
 
 #endif
+
+#define GPIO_PM8058_LED_PWM	0	/* pm8058, gpio-24, channel 0  */
+#define GPIO_PM8058_LED_EN	0	/* pm8058, gpio-1 */
+#define GPIO_LVDS_PWR_DOWN	30	/* msm  */
+
+static int chimei_gpios[3] = {
+		GPIO_PM8058_LED_PWM,
+		PM8058_GPIO_PM_TO_SYS(GPIO_PM8058_LED_EN),
+		GPIO_LVDS_PWR_DOWN
+};
+
+static struct msm_panel_common_pdata lcdc_chimei_panel_data = {
+	.gpio_num = chimei_gpios,
+};
+
+static struct platform_device lcdc_chimei_panel_device = {
+	.name = "lcdc_chimei_lvds_wxga",
+	.id = 0,
+	.dev = {
+		.platform_data = &lcdc_chimei_panel_data,
+	}
+};
 
 #ifdef CONFIG_FB_MSM_HDMI_MSM_PANEL
 static struct resource hdmi_msm_resources[] = {
@@ -2053,6 +2075,7 @@ static struct platform_device *qt_devices[] __initdata = {
 #endif
 	&msm_fb_device,
 	&msm_device_kgsl,
+	&lcdc_chimei_panel_device,
 #ifdef CONFIG_FB_MSM_HDMI_MSM_PANEL
 	&hdmi_msm_device,
 #endif /* CONFIG_FB_MSM_HDMI_MSM_PANEL */
@@ -2158,6 +2181,19 @@ static int pm8058_gpios_init(void)
 	};
 
 	struct pm8058_gpio_cfg gpio_cfgs[] = {
+		{ /* chimei panel, led_en */
+			0,
+			{
+				.direction	= PM_GPIO_DIR_OUT,
+				.output_value	= 1,
+				.output_buffer	= PM_GPIO_OUT_BUF_CMOS,
+				.pull		= PM_GPIO_PULL_UP_30,
+				.out_strength	= PM_GPIO_STRENGTH_HIGH,
+				.function	= PM_GPIO_FUNC_NORMAL,
+				.vin_sel	= 2,
+				.inv_int_pol	= 0,
+			}
+		},
 		{ /* FFA ethernet */
 			6,
 			{
@@ -3995,6 +4031,66 @@ static void __init msm8x60_init_mmc(void)
 #endif
 }
 
+#define LCDC_NUM_GPIO 28
+#define LCDC_GPIO_START 0
+
+static void lcdc_chimei_panel_power(int on)
+{
+	int n, ret = 0;
+#ifdef USE_VREG_L2B
+	static struct regulator *vreg_l2b;
+
+	/*
+	 * chimei panle power always on.
+	 * no power control necessary.
+	 */
+
+	if (vreg_l2b == NULL) {
+		vreg_l2b = regulator_get(NULL, "8901_l2");
+		if (IS_ERR(vreg_l2b)) {
+			pr_debug("%s: vreg_l2b failed\n", __func__);
+			ret = PTR_ERR(vreg_l2b);
+			return ret;
+		}
+	}
+
+	if (on) {
+		ret = regulator_set_voltage(vreg_l2b, 3300000, 3300000);
+		if (ret)
+			goto out;
+		ret = regulator_enable(vreg_l2b);
+		if (ret)
+			goto out;
+	} else {
+		regulator_disable(display_reg);
+	}
+#endif
+
+	/* configure gpio pins */
+	for (n = 0; n < LCDC_NUM_GPIO; n++) {
+		if (on) {
+			ret = gpio_request(LCDC_GPIO_START + n, "LCDC_GPIO");
+			if (unlikely(ret)) {
+				pr_err("%s not able to get gpio\n", __func__);
+				break;
+			}
+		} else
+			gpio_free(LCDC_GPIO_START + n);
+	}
+
+	if (ret) {
+		for (n--; n >= 0; n--)
+			gpio_free(LCDC_GPIO_START + n);
+	}
+
+#ifdef USE_VREG_L2B
+out:
+	regulator_disable(vreg_l2b);
+	regulator_put(vreg_l2b);
+	vreg_l2b = NULL;
+#endif
+}
+
 #ifdef CONFIG_FB_MSM_HDMI_MSM_PANEL
 #define _GET_REGULATOR(var, name) do {				\
 	var = regulator_get(NULL, name);			\
@@ -4165,6 +4261,21 @@ error:
 
 #endif /* CONFIG_FB_MSM_HDMI_MSM_PANEL */
 
+static int lcdc_panel_power(int on)
+{
+	int flag_on = !!on;
+	static int lcdc_power_save_on;
+
+	if (lcdc_power_save_on == flag_on)
+		return 0;
+
+	lcdc_power_save_on = flag_on;
+
+	lcdc_chimei_panel_power(on);
+
+	return 0;
+}
+
 #ifdef CONFIG_MSM_BUS_SCALING
 static struct msm_bus_vectors mdp_init_vectors[] = {
 	/* For now, 0th array entry is reserved.
@@ -4322,18 +4433,23 @@ static struct msm_bus_scale_pdata mdp_bus_scale_pdata = {
 };
 #endif
 
-#define MDP_VSYNC_GPIO 28
+static struct lcdc_platform_data lcdc_pdata = {
+	.lcdc_power_save   = lcdc_panel_power,
+};
+
+#define MDP_VSYNC_GPIO		28
 
 static int mdp_core_clk_rate_table[] = {
 	59080000,
-	59080000,
-	85330000,
+	128000000,
+	160000000,
 	200000000,
 	200000000,
 };
+
 static struct msm_panel_common_pdata mdp_pdata = {
 	.gpio = MDP_VSYNC_GPIO,
-	.mdp_core_clk_rate = 59080000,
+	.mdp_core_clk_rate = 160000000,
 	.mdp_core_clk_table = mdp_core_clk_rate_table,
 	.num_mdp_clk = ARRAY_SIZE(mdp_core_clk_rate_table),
 #ifdef CONFIG_MSM_BUS_SCALING
@@ -4344,6 +4460,7 @@ static struct msm_panel_common_pdata mdp_pdata = {
 static void __init msm_fb_add_devices(void)
 {
 	msm_fb_register_device("mdp", &mdp_pdata);
+	msm_fb_register_device("lcdc", &lcdc_pdata);
 }
 
 #if (defined(CONFIG_MARIMBA_CORE)) && \

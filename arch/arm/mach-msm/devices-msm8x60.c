@@ -34,7 +34,6 @@
 #include "clock-voter.h"
 #include "devices.h"
 #include "devices-msm8x60.h"
-#include "devices-msm8x60-iommu.h"
 #include <linux/dma-mapping.h>
 #include <linux/irq.h>
 #include <linux/clk.h>

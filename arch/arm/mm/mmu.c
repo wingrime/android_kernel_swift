@@ -256,6 +256,18 @@ static struct mem_type mem_types[] = {
 		.prot_sect = PMD_TYPE_SECT | PMD_SECT_AP_WRITE,
 		.domain    = DOMAIN_KERNEL,
 	},
+	[MT_MEMORY_R] = {
+		.prot_sect = PMD_TYPE_SECT | PMD_SECT_XN,
+		.domain    = DOMAIN_KERNEL,
+	},
+	[MT_MEMORY_RW] = {
+		.prot_sect = PMD_TYPE_SECT | PMD_SECT_AP_WRITE | PMD_SECT_XN,
+		.domain    = DOMAIN_KERNEL,
+	},
+	[MT_MEMORY_RX] = {
+		.prot_sect = PMD_TYPE_SECT,
+		.domain    = DOMAIN_KERNEL,
+	},
 	[MT_ROM] = {
 		.prot_sect = PMD_TYPE_SECT,
 		.domain    = DOMAIN_KERNEL,
@@ -419,6 +431,8 @@ static void __init build_mem_type_table(void)
 		 * from SVC mode and no access from userspace.
 		 */
 		mem_types[MT_ROM].prot_sect |= PMD_SECT_APX|PMD_SECT_AP_WRITE;
+		mem_types[MT_MEMORY_RX].prot_sect |= PMD_SECT_APX|PMD_SECT_AP_WRITE;
+		mem_types[MT_MEMORY_R].prot_sect |= PMD_SECT_APX|PMD_SECT_AP_WRITE;
 		mem_types[MT_MINICLEAN].prot_sect |= PMD_SECT_APX|PMD_SECT_AP_WRITE;
 		mem_types[MT_CACHECLEAN].prot_sect |= PMD_SECT_APX|PMD_SECT_AP_WRITE;
 
@@ -434,6 +448,9 @@ static void __init build_mem_type_table(void)
 		mem_types[MT_DEVICE_CACHED].prot_sect |= PMD_SECT_S;
 		mem_types[MT_DEVICE_CACHED].prot_pte |= L_PTE_SHARED;
 		mem_types[MT_MEMORY].prot_sect |= PMD_SECT_S;
+		mem_types[MT_MEMORY_R].prot_sect |= PMD_SECT_S;
+		mem_types[MT_MEMORY_RW].prot_sect |= PMD_SECT_S;
+		mem_types[MT_MEMORY_RX].prot_sect |= PMD_SECT_S;
 		mem_types[MT_MEMORY_NONCACHED].prot_sect |= PMD_SECT_S;
 #endif
 	}
@@ -471,6 +488,9 @@ static void __init build_mem_type_table(void)
 	mem_types[MT_LOW_VECTORS].prot_l1 |= ecc_mask;
 	mem_types[MT_HIGH_VECTORS].prot_l1 |= ecc_mask;
 	mem_types[MT_MEMORY].prot_sect |= ecc_mask | cp->pmd;
+	mem_types[MT_MEMORY_R].prot_sect |= ecc_mask | cp->pmd;
+	mem_types[MT_MEMORY_RW].prot_sect |= ecc_mask | cp->pmd;
+	mem_types[MT_MEMORY_RX].prot_sect |= ecc_mask | cp->pmd;
 	mem_types[MT_ROM].prot_sect |= cp->pmd;
 
 	switch (cp->pmd) {
@@ -1040,9 +1060,57 @@ static inline void map_memory_bank(struct membank *bank)
 	map.pfn = bank_pfn_start(bank);
 	map.virtual = __phys_to_virt(bank_phys_start(bank));
 	map.length = bank_phys_size(bank);
+#ifdef CONFIG_STRICT_MEMORY_RWX
+	map.type = MT_MEMORY_RW;
+#else
+	map.type = MT_MEMORY;
+#endif
+
+	create_mapping(&map);
+}
+
+static inline void map_memory_bank0(void)
+{
+#ifdef CONFIG_STRICT_MEMORY_RWX
+	struct map_desc map;
+#endif
+	struct meminfo *mi = &meminfo;
+	struct membank *bank = &mi->bank[0];
+
+#ifdef CONFIG_STRICT_MEMORY_RWX
+	printk(KERN_INFO "restricting memory access in bank 0\n");
+
+	map.pfn = bank_pfn_start(bank);
+	map.virtual = __phys_to_virt(bank_phys_start(bank));
+	map.length = (int)_text - map.virtual;
 	map.type = MT_MEMORY;
 
 	create_mapping(&map);
+
+	map.pfn = __phys_to_pfn(__pa(_text));
+	map.virtual = (unsigned long)_text;
+	map.length = __start_rodata - _text;
+	map.type = MT_MEMORY_RX;
+
+	create_mapping(&map);
+
+	map.pfn = __phys_to_pfn(__pa(__start_rodata));
+	map.virtual = (unsigned long)__start_rodata;
+	map.length = _sdata - __start_rodata;
+	map.type = MT_MEMORY_R;
+
+	create_mapping(&map);
+
+	map.pfn = __phys_to_pfn(__pa(_sdata));
+	map.virtual = (unsigned long)_sdata;
+	map.length = bank->size - ((int)_sdata -
+		__phys_to_virt(bank_phys_start(bank)));
+	map.type = MT_MEMORY_RW;
+
+	create_mapping(&map);
+#else
+	map_memory_bank(bank);
+#endif
 }
 
 static void __init map_lowmem(void)
@@ -1051,7 +1119,9 @@ static void __init map_lowmem(void)
 	int i;
 
 	/* Map all the lowmem memory banks. */
-	for (i = 0; i < mi->nr_banks; i++) {
+	map_memory_bank0();
+
+	for (i = 1; i < mi->nr_banks; i++) {
 		struct membank *bank = &mi->bank[i];
 
 		if (!bank->highmem)

@@ -7,6 +7,9 @@
 #include <asm/thread_info.h>
 #include <asm/memory.h>
 #include <asm/page.h>
+#ifdef CONFIG_STRICT_MEMORY_RWX
+#include <asm/pgtable.h>
+#endif
 	
 OUTPUT_ARCH(arm)
 ENTRY(stext)
@@ -82,6 +85,9 @@ SECTIONS
 #endif
 	}
 
+#ifdef CONFIG_STRICT_MEMORY_RWX
+	. = ALIGN(1<<SECTION_SHIFT);
+#endif
 	.text : {			/* Real text segment		*/
 		_text = .;		/* Text and read-only data	*/
 			__exception_text_start = .;
@@ -97,6 +103,9 @@ SECTIONS
 			*(.gnu.warning)
 			*(.rodata)
 			*(.rodata.*)
+#ifdef CONFIG_STRICT_MEMORY_RWX
+			. = ALIGN(1<<SECTION_SHIFT);
+#endif
 			*(.glue_7)
 			*(.glue_7t)
 		*(.got)			/* Global offset table		*/
@@ -127,7 +136,11 @@ SECTIONS
 	__data_loc = ALIGN(4);		/* location in binary */
 	. = PAGE_OFFSET + TEXT_OFFSET;
 #else
+#ifdef CONFIG_STRICT_MEMORY_RWX
+	. = ALIGN(1<<SECTION_SHIFT);
+#else
 	. = ALIGN(THREAD_SIZE);
+#endif
 	__data_loc = .;
 #endif
 

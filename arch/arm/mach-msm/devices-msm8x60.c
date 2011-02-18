@@ -1712,6 +1712,7 @@ struct clk_lookup msm_clocks_8x60[] = {
 	CLK_8X60("i2s_spkr_bit_clk",	SPARE_I2S_SPKR_BIT_CLK,	NULL, OFF),
 	CLK_8X60("pcm_clk",		PCM_CLK,		NULL, OFF),
 	CLK_8X60("iommu_clk",           JPEGD_AXI_CLK, "msm_iommu.0", 0),
+	CLK_8X60("iommu_clk",           IJPEG_AXI_CLK, "msm_iommu.5", 0),
 	CLK_8X60("iommu_clk",           VFE_AXI_CLK, "msm_iommu.6", 0),
 	CLK_8X60("iommu_clk",           VCODEC_AXI_CLK, "msm_iommu.7", 0),
 	CLK_8X60("iommu_clk",           VCODEC_AXI_CLK, "msm_iommu.8", 0),

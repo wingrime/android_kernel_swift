@@ -30,6 +30,8 @@
 #include <linux/delay.h>
 #include <linux/slab.h>
 #include <linux/random.h>
+#include <linux/platform_device.h>
+#include <mach/sdio_smem.h>
 
 #include <mach/sdio_al.h>
 
@@ -40,6 +42,7 @@
 #define TEST_CONFIG_SIGNATURE 0xBEEFCAFE
 
 #define MAX_XFER_SIZE (16*1024)
+#define SMEM_MAX_XFER_SIZE 0xBC000
 
 #define CHANNEL_NAME_SIZE 9
 
@@ -127,6 +130,12 @@ struct test_context {
 	u32 signature;
 
 	int runtime_debug;
+
+	struct platform_device smem_pdev;
+	struct sdio_smem_client *sdio_smem;
+	int smem_was_init;
+	u8 *smem_buf;
+	int smem_result_printed;
 };
 
 static struct test_context *test_ctx;
@@ -626,6 +635,66 @@ static void notify(void *priv, unsigned channel_event)
 	}
 }
 
+#ifdef CONFIG_MSM_SDIO_SMEM
+static int sdio_smem_test_cb(int event)
+{
+	struct test_channel *tch = test_ctx->test_ch_arr[SDIO_SMEM];
+	pr_debug(TEST_MODULE_NAME ":%s: Received event %d\n", __func__, event);
+
+	switch (event) {
+	case SDIO_SMEM_EVENT_READ_DONE:
+		tch->rx_bytes += SMEM_MAX_XFER_SIZE;
+		if (tch->rx_bytes >= 40000000) {
+			if (!test_ctx->smem_result_printed) {
+				pr_info(TEST_MODULE_NAME ":SMEM test PASSED\n");
+				test_ctx->smem_result_printed = 1;
+			}
+
+		}
+		break;
+	case SDIO_SMEM_EVENT_READ_ERR:
+		pr_err(TEST_MODULE_NAME ":Read overflow, SMEM test FAILED\n");
+		return -EIO;
+	default:
+		pr_err(TEST_MODULE_NAME ":Unhandled event\n");
+		return -EINVAL;
+	}
+	return 0;
+}
+
+static int sdio_smem_test_probe(struct platform_device *pdev)
+{
+	int ret = 0;
+
+	test_ctx->sdio_smem = container_of(pdev, struct sdio_smem_client,
+					   plat_dev);
+
+	test_ctx->sdio_smem->buf = test_ctx->smem_buf;
+	test_ctx->sdio_smem->size = SMEM_MAX_XFER_SIZE;
+	test_ctx->sdio_smem->cb_func = sdio_smem_test_cb;
+	ret = sdio_smem_register_client();
+	if (ret)
+		pr_info(TEST_MODULE_NAME "%s: Error (%d) registering sdio_smem "
+					 "test client\n",
+			__func__, ret);
+	return ret;
+}
+
+static struct platform_driver sdio_smem_drv = {
+	.probe		= sdio_smem_test_probe,
+	.driver		= {
+		.name	= "SDIO_SMEM_CLIENT",
+		.owner	= THIS_MODULE,
+	},
+};
+#endif
+
+
+static void default_sdio_al_test_release(struct device *dev)
+{
+	pr_info(MODULE_NAME ":platform device released.\n");
+}
+
 /**
  * Test Main
  */
@@ -635,6 +704,8 @@ static int test_start(void)
 	int i;
 
 	pr_debug(TEST_MODULE_NAME ":Starting Test ....\n");
+
+	test_ctx->smem_result_printed = 0;
 
 	/* Open The Channels */
 	for (i = 0; i < SDIO_MAX_CHANNELS; i++) {
@@ -655,16 +726,24 @@ static int test_start(void)
 			pr_info(TEST_MODULE_NAME ":openning channel %s\n",
 				tch->name);
 			tch->ch_ready = true;
-			ret = sdio_open(tch->name , &tch->ch, tch, notify);
-			if (ret) {
-				pr_info(TEST_MODULE_NAME ":openning channel %s "
-							 "failed\n",
-				tch->name);
-				tch->ch_ready = false;
+			if (tch->ch_id == SDIO_SMEM) {
+				test_ctx->smem_pdev.name = "SDIO_SMEM";
+				test_ctx->smem_pdev.dev.release =
+					default_sdio_al_test_release;
+				platform_device_register(&test_ctx->smem_pdev);
+			} else {
+				ret = sdio_open(tch->name , &tch->ch, tch,
+						notify);
+				if (ret) {
+					pr_info(TEST_MODULE_NAME
+						":openning channel %s failed\n",
+					tch->name);
+					tch->ch_ready = false;
+				}
 			}
 		}
 
-		if (tch->ch_ready)
+		if ((tch->ch_ready) && (tch->ch_id != SDIO_SMEM))
 			send_config_msg(tch);
 	}
 
@@ -672,7 +751,8 @@ static int test_start(void)
 	for (i = 0; i < SDIO_MAX_CHANNELS; i++) {
 		struct test_channel *tch = test_ctx->test_ch_arr[i];
 
-		if ((!tch) || (!tch->is_used) || (!tch->ch_ready))
+		if ((!tch) || (!tch->is_used) || (!tch->ch_ready) ||
+		    (tch->ch_id == SDIO_SMEM))
 			continue;
 		queue_work(tch->workqueue, &tch->test_work.work);
 	}
@@ -682,11 +762,11 @@ static int test_start(void)
 	return 0;
 }
 
-static void set_params_loopback_9k(struct test_channel *tch)
+static int set_params_loopback_9k(struct test_channel *tch)
 {
 	if (!tch) {
 		pr_err(TEST_MODULE_NAME ":NULL channel\n");
-		return;
+		return -EINVAL;
 	}
 	tch->is_used = 1;
 	tch->test_type = SENDER_TEST;
@@ -700,13 +780,15 @@ static void set_params_loopback_9k(struct test_channel *tch)
 
 	if (tch->ch_id == SDIO_RPC)
 		tch->config_msg.packet_length = 128;
+
+	return 0;
 }
 
-static void set_params_a2_perf(struct test_channel *tch)
+static int set_params_a2_perf(struct test_channel *tch)
 {
 	if (!tch) {
 		pr_err(TEST_MODULE_NAME ":NULL channel\n");
-		return;
+		return -EINVAL;
 	}
 	tch->is_used = 1;
 	tch->test_type = A2_TEST;
@@ -721,6 +803,17 @@ static void set_params_a2_perf(struct test_channel *tch)
 	tch->config_msg.num_packets = 10000;
 	tch->config_msg.sleep_interval = 0;
 	tch->config_msg.num_iterations = 1;
+	return 0;
+}
+
+static int set_params_smem_test(struct test_channel *tch)
+{
+	if (!tch) {
+		pr_err(TEST_MODULE_NAME ":NULL channel\n");
+		return -EINVAL;
+	}
+	tch->is_used = 1;
+	return 0;
 }
 
 /**
@@ -741,35 +834,63 @@ ssize_t test_write(struct file *filp, const char __user *buf, size_t size,
 	case 1:
 		/* RPC */
 		pr_debug(TEST_MODULE_NAME " --RPC sender--.\n");
-		set_params_loopback_9k(test_ctx->test_ch_arr[SDIO_RPC]);
+		if (set_params_loopback_9k(test_ctx->test_ch_arr[SDIO_RPC]))
+			return size;
 		break;
 	case 2:
 		/* RPC, QMI and DIAG */
 		pr_debug(TEST_MODULE_NAME " --RPC, QMI and DIAG sender--.\n");
-		set_params_loopback_9k(test_ctx->test_ch_arr[SDIO_RPC]);
-		set_params_loopback_9k(test_ctx->test_ch_arr[SDIO_QMI]);
-		set_params_loopback_9k(test_ctx->test_ch_arr[SDIO_DIAG]);
+		if (set_params_loopback_9k(test_ctx->test_ch_arr[SDIO_RPC]) ||
+		    set_params_loopback_9k(test_ctx->test_ch_arr[SDIO_QMI]) ||
+		    set_params_loopback_9k(test_ctx->test_ch_arr[SDIO_DIAG]))
+			return size;
+		break;
+	case 4:
+		pr_debug(TEST_MODULE_NAME " --SMEM--.\n");
+		if (set_params_smem_test(test_ctx->test_ch_arr[SDIO_SMEM]))
+			return size;
+		break;
+
+	case 5:
+		pr_debug(TEST_MODULE_NAME " --SMEM and RPC--.\n");
+		if (set_params_loopback_9k(test_ctx->test_ch_arr[SDIO_RPC]) ||
+		    set_params_smem_test(test_ctx->test_ch_arr[SDIO_SMEM]))
+			return size;
 		break;
 	case 6:
 		pr_debug(TEST_MODULE_NAME " --RmNet A2 Performance--.\n");
-		set_params_a2_perf(test_ctx->test_ch_arr[SDIO_RMNT]);
+		if (set_params_a2_perf(test_ctx->test_ch_arr[SDIO_RMNT]))
+			return size;
 		break;
 
 	case 7:
 		pr_debug(TEST_MODULE_NAME " --DUN A2 Performance--.\n");
-		set_params_a2_perf(test_ctx->test_ch_arr[SDIO_DUN]);
+		if (set_params_a2_perf(test_ctx->test_ch_arr[SDIO_DUN]))
+			return size;
 		break;
 	case 8:
 		pr_debug(TEST_MODULE_NAME " --RmNet and DUN A2 Performance--."
 					  "\n");
-		set_params_a2_perf(test_ctx->test_ch_arr[SDIO_RMNT]);
-		set_params_a2_perf(test_ctx->test_ch_arr[SDIO_DUN]);
+		if (set_params_a2_perf(test_ctx->test_ch_arr[SDIO_RMNT]) ||
+		    set_params_a2_perf(test_ctx->test_ch_arr[SDIO_DUN]))
+			return size;
 		break;
 	case 9:
 		pr_debug(TEST_MODULE_NAME " --RPC sender and RmNet A2 "
 					  "Performance--.\n");
-		set_params_loopback_9k(test_ctx->test_ch_arr[SDIO_RPC]);
-		set_params_a2_perf(test_ctx->test_ch_arr[SDIO_RMNT]);
+		if (set_params_loopback_9k(test_ctx->test_ch_arr[SDIO_RPC]) ||
+		    set_params_a2_perf(test_ctx->test_ch_arr[SDIO_RMNT]))
+			return size;
+		break;
+	case 10:
+		pr_debug(TEST_MODULE_NAME " --All the channels--.\n");
+		if (set_params_loopback_9k(test_ctx->test_ch_arr[SDIO_RPC]) ||
+		    set_params_loopback_9k(test_ctx->test_ch_arr[SDIO_QMI]) ||
+		    set_params_loopback_9k(test_ctx->test_ch_arr[SDIO_DIAG]) ||
+		    set_params_a2_perf(test_ctx->test_ch_arr[SDIO_RMNT]) ||
+		    set_params_a2_perf(test_ctx->test_ch_arr[SDIO_DUN]) ||
+		    set_params_smem_test(test_ctx->test_ch_arr[SDIO_SMEM]))
+			return size;
 		break;
 	case 98:
 		pr_info(TEST_MODULE_NAME " set runtime debug on");
@@ -800,6 +921,9 @@ int test_channel_init(char *name)
 {
 	struct test_channel *test_ch;
 	int ch_id = 0;
+#ifdef CONFIG_MSM_SDIO_SMEM
+	int ret;
+#endif
 
 	pr_debug(TEST_MODULE_NAME ":%s.\n", __func__);
 	pr_info(TEST_MODULE_NAME ": init test cahnnel %s.\n", name);
@@ -829,14 +953,39 @@ int test_channel_init(char *name)
 			return -ENOMEM;
 		}
 
-		test_ch->workqueue =
-			create_singlethread_workqueue(test_ch->name);
-		test_ch->test_work.test_ch = test_ch;
-		INIT_WORK(&test_ch->test_work.work, worker);
+		if (test_ch->ch_id == SDIO_SMEM) {
+			test_ctx->smem_buf = kzalloc(SMEM_MAX_XFER_SIZE,
+						     GFP_KERNEL);
+			if (test_ctx->smem_buf == NULL) {
+				pr_err(TEST_MODULE_NAME ":%s: Unable to "
+							"allocate smem buf\n",
+				       __func__);
+				kfree(test_ch);
+				test_ctx->test_ch = NULL;
+				return -ENOMEM;
+			}
 
-		init_waitqueue_head(&test_ch->wait_q);
+#ifdef CONFIG_MSM_SDIO_SMEM
+			ret = platform_driver_register(&sdio_smem_drv);
+			if (ret) {
+				pr_err(TEST_MODULE_NAME ":%s: Unable to "
+							"register sdio smem "
+							"test client\n",
+				       __func__);
+				return ret;
+			}
+#endif
+		} else {
+			test_ch->workqueue =
+				create_singlethread_workqueue(test_ch->name);
+			test_ch->test_work.test_ch = test_ch;
+			INIT_WORK(&test_ch->test_work.work, worker);
+
+			init_waitqueue_head(&test_ch->wait_q);
+		}
 	} else {
-		pr_err("trying to call test_channel_init twice for chan %d\n",
+		pr_err(TEST_MODULE_NAME ":trying to call test_channel_init "
+					"twice for chan %d\n",
 		       ch_id);
 	}
 

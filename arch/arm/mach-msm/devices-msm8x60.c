@@ -643,14 +643,10 @@ struct kgsl_platform_data kgsl_pdata = {
 #endif
 #ifdef CONFIG_KGSL_PER_PROCESS_PAGE_TABLE
 	.pt_va_size = SZ_32M,
-	/* Maximum of 32 concurrent processes */
-	.pt_max_count = 32,
 #else
 	/* Set the GPU pagetable size to the maximum practical
 	 * limit */
 	.pt_va_size = SZ_256M - SZ_64K,
-	/* We only ever have one pagetable for everybody */
-	.pt_max_count = 1,
 #endif
 };
 

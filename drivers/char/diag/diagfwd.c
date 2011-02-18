@@ -491,7 +491,8 @@ static int diag_process_apps_pkt(unsigned char *buf, int len)
 		/* Not required, represents that command isnt sent to modem */
 		return 0;
 	}
-	else if (CHK_APQ_GET_ID()) { /* Check for ID for APQ8060 */
+	 /* Check for ID for APQ8060 AND NO MODEM present */
+	else if (!(driver->ch) && CHK_APQ_GET_ID()) {
 		/* Respond to polling for Apps only DIAG */
 		if ((*buf == 0x4b) && (*(buf+1) == 0x32) &&
 							 (*(buf+2) == 0x03)) {
@@ -615,7 +616,7 @@ void diag_process_hdlc(void *data, unsigned len)
 		driver->debug_flag = 0;
 	}
 	/* implies this packet is NOT meant for apps */
-	if (type == 1 && CHK_APQ_GET_ID()) {
+	if (!(driver->ch) && type == 1 && CHK_APQ_GET_ID()) {
 		if (driver->chqdsp)
 			smd_write(driver->chqdsp, driver->hdlc_buf,
 							 hdlc.dest_idx - 3);
@@ -843,7 +844,7 @@ static int diag_smd_probe(struct platform_device *pdev)
 #endif
 	pm_runtime_set_active(&pdev->dev);
 	pm_runtime_enable(&pdev->dev);
-	pr_debug("diag opened SMD port ; r = %d\n", r);
+	pr_debug("diag: opened SMD port ; r = %d\n", r);
 
 	return 0;
 }

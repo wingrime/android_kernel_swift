@@ -29,7 +29,6 @@
 #include <mach/msm_bus.h>
 #include <linux/vmalloc.h>
 
-#include "kgsl_drawctxt.h"
 #include "kgsl.h"
 #include "kgsl_yamato.h"
 #include "kgsl_log.h"
@@ -37,6 +36,7 @@
 #include "kgsl_cmdstream.h"
 #include "kgsl_postmortem.h"
 #include "kgsl_cffdump.h"
+#include "kgsl_drawctxt.h"
 
 #include "yamato_reg.h"
 
@@ -966,7 +966,7 @@ kgsl_yamato_recover_hang(struct kgsl_device *device)
 	unsigned int enable_ts;
 	unsigned int soptimestamp;
 	unsigned int eoptimestamp;
-	int i;
+	struct kgsl_yamato_context *drawctxt;
 
 	KGSL_DRV_ERR("Starting recovery from 3D GPU hang....\n");
 	rb_buffer = vmalloc(rb->buffer_desc.size);
@@ -1023,14 +1023,12 @@ kgsl_yamato_recover_hang(struct kgsl_device *device)
 	wmb();
 	/* Mark the invalid context so no more commands are accepted from
 	 * that context */
-	for (i = 0; i < yamato_device->drawctxt_count; i++)
-		if (bad_context == (unsigned int)yamato_device->drawctxt[i]) {
-			KGSL_CTXT_ERR("Context that caused a GPU hang: %x,"
-					" index: %d\n", bad_context, i);
-			yamato_device->drawctxt[i]->flags |=
-						CTXT_FLAGS_GPU_HANG;
-			break;
-		}
+
+	drawctxt = (struct kgsl_yamato_context *) bad_context;
+
+	KGSL_CTXT_ERR("Context that caused a GPU hang: %x\n", bad_context);
+
+	drawctxt->flags |= CTXT_FLAGS_GPU_HANG;
 
 	/* Restore valid commands in ringbuffer */
 	kgsl_ringbuffer_restore(rb, rb_buffer, num_rb_contents);
@@ -1450,6 +1448,7 @@ static long kgsl_yamato_ioctl(struct kgsl_device_private *dev_priv,
 {
 	int result = 0;
 	struct kgsl_drawctxt_set_bin_base_offset binbase;
+	struct kgsl_context *context;
 
 	switch (cmd) {
 	case IOCTL_KGSL_DRAWCTXT_SET_BIN_BASE_OFFSET:
@@ -1459,10 +1458,11 @@ static long kgsl_yamato_ioctl(struct kgsl_device_private *dev_priv,
 			break;
 		}
 
-		if (test_bit(binbase.drawctxt_id, dev_priv->ctxt_bitmap)) {
+		context = kgsl_find_context(dev_priv, binbase.drawctxt_id);
+		if (context) {
 			result = kgsl_drawctxt_set_bin_base_offset(
 					dev_priv->device,
-					binbase.drawctxt_id,
+					context,
 					binbase.offset);
 		} else {
 			result = -EINVAL;

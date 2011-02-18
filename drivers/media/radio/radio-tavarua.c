@@ -2279,6 +2279,7 @@ static int tavarua_vidioc_g_ctrl(struct file *file, void *priv,
 	int retval = 0;
 	unsigned char xfr_buf[XFR_REG_NUM];
 	signed char cRmssiThreshold;
+	signed char ioc;
 
 	switch (ctrl->id) {
 	case V4L2_CID_AUDIO_VOLUME:
@@ -2297,6 +2298,54 @@ static int tavarua_vidioc_g_ctrl(struct file *file, void *priv,
 		break;
 	case V4L2_CID_PRIVATE_TAVARUA_STATE:
 		ctrl->value = (radio->registers[RDCTRL] & 0x03);
+		break;
+	case V4L2_CID_PRIVATE_TAVARUA_IOVERC:
+		retval = tavarua_read_registers(radio, IOVERC, 1);
+		if (retval < 0)
+			return retval;
+		ioc = radio->registers[IOVERC];
+		ctrl->value = ioc;
+		break;
+	case V4L2_CID_PRIVATE_TAVARUA_INTDET:
+		xfr_buf[0] = INTDET_PEEK_MSB;
+		xfr_buf[1] = INTDET_PEEK_LSB;
+		FMDBG("xfr_buf[2]: %x\n", xfr_buf[2]);
+		xfr_buf[2] = 0;
+		FMDBG("After reset: xfr_buf[2]: %x\n", xfr_buf[2]);
+
+		/*Write the MSB of the address to peek*/
+		retval = tavarua_write_register(radio, XFRDAT0, xfr_buf[0]);
+		if (retval < 0) {
+			FMDBG("write failure, xfrdat0\n");
+			return retval;
+		}
+		/*Write the LSB of the address to peek*/
+		retval = tavarua_write_register(radio, XFRDAT1, xfr_buf[1]);
+		if (retval < 0) {
+			FMDBG("write failure, xfrdat1\n");
+			return retval;
+		}
+		/*Clear the xfrdata2 */
+		retval = tavarua_write_register(radio, XFRDAT2, xfr_buf[2]);
+		if (retval < 0) {
+			FMDBG("write failure, xfrdat2\n");
+			return retval;
+		}
+		/*Set the memaccess mode in XFRCTRL*/
+		retval = tavarua_write_register(radio, XFRCTRL, INTDET_PEEK);
+		if (retval < 0) {
+			FMDBG("write failure, xfrctrl\n");
+			return retval;
+		}
+		FMDBG("INT_DET:Sync write success\n");
+		/*Wait for the XFR interrupt */
+		msleep(TAVARUA_DELAY*2);
+		retval = tavarua_read_registers(radio, XFRDAT2, 1);
+		if (retval < 0)
+			FMDBG("INT_DET: Read failure\n");
+
+		ctrl->value = radio->registers[XFRDAT2];
+		FMDBG("Returning INTDET: %x\n", ctrl->value);
 		break;
 	case V4L2_CID_PRIVATE_TAVARUA_REGION:
 		ctrl->value = radio->region_params.region;

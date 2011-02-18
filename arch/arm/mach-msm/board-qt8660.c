@@ -39,6 +39,7 @@
 #include <linux/spi/spi.h>
 #include <linux/dma-mapping.h>
 #include <linux/gpio_keys.h>
+#include <linux/input/matrix_keypad.h>
 
 #ifdef CONFIG_ANDROID_PMEM
 #include <linux/android_pmem.h>
@@ -104,7 +105,7 @@
 
 #define GPIO_AUX_CAM_2P7_EN	94
 #define GPIO_WEB_CAMIF_STANDBY	105
-#define GPIO_MS_SYS_RESET_N	PM8058_GPIO_PM_TO_SYS(3)
+#define GPIO_MS_SYS_RESET_N	PM8058_GPIO_PM_TO_SYS(2)
 /*
  * The UI_INTx_N lines are pmic gpio lines which connect i2c
  * gpio expanders to the pm8058.
@@ -2076,6 +2077,43 @@ static struct platform_device qt_gpio_keys = {
 	},
 };
 
+static const unsigned int qt_keymap[] = {
+	KEY(0, 3, KEY_VOLUMEDOWN),
+	KEY(1, 3, KEY_VOLUMEUP),
+	KEY(2, 3, KEY_HOME),
+};
+
+static struct matrix_keymap_data qt_keymap_data = {
+	.keymap_size	= ARRAY_SIZE(qt_keymap),
+	.keymap		= qt_keymap,
+};
+
+static unsigned int qt_row_gpios[] = { PM8058_GPIO_PM_TO_SYS(8),
+				       PM8058_GPIO_PM_TO_SYS(9),
+				       PM8058_GPIO_PM_TO_SYS(10) };
+static unsigned int qt_col_gpios[] = { PM8058_GPIO_PM_TO_SYS(3) };
+
+static struct matrix_keypad_platform_data qt_keypad_data = {
+	.keymap_data		= &qt_keymap_data,
+	.row_gpios		= qt_row_gpios,
+	.col_gpios		= qt_col_gpios,
+	.num_row_gpios		= ARRAY_SIZE(qt_row_gpios),
+	.num_col_gpios		= ARRAY_SIZE(qt_col_gpios),
+	.col_scan_delay_us	= 32000,
+	.debounce_ms		= 10,
+	.wakeup			= 1,
+	.active_low		= 1,
+	.no_autorepeat		= 1,
+};
+
+static struct platform_device qt_keypad_device = {
+	.name           = "matrix-keypad",
+	.id             = -1,
+	.dev            = {
+		.platform_data  = &qt_keypad_data,
+	},
+};
+
 static struct platform_device *qt_devices[] __initdata = {
 	&msm_device_smd,
 	&msm_device_uart_dm12,
@@ -2231,11 +2269,68 @@ static struct platform_device *qt_devices[] __initdata = {
 
 	&msm_tsens_device,
 	&qt_gpio_keys,
+	&qt_keypad_device,
 
 };
 
 #ifdef CONFIG_PMIC8058
 #define PMIC_GPIO_SDC3_DET 22
+
+static int pm8058_kp_config_drv(int gpio_start, int num_gpios)
+{
+	int	rc;
+	struct pm8058_gpio kypd_drv = {
+		.direction	= PM_GPIO_DIR_OUT,
+		.output_buffer	= PM_GPIO_OUT_BUF_OPEN_DRAIN,
+		.output_value	= 0,
+		.pull		= PM_GPIO_PULL_NO,
+		.vin_sel	= 2,
+		.out_strength	= PM_GPIO_STRENGTH_LOW,
+		.function	= PM_GPIO_FUNC_NORMAL,
+		.inv_int_pol	= 1,
+	};
+
+	if (gpio_start < 0 || num_gpios < 0 || num_gpios > PM8058_GPIOS)
+		return -EINVAL;
+
+	while (num_gpios--) {
+		rc = pm8058_gpio_config(gpio_start++, &kypd_drv);
+		if (rc) {
+			pr_err("%s: FAIL pm8058_gpio_config(): rc=%d.\n",
+				__func__, rc);
+			return rc;
+		}
+	}
+
+	return 0;
+}
+
+static int pm8058_kp_config_sns(int gpio_start, int num_gpios)
+{
+	int	rc;
+	struct pm8058_gpio kypd_sns = {
+		.direction	= PM_GPIO_DIR_IN,
+		.pull		= PM_GPIO_PULL_UP_31P5,
+		.vin_sel	= 2,
+		.out_strength	= PM_GPIO_STRENGTH_NO,
+		.function	= PM_GPIO_FUNC_NORMAL,
+		.inv_int_pol	= 1,
+	};
+
+	if (gpio_start < 0 || num_gpios < 0 || num_gpios > PM8058_GPIOS)
+		return -EINVAL;
+
+	while (num_gpios--) {
+		rc = pm8058_gpio_config(gpio_start++, &kypd_sns);
+		if (rc) {
+			pr_err("%s: FAIL pm8058_gpio_config(): rc=%d.\n",
+				__func__, rc);
+			return rc;
+		}
+	}
+
+	return 0;
+}
 
 static int pm8058_gpios_init(void)
 {
@@ -2367,6 +2462,8 @@ static int pm8058_gpios_init(void)
 		return rc;
 	}
 #endif
+	rc = pm8058_kp_config_sns(8, 3);
+	rc = pm8058_kp_config_drv(3, 1);
 
 	for (i = 0; i < ARRAY_SIZE(gpio_cfgs); ++i) {
 		rc = pm8058_gpio_config(gpio_cfgs[i].gpio,

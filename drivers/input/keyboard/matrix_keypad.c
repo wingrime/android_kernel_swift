@@ -297,12 +297,12 @@ static int __devinit init_matrix_gpio(struct platform_device *pdev,
 	}
 
 	for (i = 0; i < pdata->num_row_gpios; i++) {
-		err = request_irq(gpio_to_irq(pdata->row_gpios[i]),
+		err = request_any_context_irq(gpio_to_irq(pdata->row_gpios[i]),
 				matrix_keypad_interrupt,
 				IRQF_DISABLED |
 				IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING,
 				"matrix-keypad", keypad);
-		if (err) {
+		if (err < 0) {
 			dev_err(&pdev->dev,
 				"Unable to acquire interrupt for GPIO line %i\n",
 				pdata->row_gpios[i]);

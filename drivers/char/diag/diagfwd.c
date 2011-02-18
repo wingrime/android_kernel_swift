@@ -65,7 +65,8 @@ do {									\
 		enc.dest_last = (void *)(driver->buf_in_1 + 499);	\
 		diag_hdlc_encode(&send, &enc);				\
 		driver->write_ptr_1->buf = driver->buf_in_1;		\
-		driver->write_ptr_1->length = buf_length + 4;		\
+		driver->write_ptr_1->length = buf_length + 4 +		\
+			 *(int *)(enc.dest - buf_length);		\
 		usb_diag_write(driver->legacy_ch, driver->write_ptr_1);	\
 	}								\
 } while (0)

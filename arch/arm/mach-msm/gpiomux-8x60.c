@@ -104,19 +104,6 @@ static struct gpiomux_setting usb_hub_reset_susp_cfg = {
 	.pull = GPIOMUX_PULL_DOWN,
 };
 
-/* CHARM FFA HUB_EN signal */
-static struct gpiomux_setting usb_hub_enable_actv_cfg = {
-	.func = GPIOMUX_FUNC_GPIO,
-	.drv = GPIOMUX_DRV_2MA,
-	.pull = GPIOMUX_PULL_NONE,
-};
-
-static struct gpiomux_setting usb_hub_enable_susp_cfg = {
-	.func = GPIOMUX_FUNC_GPIO,
-	.drv = GPIOMUX_DRV_2MA,
-	.pull = GPIOMUX_PULL_DOWN
-};
-
 static struct gpiomux_setting msm_snddev_active_config = {
 	.func = GPIOMUX_FUNC_1,
 	.drv = GPIOMUX_DRV_2MA,
@@ -1022,16 +1009,6 @@ static struct msm_gpiomux_config msm_qrdc_sdc_configs[] __initdata = {
 	},
 };
 
-static struct msm_gpiomux_config msm8x60_charm_usb_configs[] __initdata = {
-	{
-		.gpio      = 138,
-		.settings = {
-			[GPIOMUX_ACTIVE]    = &usb_hub_enable_actv_cfg,
-			[GPIOMUX_SUSPENDED] = &usb_hub_enable_susp_cfg,
-		},
-	},
-};
-
 static struct msm_gpiomux_config msm8x60_charm_sdc_configs[] __initdata = {
 	/* SDCC5 cmd */
 	{
@@ -1793,7 +1770,6 @@ msm8x60_charm_gpiomux_cfgs[] __initdata = {
 	{msm8x60_cam_configs, ARRAY_SIZE(msm8x60_cam_configs)},
 	{msm8x60_tmg200_configs, ARRAY_SIZE(msm8x60_tmg200_configs)},
 	{msm8x60_charm_sdc_configs, ARRAY_SIZE(msm8x60_charm_sdc_configs)},
-	{msm8x60_charm_usb_configs, ARRAY_SIZE(msm8x60_charm_usb_configs)},
 	{msm8x60_charm_configs, ARRAY_SIZE(msm8x60_charm_configs)},
 	{NULL, 0},
 };

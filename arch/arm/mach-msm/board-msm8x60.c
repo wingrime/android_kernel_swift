@@ -8078,26 +8078,6 @@ static struct msm_board_data msm8x60_charm_ffa_board_data __initdata = {
 	.gpiomux_cfgs = msm8x60_charm_gpiomux_cfgs,
 };
 
-#define USB_HUB_EN_GPIO	138
-static void msm8x60_charm_hub_init(void)
-{
-	int rc;
-
-	rc = gpio_request(USB_HUB_EN_GPIO, "usb_hub");
-	if (rc) {
-		pr_err("%s: hub enable %d request failed\n",
-				__func__, USB_HUB_EN_GPIO);
-		return;
-	}
-
-	rc = gpio_direction_output(USB_HUB_EN_GPIO, 1);
-	if (rc) {
-		pr_err("%s: gpio_direction_output failed for %d\n",
-				__func__, USB_HUB_EN_GPIO);
-		return;
-	}
-}
-
 static void __init msm8x60_init(struct msm_board_data *board_data)
 {
 	uint32_t soc_platform_version;
@@ -8168,9 +8148,6 @@ static void __init msm8x60_init(struct msm_board_data *board_data)
 	msm8x60_init_gpiomux(board_data->gpiomux_cfgs);
 	msm8x60_init_uart12dm();
 	msm8x60_init_mmc();
-
-	if (machine_is_msm8x60_charm_ffa())
-		msm8x60_charm_hub_init();
 
 #ifdef CONFIG_MSM_DSPS
 	msm8x60_init_dsps();

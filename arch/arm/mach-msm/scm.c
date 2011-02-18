@@ -21,13 +21,11 @@
 #include <linux/mutex.h>
 #include <linux/errno.h>
 #include <linux/err.h>
+#include <linux/init.h>
 
 #include <asm/cacheflush.h>
 
 #include <mach/scm.h>
-
-/* Cache line size for msm8x60 */
-#define CACHELINESIZE 32
 
 #define SCM_ENOMEM		-5
 #define SCM_EOPNOTSUPP		-4
@@ -207,6 +205,8 @@ static int __scm_call(const struct scm_command *cmd)
 	return ret;
 }
 
+static u32 cacheline_size;
+
 /**
  * scm_call() - Send an SCM command
  * @svc_id: service identifier
@@ -224,6 +224,7 @@ int scm_call(u32 svc_id, u32 cmd_id, const void *cmd_buf, size_t cmd_len,
 	int ret;
 	struct scm_command *cmd;
 	struct scm_response *rsp;
+	u32 end;
 
 	cmd = alloc_scm_command(cmd_len, resp_len);
 	if (!cmd)
@@ -240,14 +241,16 @@ int scm_call(u32 svc_id, u32 cmd_id, const void *cmd_buf, size_t cmd_len,
 		goto out;
 
 	rsp = scm_command_to_response(cmd);
+	end = (u32)scm_get_response_buffer(rsp) + resp_len;
+
 	do {
 		u32 start = (u32)rsp;
-		u32 end = (u32)scm_get_response_buffer(rsp) + resp_len;
-		start &= ~(CACHELINESIZE - 1);
+		start &= ~(cacheline_size - 1);
+
 		while (start < end) {
 			asm ("mcr p15, 0, %0, c7, c6, 1" : : "r" (start)
 			     : "memory");
-			start += CACHELINESIZE;
+			start += cacheline_size;
 		}
 	} while (!rsp->is_complete);
 
@@ -291,3 +294,14 @@ u32 scm_get_version(void)
 	return version;
 }
 EXPORT_SYMBOL(scm_get_version);
+
+static int scm_init(void)
+{
+	u32 ctr;
+
+	asm volatile("mrc p15, 0, %0, c0, c0, 1" : "=r" (ctr));
+	cacheline_size =  4 << ((ctr >> 16) & 0xf);
+
+	return 0;
+}
+early_initcall(scm_init);

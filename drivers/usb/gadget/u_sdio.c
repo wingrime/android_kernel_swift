@@ -193,24 +193,24 @@ start_rx_end:
 	spin_unlock_irq(&port->port_lock);
 }
 
-void gsdio_write(struct gsdio_port *port, struct usb_request *req)
+int gsdio_write(struct gsdio_port *port, struct usb_request *req)
 {
 	unsigned	avail;
 	char		*packet = req->buf;
 	unsigned	size = req->actual;
 	unsigned	n;
-	int		ret;
+	int		ret = 0;
 
 
 	if (!port) {
 		pr_err("%s: port is null\n", __func__);
-		return;
+		return -ENODEV;
 	}
 
 	if (!req) {
 		pr_err("%s: usb request is null port#%d\n",
 				__func__, port->port_num);
-		return;
+		return -ENODEV;
 	}
 
 	pr_debug("%s: port:%p port#%d req:%p actual:%d n_read:%d\n",
@@ -219,19 +219,21 @@ void gsdio_write(struct gsdio_port *port, struct usb_request *req)
 
 	if (!port->sdio_open) {
 		pr_debug("%s: SDIO IO is not supported\n", __func__);
-		port->n_read = 0;
-		return;
+		return -ENODEV;
 	}
 
 	avail = sdio_write_avail(port->sport_info->ch);
 
 	pr_debug("%s: sdio_write_avail:%d", __func__, avail);
 
+	if (!avail)
+		return -EBUSY;
+
 	if (!req->actual) {
 		pr_debug("%s: req->actual is already zero,update bytes read\n",
 				__func__);
 		port->n_read = 0;
-		return;
+		return -ENODEV;
 	}
 
 	packet = req->buf;
@@ -251,7 +253,7 @@ void gsdio_write(struct gsdio_port *port, struct usb_request *req)
 		pr_err("%s: port#%d sdio write failed err:%d",
 				__func__, port->port_num, ret);
 		/* try again later */
-		return;
+		return ret;
 	}
 
 	if (size + n == req->actual)
@@ -259,13 +261,14 @@ void gsdio_write(struct gsdio_port *port, struct usb_request *req)
 	else
 		port->n_read += size;
 
-	return;
+	return ret;
 }
 
 void gsdio_rx_push(struct work_struct *w)
 {
 	struct gsdio_port *port = container_of(w, struct gsdio_port, push);
 	struct list_head *q = &port->read_queue;
+	int ret;
 
 	pr_debug("%s: port:%p port#%d read_queue:%p", __func__,
 			port, port->port_num, q);
@@ -298,12 +301,9 @@ void gsdio_rx_push(struct work_struct *w)
 			goto rx_push_end;
 		}
 
-		gsdio_write(port, req);
-		if (port->n_read) {
-			pr_debug("%s: partial bytes were written into port\n",
-					__func__);
+		ret = gsdio_write(port, req);
+		if (ret || port->n_read)
 			goto rx_push_end;
-		}
 
 		list_move(&req->list, &port->read_pool);
 	}

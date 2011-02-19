@@ -1451,7 +1451,7 @@ msmsdcc_probe(struct platform_device *pdev)
 	if (pdev->id < 1 || pdev->id > 5)
 		return -EINVAL;
 
-	if (pdev->resource == NULL || pdev->num_resources < 3) {
+	if (pdev->resource == NULL || pdev->num_resources < 2) {
 		pr_err("%s: Invalid resource\n", __func__);
 		return -ENXIO;
 	}
@@ -1511,9 +1511,12 @@ msmsdcc_probe(struct platform_device *pdev)
 	/*
 	 * Setup DMA
 	 */
-	ret = msmsdcc_init_dma(host);
-	if (ret)
-		goto ioremap_free;
+	if (host->dmares) {
+		ret = msmsdcc_init_dma(host);
+		if (ret)
+			goto ioremap_free;
+	} else
+		host->dma.channel = -1;
 
 	/*
 	 * Setup SDCC clock if derived from Dayatona
@@ -1795,8 +1798,9 @@ msmsdcc_probe(struct platform_device *pdev)
 	if (!IS_ERR_OR_NULL(host->dfab_pclk))
 		clk_put(host->dfab_pclk);
  dma_free:
-	dma_free_coherent(NULL, sizeof(struct msmsdcc_nc_dmadata),
-			host->dma.nc, host->dma.nc_busaddr);
+	if (host->dmares)
+		dma_free_coherent(NULL, sizeof(struct msmsdcc_nc_dmadata),
+				host->dma.nc, host->dma.nc_busaddr);
  ioremap_free:
 	iounmap(host->base);
  host_free:

@@ -394,6 +394,10 @@ static void rmnet_command_complete(struct usb_ep *ep, struct usb_request *req)
 		return;
 	}
 
+	/* discard the packet if sdio is not available */
+	if (!atomic_read(&dev->sdio_open))
+		return;
+
 	qmi_req = rmnet_alloc_qmi(len, GFP_ATOMIC);
 	if (IS_ERR(qmi_req)) {
 		ERROR(cdev, "unable to allocate memory for QMI req\n");
@@ -418,9 +422,6 @@ rmnet_setup(struct usb_function *f, const struct usb_ctrlrequest *ctrl)
 	u16                     w_value = le16_to_cpu(ctrl->wValue);
 	u16                     w_length = le16_to_cpu(ctrl->wLength);
 	struct rmnet_sdio_qmi_buf *resp;
-
-	if (!atomic_read(&dev->sdio_open))
-		return 0;
 
 	if (!atomic_read(&dev->online))
 		return -ENOTCONN;

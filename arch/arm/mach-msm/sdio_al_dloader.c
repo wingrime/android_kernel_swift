@@ -39,9 +39,9 @@
 #include <linux/errno.h>
 
 /* DEFINES AND MACROS */
-#define MAX_NUM_DEVICES			1
+#define MAX_NUM_DEVICES		1
 #define TTY_SDIO_DEV			"tty_sdio_0"
-#define SDIOC_MAILBOX_SIZE		32
+#define TTY_SDIO_DEV_TEST		"tty_sdio_test_0"
 #define SDIOC_MAILBOX_ADDRESS		0
 #define SDIO_DL_BLOCK_SIZE		512
 #define SDIO_DL_MAIN_THREAD_NAME	"sdio_tty_main_thread"
@@ -49,15 +49,19 @@
 #define SDIOC_UP_BUFF_ADDRESS		0x4
 #define SDIOC_DL_BUFF_SIZE_OFFSET	0x8
 #define SDIOC_UP_BUFF_SIZE_OFFSET	0xC
-#define SDIOC_DL_WR_PTR			0x10
-#define SDIOC_DL_RD_PTR			0x14
-#define SDIOC_UL_WR_PTR			0x18
-#define SDIOC_UL_RD_PTR			0x1C
+#define SDIOC_DL_WR_PTR		0x10
+#define SDIOC_DL_RD_PTR		0x14
+#define SDIOC_UL_WR_PTR		0x18
+#define SDIOC_UL_RD_PTR		0x1C
 #define SDIOC_EXIT_PTR			0x20
+#define SDIOC_OP_MODE_PTR		0x24
+#define SDIOC_PTRS_OFFSET		0x10
+#define SDIOC_PTR_REGS_SIZE		0x10
+#define SDIOC_CFG_REGS_SIZE		0x10
 #define WRITE_RETRIES			0xFFFFFFFF
 #define INPUT_SPEED			4800
 #define OUTPUT_SPEED			4800
-#define SDIOC_EXIT_CODE			0xDEADDEAD
+#define SDIOC_EXIT_CODE		0xDEADDEAD
 #define SLEEP_MS			10
 #define PRINTING_GAP			200
 #define TIMER_DURATION			10
@@ -66,6 +70,10 @@
 #define BITS_IN_BYTE			8
 #define BYTES_IN_KB			1024
 #define WRITE_TILL_END_RETRIES		5
+#define SDIO_DLD_NORMAL_MODE_NAME	"SDIO DLD NORMAL MODE"
+#define SDIO_DLD_BOOT_TEST_MODE_NAME	"SDIO DLD BOOT TEST MODE"
+#define SDIO_DLD_AMSS_TEST_MODE_NAME	"SDIO DLD AMSS TEST MODE"
+#define TEST_NAME_MAX_SIZE		30
 
 #define PUSH_STRING
 #define DLOADER_DBG
@@ -78,15 +86,18 @@ static int sdio_dld_write_callback(struct tty_struct *tty,
 static int sdio_dld_main_task(void *card);
 
 /* STRUCTURES AND TYPES */
-struct sdioc_reg_sequential_chunk {
-	unsigned int dl_buff_address;
-	unsigned int up_buff_address;
-	unsigned int dl_buff_size;
-	unsigned int ul_buff_size;
+struct sdioc_reg_sequential_chunk_ptrs {
 	unsigned int dl_wr_ptr;
 	unsigned int dl_rd_ptr;
 	unsigned int up_wr_ptr;
 	unsigned int up_rd_ptr;
+};
+
+struct sdioc_reg_sequential_chunk_cfg {
+	unsigned int dl_buff_address;
+	unsigned int up_buff_address;
+	unsigned int dl_buff_size;
+	unsigned int ul_buff_size;
 };
 
 struct sdioc_reg {
@@ -144,6 +155,9 @@ struct sdio_downloader {
 	struct sdio_dld_wait_event main_loop_event;
 	struct timer_list timer;
 	int poll_ms;
+	enum sdio_dld_op_mode op_mode;
+	atomic_t change_op_mode;
+	char op_mode_name[TEST_NAME_MAX_SIZE];
 };
 
 struct sdio_dld_global_info {
@@ -493,8 +507,79 @@ static int __init bootloader_debugfs_init(void)
 
 	return 0;
 }
-
 #endif /* DLOADER_DBG */
+
+/**
+  * sdio_dld_set_op_mode - sets the operation mode global
+  * variable
+  *
+  * @op_mode: the operation mode to be set
+  * @return 0 on success or negative value on error.
+  */
+int sdio_dld_set_op_mode(enum sdio_dld_op_mode op_mode)
+{
+	int result = 0;
+
+	if (op_mode <= SDIO_DLD_NO_MODE ||
+	    op_mode > SDIO_DLD_NUM_OF_MODES) {
+		pr_err(MODULE_NAME ": %s - FLASHLESS BOOT - op_mode has "
+		       "invalid value = %d", __func__, op_mode);
+	    return -EINVAL;
+	}
+
+	if (atomic_read(&sdio_dld.change_op_mode) == 0) {
+		atomic_set(&sdio_dld.change_op_mode, 1);
+		sdio_dld.op_mode = op_mode;
+		atomic_set(&sdio_dld.change_op_mode, 0);
+	} else {
+		return -EAGAIN;
+	}
+
+	switch (sdio_dld.op_mode) {
+	case SDIO_DLD_NORMAL_MODE:
+		memcpy(sdio_dld.op_mode_name,
+		       SDIO_DLD_NORMAL_MODE_NAME, TEST_NAME_MAX_SIZE);
+		break;
+	case SDIO_DLD_BOOT_TEST_MODE:
+		memcpy(sdio_dld.op_mode_name,
+		       SDIO_DLD_BOOT_TEST_MODE_NAME, TEST_NAME_MAX_SIZE);
+		break;
+	case SDIO_DLD_AMSS_TEST_MODE:
+		memcpy(sdio_dld.op_mode_name,
+		       SDIO_DLD_AMSS_TEST_MODE_NAME, TEST_NAME_MAX_SIZE);
+		break;
+	default:
+		pr_err(MODULE_NAME ": %s - Invalid Op_Mode = %d. Settings "
+		       "Op_Mode to default - NORMAL_MODE\n",
+		       __func__, sdio_dld.op_mode);
+		memcpy(sdio_dld.op_mode_name,
+		       SDIO_DLD_NORMAL_MODE_NAME, TEST_NAME_MAX_SIZE);
+		result = -EINVAL;
+		break;
+	}
+
+	if (sdio_dld.op_mode_name != NULL) {
+		pr_info(MODULE_NAME ": %s - FLASHLESS BOOT - Op_Mode is set to "
+			"%s\n", __func__, sdio_dld.op_mode_name);
+	} else {
+		pr_info(MODULE_NAME ": %s - FLASHLESS BOOT - op_mode_name is "
+			"NULL\n", __func__);
+	}
+
+	return result;
+}
+
+/**
+  * sdio_dld_get_op_mode - gets the operation mode global
+  * variable
+  *
+  * @return the operation mode global variable.
+  *
+  */
+static enum sdio_dld_op_mode sdio_dld_get_op_mode(void)
+{
+	return sdio_dld.op_mode;
+}
 
 /**
   * sdio_dld_allocate_local_buffers
@@ -554,16 +639,61 @@ static void sdio_dld_dealloc_local_buffers(void)
 }
 
 /**
-  * mailbox_to_seq_chunk_read
-  * reads 6 registers of mailbox from str_func, as a sequentail
-  * chunk in memory, and updates global struct accordingly.
+  * mailbox_to_seq_chunk_read_cfg
+  * reads 4 configuration registers of mailbox from str_func, as
+  * a sequentail chunk in memory, and updates global struct
+  * accordingly.
   *
   * @str_func: a pointer to func struct.
   * @return 0 on success or negative value on error.
   */
-static int mailbox_to_seq_chunk_read(struct sdio_func *str_func)
+static int mailbox_to_seq_chunk_read_cfg(struct sdio_func *str_func)
 {
-	struct sdioc_reg_sequential_chunk seq_chunk;
+	struct sdioc_reg_sequential_chunk_cfg seq_chunk;
+	struct sdioc_reg_chunk *reg = &sdio_dld.sdio_dloader_data.sdioc_reg;
+	int status = 0;
+
+	if (!str_func) {
+		pr_err(MODULE_NAME ": %s - param ""str_func"" is NULL.\n",
+		       __func__);
+		return -EINVAL;
+	}
+
+	sdio_claim_host(str_func);
+
+	/* reading SDIOC_MAILBOX_SIZE bytes from SDIOC_MAILBOX_ADDRESS */
+	status = sdio_memcpy_fromio(str_func,
+				    (void *)&seq_chunk,
+				    SDIOC_MAILBOX_ADDRESS,
+				    SDIOC_CFG_REGS_SIZE);
+	if (status) {
+		pr_err(MODULE_NAME ": %s - sdio_memcpy_fromio()"
+		       " READING CFG MAILBOX failed. status=%d.\n",
+		       __func__, status);
+	}
+
+	sdio_release_host(str_func);
+
+	reg->dl_buff_address.reg_val = seq_chunk.dl_buff_address;
+	reg->up_buff_address.reg_val = seq_chunk.up_buff_address;
+	reg->dl_buff_size.reg_val = seq_chunk.dl_buff_size;
+	reg->ul_buff_size.reg_val = seq_chunk.ul_buff_size;
+
+	return status;
+}
+
+/**
+  * mailbox_to_seq_chunk_read_ptrs
+  * reads 4 pointers registers of mailbox from str_func, as a
+  * sequentail chunk in memory, and updates global struct
+  * accordingly.
+  *
+  * @str_func: a pointer to func struct.
+  * @return 0 on success or negative value on error.
+  */
+static int mailbox_to_seq_chunk_read_ptrs(struct sdio_func *str_func)
+{
+	struct sdioc_reg_sequential_chunk_ptrs seq_chunk;
 	struct sdioc_reg_chunk *reg = &sdio_dld.sdio_dloader_data.sdioc_reg;
 	int status = 0;
 
@@ -587,27 +717,23 @@ static int mailbox_to_seq_chunk_read(struct sdio_func *str_func)
 	/* reading SDIOC_MAILBOX_SIZE bytes from SDIOC_MAILBOX_ADDRESS */
 	status = sdio_memcpy_fromio(str_func,
 				    (void *)&seq_chunk,
-				    SDIOC_MAILBOX_ADDRESS,
-				    SDIOC_MAILBOX_SIZE);
+				    SDIOC_PTRS_OFFSET,
+				    SDIOC_PTR_REGS_SIZE);
 	if (status) {
 		pr_err(MODULE_NAME ": %s - sdio_memcpy_fromio()"
-		       " READING MAILBOX failed. status=%d.\n",
+		       " READING PTRS MAILBOX failed. status=%d.\n",
 		       __func__, status);
 	}
 
 	sdio_release_host(str_func);
 
-	reg->dl_buff_address.reg_val = seq_chunk.dl_buff_address;
-	reg->up_buff_address.reg_val = seq_chunk.up_buff_address;
-	reg->dl_buff_size.reg_val = seq_chunk.dl_buff_size;
 	reg->dl_rd_ptr.reg_val = seq_chunk.dl_rd_ptr;
 	reg->dl_wr_ptr.reg_val = seq_chunk.dl_wr_ptr;
-	reg->ul_buff_size.reg_val = seq_chunk.ul_buff_size;
 	reg->up_rd_ptr.reg_val = seq_chunk.up_rd_ptr;
 	reg->up_wr_ptr.reg_val = seq_chunk.up_wr_ptr;
 
 	/* DEBUG - if there was a change in value */
-	if ((offset_write_p !=	outgoing->offset_write_p) ||
+	if ((offset_write_p != outgoing->offset_write_p) ||
 	    (offset_read_p != outgoing->offset_read_p) ||
 	    (up_wr_ptr != reg->up_wr_ptr.reg_val) ||
 	    (up_rd_ptr != reg->up_rd_ptr.reg_val) ||
@@ -616,12 +742,9 @@ static int mailbox_to_seq_chunk_read(struct sdio_func *str_func)
 	    (counter % PRINTING_GAP == 0)) {
 		counter = 1;
 		pr_debug(MODULE_NAME ": %s MailBox pointers: BLOCK_SIZE=%d, "
-				   "d_s=%d, u_s=%d, hw=%d, hr=%d, cuw=%d, "
-				   "cur=%d, cdw=%d, cdr=%d\n",
+			 "hw=%d, hr=%d, cuw=%d, cur=%d, cdw=%d, cdr=%d\n",
 			 __func__,
 			 SDIO_DL_BLOCK_SIZE,
-			 seq_chunk.dl_buff_size,
-			 seq_chunk.ul_buff_size,
 			 outgoing->offset_write_p,
 			 outgoing->offset_read_p,
 			 reg->up_wr_ptr.reg_val,
@@ -642,7 +765,6 @@ static int mailbox_to_seq_chunk_read(struct sdio_func *str_func)
 	} else {
 		counter++;
 	}
-
 	return status;
 }
 
@@ -693,7 +815,7 @@ static int sdio_dld_init_func(struct sdio_func *str_func)
 }
 
 /**
-  * init_func_and_allocate
+  * sdio_dld_allocate_buffers
   * initializes the sdio func, and then reads the mailbox, in
   * order to allocate incoming and outgoing buffers according to
   * the size that was read from the mailbox.
@@ -701,7 +823,7 @@ static int sdio_dld_init_func(struct sdio_func *str_func)
   * @str_func: a pointer to func struct.
   * @return 0 on success or negative value on error.
   */
-static int init_func_and_allocate(struct sdio_func *str_func)
+static int sdio_dld_allocate_buffers(struct sdio_func *str_func)
 {
 	int status = 0;
 
@@ -711,18 +833,10 @@ static int init_func_and_allocate(struct sdio_func *str_func)
 		return -EINVAL;
 	}
 
-	status = sdio_dld_init_func(str_func);
+	status = mailbox_to_seq_chunk_read_cfg(str_func);
 	if (status) {
 		pr_err(MODULE_NAME ": %s - Failure in Function "
-		       "sdio_dld_init_func(). status=%d\n",
-		       __func__, status);
-		return status;
-	}
-
-	status = mailbox_to_seq_chunk_read(str_func);
-	if (status) {
-		pr_err(MODULE_NAME ": %s - Failure in Function "
-		       "mailbox_to_seq_chunk_read(). status=%d\n",
+		       "mailbox_to_seq_chunk_read_cfg(). status=%d\n",
 		       __func__, status);
 		return status;
 	}
@@ -734,7 +848,6 @@ static int init_func_and_allocate(struct sdio_func *str_func)
 		       __func__, status);
 		return status;
 	}
-
 	return 0;
 }
 
@@ -839,11 +952,12 @@ static int sdio_dld_open(struct tty_struct *tty, struct file *file)
 	atomic_set(&sdio_dld.dld_main_thread.please_close, 0);
 	sdio_dld.dld_main_thread.exit_wait.wake_up_signal = 0;
 
-	status = init_func_and_allocate(str_func);
+	status = sdio_dld_allocate_buffers(str_func);
 	if (status) {
 		sdio_dld_dealloc_local_buffers();
-		pr_err(MODULE_NAME ": %s, failed in init_func_and_allocate()."
-				   "status=%d\n", __func__, status);
+		pr_err(MODULE_NAME ": %s, failed in "
+		       "sdio_dld_allocate_buffers(). status=%d\n",
+		       __func__, status);
 		return status;
 	}
 
@@ -1460,7 +1574,6 @@ static int sdio_memcpy_toio_wrapper(struct sdio_func *str_func,
 	}
 
 	sdio_dld_info.global_bytes_write_toio += bytes_to_write;
-
 	outgoing->num_of_bytes_in_use -= bytes_to_write;
 
 	/*
@@ -1717,10 +1830,10 @@ static int sdio_dld_main_task(void *card)
 				return 0;
 			}
 
-			status = mailbox_to_seq_chunk_read(str_func);
+			status = mailbox_to_seq_chunk_read_ptrs(str_func);
 			if (status) {
 				pr_err(MODULE_NAME ": %s - Failure in Function "
-				       "mailbox_to_seq_chunk_read(). "
+				       "mailbox_to_seq_chunk_read_ptrs(). "
 				       "status=%d\n", __func__, status);
 				return status;
 			}
@@ -1738,7 +1851,7 @@ static int sdio_dld_main_task(void *card)
 
 			if (status) {
 				pr_err(MODULE_NAME ": %s - Failure in Function "
-				       "sdioc_bytes_free_in_buffer(). "
+				       "sdioc_bytes_till_end_of_buffer(). "
 				       "status=%d\n", __func__, status);
 				return status;
 			}
@@ -1766,7 +1879,7 @@ static int sdio_dld_main_task(void *card)
 
 			if (status) {
 				pr_err(MODULE_NAME ": %s - Failure in Function "
-				       "sdioc_bytes_free_in_buffer(). "
+				       "sdioc_bytes_till_end_of_buffer(). "
 				       "status=%d\n", __func__, status);
 				return status;
 			}
@@ -2034,6 +2147,9 @@ static int sdio_dld_init_global(struct mmc_card *card,
 	sdio_dld.sdio_dloader_data.sdioc_reg.up_buff_address.reg_offset =
 		SDIOC_UP_BUFF_ADDRESS;
 
+	if (sdio_dld_get_op_mode() == SDIO_DLD_NO_MODE)
+		sdio_dld_set_op_mode(SDIO_DLD_NORMAL_MODE);
+
 	return 0;
 }
 
@@ -2057,6 +2173,8 @@ int sdio_downloader_setup(struct mmc_card *card,
 {
 	unsigned i;
 	int status = 0;
+	int func_in_array = 0;
+	struct sdio_func *str_func = NULL;
 
 	if (num_of_devices == 0 || num_of_devices > MAX_NUM_DEVICES) {
 		pr_err(MODULE_NAME ": %s - invalid number of devices\n",
@@ -2097,9 +2215,14 @@ int sdio_downloader_setup(struct mmc_card *card,
 		return -EINVAL;
 	}
 
+	/* according to op_mode, a different tty device is created */
+	if (sdio_dld_get_op_mode() == SDIO_DLD_BOOT_TEST_MODE)
+		sdio_dld.tty_drv->name = TTY_SDIO_DEV_TEST;
+	else
+	    sdio_dld.tty_drv->name = TTY_SDIO_DEV;
+
 	sdio_dld.tty_drv->owner = THIS_MODULE;
 	sdio_dld.tty_drv->driver_name = "SDIO_Dloader";
-	sdio_dld.tty_drv->name = TTY_SDIO_DEV;
 
 	/* uses dynamically assigned dev_t values */
 	sdio_dld.tty_drv->type = TTY_DRIVER_TYPE_SERIAL;
@@ -2115,7 +2238,6 @@ int sdio_downloader_setup(struct mmc_card *card,
 	sdio_dld.tty_drv->init_termios.c_ospeed = OUTPUT_SPEED;
 
 	tty_set_operations(sdio_dld.tty_drv, &sdio_dloader_tty_ops);
-	sdio_dld.sdioc_boot_func = SDIOC_CHAN_TO_FUNC_NUM(channel_number);
 
 	status = tty_register_driver(sdio_dld.tty_drv);
 	if (status) {
@@ -2155,6 +2277,38 @@ int sdio_downloader_setup(struct mmc_card *card,
 	sdio_dld.tty_str->low_latency = 1;
 	sdio_dld.tty_str->icanon = 0;
 	set_bit(TTY_NO_WRITE_SPLIT, &sdio_dld.tty_str->flags);
+
+	sdio_dld.sdioc_boot_func = SDIOC_CHAN_TO_FUNC_NUM(channel_number);
+	func_in_array = REAL_FUNC_TO_FUNC_IN_ARRAY(sdio_dld.sdioc_boot_func);
+	str_func = sdio_dld.card->sdio_func[func_in_array];
+	status = sdio_dld_init_func(str_func);
+	if (status) {
+		pr_err(MODULE_NAME ": %s - Failure in Function "
+		       "sdio_dld_init_func(). status=%d\n",
+		       __func__, status);
+		return status;
+	}
+
+	sdio_claim_host(str_func);
+
+	/*
+	 * notifing the client by writing what mode we are by writing
+	 * to a special register
+	 */
+	status = sdio_memcpy_toio(str_func,
+				  SDIOC_OP_MODE_PTR,
+				  (void *)&sdio_dld.op_mode,
+				  sizeof(sdio_dld.op_mode));
+
+	sdio_release_host(str_func);
+
+	if (status) {
+		pr_err(MODULE_NAME ": %s - sdio_memcpy_toio() "
+		       "writing to OP_MODE_REGISTER failed. "
+		       "status=%d.\n",
+		       __func__, status);
+		return status;
+	}
 
 	return 0;
 }

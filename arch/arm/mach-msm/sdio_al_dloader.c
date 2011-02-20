@@ -1699,6 +1699,8 @@ static int sdio_dld_main_task(void *card)
 				pr_debug(MODULE_NAME ": %s - 0x%x was written "
 					 "to 9K\n", __func__, SDIOC_EXIT_CODE);
 
+				sdio_claim_host(str_func);
+
 				/* returned value is not checked on purpose */
 				sdio_memcpy_toio(
 					str_func,
@@ -1707,6 +1709,8 @@ static int sdio_dld_main_task(void *card)
 					reg_val,
 					sizeof(reg_str->good_to_exit_ptr.
 					       reg_val));
+
+				sdio_release_host(str_func);
 
 				task->exit_wait.wake_up_signal = 1;
 				wake_up(&task->exit_wait.wait_event);

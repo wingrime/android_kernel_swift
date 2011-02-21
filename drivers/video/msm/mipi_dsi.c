@@ -498,16 +498,17 @@ static int mipi_dsi_on(struct platform_device *pdev)
 
 	mipi_dsi_op_mode_config(mipi->mode);
 
-	if (pinfo->lcd.vsync_enable) {
-		if (pinfo->lcd.hw_vsync_mode && vsync_gpio > 0) {
-			if (gpio_request(vsync_gpio, "MDP_VSYNC") == 0)
-				gpio_direction_input(vsync_gpio);
-			else
-				pr_err("%s: unable to request gpio=%d\n",
-					__func__, vsync_gpio);
+	if (mfd->panel_info.type == MIPI_CMD_PANEL) {
+		if (pinfo->lcd.vsync_enable) {
+			if (pinfo->lcd.hw_vsync_mode && vsync_gpio > 0) {
+				if (gpio_request(vsync_gpio, "MDP_VSYNC") == 0)
+					gpio_direction_input(vsync_gpio);
+				else
+					pr_err("%s: unable to request gpio=%d\n",
+						__func__, vsync_gpio);
+			}
+			mipi_dsi_set_tear_on();
 		}
-
-		mipi_dsi_set_tear_on();
 	}
 
 #ifdef CONFIG_MSM_BUS_SCALING

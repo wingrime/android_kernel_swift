@@ -85,7 +85,8 @@ static struct msm_adspenc_database msm_enc_database = {
 };
 
 
-static struct audrec_session_info session_info[MAX_ENC_COUNT];
+static struct audrec_session_info
+		session_info[MAX_ENC_COUNT] = { {0, 0}, {0, 0}, {0, 0} };
 
 struct audpreproc_state {
 	struct msm_adsp_module *mod;

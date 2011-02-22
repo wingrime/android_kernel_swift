@@ -88,6 +88,157 @@ struct platform_device msm8960_device_uart_gsbi5 = {
 	.resource	= resources_uart_gsbi5,
 };
 
+#define MSM_SDC1_BASE         0x12400000
+#define MSM_SDC2_BASE         0x12140000
+#define MSM_SDC3_BASE         0x12180000
+#define MSM_SDC4_BASE         0x121C0000
+#define MSM_SDC5_BASE         0x12200000
+
+static struct resource resources_sdc1[] = {
+	{
+		.name	= "core_mem",
+		.flags	= IORESOURCE_MEM,
+		.start	= MSM_SDC1_BASE,
+		.end	= MSM_SDC1_BASE + SZ_4K - 1,
+	},
+	{
+		.name	= "core_irq",
+		.flags	= IORESOURCE_IRQ,
+		.start	= SDC1_IRQ_0,
+		.end	= SDC1_IRQ_0
+	}
+};
+
+static struct resource resources_sdc2[] = {
+	{
+		.name	= "core_mem",
+		.flags	= IORESOURCE_MEM,
+		.start	= MSM_SDC2_BASE,
+		.end	= MSM_SDC2_BASE + SZ_4K - 1
+	},
+	{
+		.name	= "core_irq",
+		.flags	= IORESOURCE_IRQ,
+		.start	= SDC2_IRQ_0,
+		.end	= SDC2_IRQ_0
+	}
+};
+
+static struct resource resources_sdc3[] = {
+	{
+		.name	= "core_mem",
+		.flags	= IORESOURCE_MEM,
+		.start	= MSM_SDC3_BASE,
+		.end	= MSM_SDC3_BASE + SZ_4K - 1,
+	},
+	{
+		.name	= "core_irq",
+		.flags	= IORESOURCE_IRQ,
+		.start	= SDC3_IRQ_0,
+		.end	= SDC3_IRQ_0
+	}
+};
+
+static struct resource resources_sdc4[] = {
+	{
+		.name	= "core_mem",
+		.flags	= IORESOURCE_MEM,
+		.start	= MSM_SDC4_BASE,
+		.end	= MSM_SDC4_BASE + SZ_4K - 1,
+	},
+	{
+		.name	= "core_irq",
+		.flags	= IORESOURCE_IRQ,
+		.start	= SDC4_IRQ_0,
+		.end	= SDC4_IRQ_0
+	}
+};
+
+static struct resource resources_sdc5[] = {
+	{
+		.name	= "core_mem",
+		.flags	= IORESOURCE_MEM,
+		.start	= MSM_SDC5_BASE,
+		.end	= MSM_SDC5_BASE + SZ_4K - 1
+	},
+	{
+		.name	= "core_irq",
+		.flags	= IORESOURCE_IRQ,
+		.start	= SDC5_IRQ_0,
+		.end	= SDC5_IRQ_0
+	}
+};
+
+struct platform_device msm_device_sdc1 = {
+	.name		= "msm_sdcc",
+	.id		= 1,
+	.num_resources	= ARRAY_SIZE(resources_sdc1),
+	.resource	= resources_sdc1,
+	.dev		= {
+		.coherent_dma_mask	= 0xffffffff,
+	},
+};
+
+struct platform_device msm_device_sdc2 = {
+	.name		= "msm_sdcc",
+	.id		= 2,
+	.num_resources	= ARRAY_SIZE(resources_sdc2),
+	.resource	= resources_sdc2,
+	.dev		= {
+		.coherent_dma_mask	= 0xffffffff,
+	},
+};
+
+struct platform_device msm_device_sdc3 = {
+	.name		= "msm_sdcc",
+	.id		= 3,
+	.num_resources	= ARRAY_SIZE(resources_sdc3),
+	.resource	= resources_sdc3,
+	.dev		= {
+		.coherent_dma_mask	= 0xffffffff,
+	},
+};
+
+struct platform_device msm_device_sdc4 = {
+	.name		= "msm_sdcc",
+	.id		= 4,
+	.num_resources	= ARRAY_SIZE(resources_sdc4),
+	.resource	= resources_sdc4,
+	.dev		= {
+		.coherent_dma_mask	= 0xffffffff,
+	},
+};
+
+struct platform_device msm_device_sdc5 = {
+	.name		= "msm_sdcc",
+	.id		= 5,
+	.num_resources	= ARRAY_SIZE(resources_sdc5),
+	.resource	= resources_sdc5,
+	.dev		= {
+		.coherent_dma_mask	= 0xffffffff,
+	},
+};
+
+static struct platform_device *msm_sdcc_devices[] __initdata = {
+	&msm_device_sdc1,
+	&msm_device_sdc2,
+	&msm_device_sdc3,
+	&msm_device_sdc4,
+	&msm_device_sdc5,
+};
+
+int __init msm_add_sdcc(unsigned int controller, struct mmc_platform_data *plat)
+{
+	struct platform_device	*pdev;
+
+	if (controller < 1 || controller > 5)
+		return -EINVAL;
+
+	pdev = msm_sdcc_devices[controller-1];
+	pdev->dev.platform_data = plat;
+	return platform_device_register(pdev);
+}
+
 struct clk_lookup msm_clocks_8960[] = {
 	CLK_DUMMY("ce_clk",		CE2_CLK,		NULL, OFF),
 	CLK_DUMMY("gsbi_uart_clk",	GSBI1_UART_CLK,		NULL, OFF),

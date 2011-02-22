@@ -26,6 +26,7 @@
 
 #include <mach/board.h>
 #include <mach/msm_iomap.h>
+#include <asm/mach/mmc.h>
 
 #include "timer.h"
 
@@ -60,6 +61,21 @@ static void __init msm8960_init_irq(void)
 	}
 }
 
+static struct mmc_platform_data msm8960_sdc1_data = {
+	.ocr_mask       = MMC_VDD_27_28 | MMC_VDD_28_29,
+	.mmc_bus_width  = MMC_CAP_4_BIT_DATA,
+	.msmsdcc_fmin	= 400000,
+	.msmsdcc_fmid	= 24000000,
+	.msmsdcc_fmax	= 48000000,
+	.nonremovable	= 1,
+};
+
+static void __init msm8960_init_mmc(void)
+{
+	/* SDCC1 : eMMC card connected */
+	msm_add_sdcc(1, &msm8960_sdc1_data);
+}
+
 static struct platform_device *sim_devices[] __initdata = {
 	&msm8960_device_uart_gsbi2,
 };
@@ -72,6 +88,7 @@ static void __init msm8960_sim_init(void)
 {
 	msm_clock_init(msm_clocks_8960, msm_num_clocks_8960);
 	platform_add_devices(sim_devices, ARRAY_SIZE(sim_devices));
+	msm8960_init_mmc();
 }
 
 static void __init msm8960_rumi3_init(void)

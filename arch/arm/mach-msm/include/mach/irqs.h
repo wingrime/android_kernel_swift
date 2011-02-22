@@ -28,7 +28,7 @@
 #include "irqs-8x60.h"
 #elif defined(CONFIG_ARCH_MSM8960)
 #include "irqs-8960.h"
-#elif defined(CONFIG_ARCH_MSM_ARM11)
+#elif defined(CONFIG_ARCH_MSM_ARM11) || defined(CONFIG_ARCH_MSM_CORTEX_A5)
 #include "irqs-7xxx.h"
 #else
 #error "Unknown architecture specification"

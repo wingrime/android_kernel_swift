@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2007 Google, Inc.
- * Copyright (c) 2009-2010, Code Aurora Forum. All rights reserved.
+ * Copyright (c) 2009-2011, Code Aurora Forum. All rights reserved.
  * Author: Brian Swetland <swetland@google.com>
  */
 
@@ -26,9 +26,15 @@
 #define INT_UART2_RX         13
 #define INT_UART3_RX         14
 #define INT_USB_OTG          15
+#if defined(CONFIG_ARCH_MSM7X27A)
+#define INT_DSI_IRQ          16
+#define INT_CSI_IRQ_1        17
+#define INT_CSI_IRQ_0        18
+#else
 #define INT_MDDI_PRI         16
 #define INT_MDDI_EXT         17
 #define INT_MDDI_CLIENT      18
+#endif
 #define INT_MDP              19
 #define INT_GRAPHICS         20
 #define INT_ADM_AARM         21
@@ -66,7 +72,12 @@
 #define INT_UART2DM_IRQ      (32 + 20)
 #define INT_UART2DM_RX       (32 + 21)
 
-/* 22-31 are reserved */
+/* 22-31 are reserved except 7x27a*/
+#if defined(CONFIG_ARCH_MSM7X27A)
+#define INT_L2CC_EM          (32 + 22)
+#define INT_L2CC_INTR        (32 + 23)
+#define INT_CE_IRQ           (32 + 24)
+#endif
 
 /* 7x00A uses 122, but 7x25 has up to 132. */
 #define NR_GPIO_IRQS 133

@@ -312,9 +312,15 @@ static int config_class_d0_gpio(int enable)
 	return 0;
 }
 
+static atomic_t pamp_ref_cnt;
+
 static int msm_snddev_poweramp_on(void)
 {
 	int rc;
+
+	if (atomic_inc_return(&pamp_ref_cnt) > 1)
+		return 0;
+
 	pr_debug("%s: enable stereo spkr amp\n", __func__);
 	rc = config_class_d0_gpio(1);
 	if (rc) {
@@ -334,13 +340,13 @@ config_gpio_fail:
 
 static void msm_snddev_poweramp_off(void)
 {
-	pr_debug("%s: disable stereo spkr amp\n", __func__);
-	config_class_d0_gpio(0);
-
-	if (!machine_is_msm8x60_qt())
-		config_class_d1_gpio(0);
-
-	msleep(30);
+	if (atomic_dec_return(&pamp_ref_cnt) == 0) {
+		pr_debug("%s: disable stereo spkr amp\n", __func__);
+		config_class_d0_gpio(0);
+		if (!machine_is_msm8x60_qt())
+			config_class_d1_gpio(0);
+		msleep(30);
+	}
 }
 
 /* Regulator 8058_l10 supplies regulator 8058_ncp. */
@@ -1079,6 +1085,110 @@ static struct platform_device msm_itty_mono_rx_device = {
 	.dev = { .platform_data = &snddev_itty_mono_rx_data },
 };
 
+static struct adie_codec_action_unit linein_pri_actions[] =
+	LINEIN_PRI_STEREO_OSR_256;
+
+static struct adie_codec_hwsetting_entry linein_pri_settings[] = {
+	{
+		.freq_plan = 48000,
+		.osr = 256,
+		.actions = linein_pri_actions,
+		.action_sz = ARRAY_SIZE(linein_pri_actions),
+	},
+};
+
+static struct adie_codec_dev_profile linein_pri_profile = {
+	.path_type = ADIE_CODEC_TX,
+	.settings = linein_pri_settings,
+	.setting_sz = ARRAY_SIZE(linein_pri_settings),
+};
+
+static struct snddev_icodec_data snddev_linein_pri_data = {
+	.capability = SNDDEV_CAP_TX,
+	.name = "linein_pri_tx",
+	.copp_id = PRIMARY_I2S_TX,
+	.profile = &linein_pri_profile,
+	.channel_mode = 2,
+	.default_sample_rate = 48000,
+	.voltage_on = msm_snddev_voltage_on,
+	.voltage_off = msm_snddev_voltage_off,
+};
+
+static struct platform_device msm_linein_pri_device = {
+	.name = "snddev_icodec",
+	.dev = { .platform_data = &snddev_linein_pri_data },
+};
+
+static struct adie_codec_action_unit auxpga_lb_lo_actions[] =
+	LB_AUXPGA_LO_STEREO;
+
+static struct adie_codec_hwsetting_entry auxpga_lb_lo_settings[] = {
+	{
+		.freq_plan = 48000,
+		.osr = 256,
+		.actions = auxpga_lb_lo_actions,
+		.action_sz = ARRAY_SIZE(auxpga_lb_lo_actions),
+	},
+};
+
+static struct adie_codec_dev_profile auxpga_lb_lo_profile = {
+	.path_type = ADIE_CODEC_LB,
+	.settings = auxpga_lb_lo_settings,
+	.setting_sz = ARRAY_SIZE(auxpga_lb_lo_settings),
+};
+
+static struct snddev_icodec_data snddev_auxpga_lb_lo_data = {
+	.capability = SNDDEV_CAP_LB,
+	.name = "speaker_stereo_lb",
+	.copp_id = PRIMARY_I2S_RX,
+	.profile = &auxpga_lb_lo_profile,
+	.channel_mode = 2,
+	.default_sample_rate = 48000,
+	.pamp_on = msm_snddev_poweramp_on,
+	.pamp_off = msm_snddev_poweramp_off,
+	.dev_vol_type = SNDDEV_DEV_VOL_ANALOG,
+};
+
+static struct platform_device msm_auxpga_lb_lo_device = {
+	.name = "snddev_icodec",
+	.dev = { .platform_data = &snddev_auxpga_lb_lo_data },
+};
+
+static struct adie_codec_action_unit auxpga_lb_hs_actions[] =
+	LB_AUXPGA_HPH_AB_CPLS_STEREO;
+
+static struct adie_codec_hwsetting_entry auxpga_lb_hs_settings[] = {
+	{
+		.freq_plan = 48000,
+		.osr = 256,
+		.actions = auxpga_lb_hs_actions,
+		.action_sz = ARRAY_SIZE(auxpga_lb_hs_actions),
+	},
+};
+
+static struct adie_codec_dev_profile auxpga_lb_hs_profile = {
+	.path_type = ADIE_CODEC_LB,
+	.settings = auxpga_lb_hs_settings,
+	.setting_sz = ARRAY_SIZE(auxpga_lb_hs_settings),
+};
+
+static struct snddev_icodec_data snddev_auxpga_lb_hs_data = {
+	.capability = SNDDEV_CAP_LB,
+	.name = "hs_stereo_lb",
+	.copp_id = PRIMARY_I2S_RX,
+	.profile = &auxpga_lb_hs_profile,
+	.channel_mode = 2,
+	.default_sample_rate = 48000,
+	.voltage_on = msm_snddev_voltage_on,
+	.voltage_off = msm_snddev_voltage_off,
+	.dev_vol_type = SNDDEV_DEV_VOL_ANALOG,
+};
+
+static struct platform_device msm_auxpga_lb_hs_device = {
+	.name = "snddev_icodec",
+	.dev = { .platform_data = &snddev_auxpga_lb_hs_data },
+};
+
 #ifdef CONFIG_DEBUG_FS
 static struct adie_codec_action_unit
 	ihs_stereo_rx_class_d_legacy_48KHz_osr256_actions[] =
@@ -1218,6 +1328,9 @@ static struct platform_device *snd_devices_ffa[] __initdata = {
 	&msm_spkr_dual_mic_broadside_device,
 	&msm_ihs_stereo_speaker_stereo_rx_device,
 	&msm_anc_headset_device,
+	&msm_auxpga_lb_hs_device,
+	&msm_auxpga_lb_lo_device,
+	&msm_linein_pri_device,
 };
 
 static struct platform_device *snd_devices_surf[] __initdata = {
@@ -1235,6 +1348,9 @@ static struct platform_device *snd_devices_surf[] __initdata = {
 	&msm_mi2s_fm_tx_device,
 	&msm_mi2s_fm_rx_device,
 	&msm_ihs_stereo_speaker_stereo_rx_device,
+	&msm_auxpga_lb_hs_device,
+	&msm_auxpga_lb_lo_device,
+	&msm_linein_pri_device,
 };
 
 static struct platform_device *snd_devices_fluid[] __initdata = {
@@ -1249,6 +1365,8 @@ static struct platform_device *snd_devices_fluid[] __initdata = {
 	&msm_mi2s_fm_tx_device,
 	&msm_mi2s_fm_rx_device,
 	&msm_anc_headset_device,
+	&msm_auxpga_lb_hs_device,
+	&msm_auxpga_lb_lo_device,
 };
 
 static struct platform_device *snd_devices_qt[] __initdata = {
@@ -1269,6 +1387,8 @@ void __init msm_snddev_init(void)
 	int i;
 	int dev_id;
 	int rc;
+
+	atomic_set(&pamp_ref_cnt, 0);
 
 	for (i = 0, dev_id = 0; i < ARRAY_SIZE(snd_devices_common); i++)
 		snd_devices_common[i]->id = dev_id++;

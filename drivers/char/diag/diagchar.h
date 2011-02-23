@@ -40,7 +40,7 @@
 #include <asm/mach-types.h>
 /* Size of the USB buffers used for read and write*/
 #define USB_MAX_OUT_BUF 4096
-#define IN_BUF_SIZE		8192
+#define IN_BUF_SIZE		16384
 #define MAX_IN_BUF_SIZE	32768
 /* Size of the buffer used for deframing a packet
   reveived from the PC tool*/

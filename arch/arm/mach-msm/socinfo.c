@@ -51,6 +51,21 @@ enum {
 	ACCESSORY_CHIP_CHARM = 58,
 };
 
+enum {
+	PLATFORM_SUBTYPE_UNKNOWN = 0x0,
+	PLATFORM_SUBTYPE_CHARM = 0x1,
+	PLATFORM_SUBTYPE_STRANGE = 0x2,
+	PLATFORM_SUBTYPE_STRANGE_2A = 0x3,
+	PLATFORM_SUBTYPE_INVALID,
+};
+
+const char  *hw_platform_subtype[] = {
+	"Unknown",
+	"charm",
+	"strange"
+	"strange_2a"
+};
+
 /* Used to parse shared memory.  Must match the modem. */
 struct socinfo_v1 {
 	uint32_t format;
@@ -88,12 +103,20 @@ struct socinfo_v5 {
 	uint32_t accessory_chip;
 };
 
+struct socinfo_v6 {
+	struct socinfo_v5 v5;
+
+	/* only valid when format==6 */
+	uint32_t hw_platform_subtype;
+};
+
 static union {
 	struct socinfo_v1 v1;
 	struct socinfo_v2 v2;
 	struct socinfo_v3 v3;
 	struct socinfo_v4 v4;
 	struct socinfo_v5 v5;
+	struct socinfo_v6 v6;
 } *socinfo;
 
 static enum msm_cpu cpu_of_id[] = {
@@ -218,6 +241,12 @@ uint32_t socinfo_get_accessory_chip(void)
 		: 0;
 }
 
+uint32_t socinfo_get_platform_subtype(void)
+{
+	return socinfo ?
+		(socinfo->v1.format >= 6 ? socinfo->v6.hw_platform_subtype : 0)
+		: 0;
+}
 
 enum msm_cpu socinfo_get_msm_cpu(void)
 {
@@ -366,6 +395,31 @@ socinfo_show_accessory_chip(struct sys_device *dev,
 		socinfo_get_accessory_chip());
 }
 
+static ssize_t
+socinfo_show_platform_subtype(struct sys_device *dev,
+			struct sysdev_attribute *attr,
+			char *buf)
+{
+	uint32_t hw_subtype;
+	if (!socinfo) {
+		pr_err("%s: No socinfo found!\n", __func__);
+		return 0;
+	}
+	if (socinfo->v1.format < 6) {
+		pr_err("%s: platform subtype not available!\n", __func__);
+		return 0;
+	}
+
+	hw_subtype = socinfo_get_platform_subtype();
+	if (hw_subtype >= PLATFORM_SUBTYPE_INVALID) {
+		pr_err("%s: Invalid hardware platform sub type found\n",
+								   __func__);
+		hw_subtype = PLATFORM_SUBTYPE_UNKNOWN;
+	}
+	return snprintf(buf, PAGE_SIZE, "%-.32s\n",
+		hw_platform_subtype[hw_subtype]);
+}
+
 static struct sysdev_attribute socinfo_v1_files[] = {
 	_SYSDEV_ATTR(id, 0444, socinfo_show_id, NULL),
 	_SYSDEV_ATTR(version, 0444, socinfo_show_version, NULL),
@@ -389,6 +443,11 @@ static struct sysdev_attribute socinfo_v4_files[] = {
 static struct sysdev_attribute socinfo_v5_files[] = {
 	_SYSDEV_ATTR(accessory_chip, 0444,
 			socinfo_show_accessory_chip, NULL),
+};
+
+static struct sysdev_attribute socinfo_v6_files[] = {
+	_SYSDEV_ATTR(platform_subtype, 0444,
+			socinfo_show_platform_subtype, NULL),
 };
 
 static struct sysdev_class soc_sysdev_class = {
@@ -454,8 +513,14 @@ static int __init socinfo_init_sysdev(void)
 	if (socinfo->v1.format < 5)
 		return err;
 
-	return socinfo_create_files(&soc_sys_device, socinfo_v5_files,
+	socinfo_create_files(&soc_sys_device, socinfo_v5_files,
 				ARRAY_SIZE(socinfo_v5_files));
+
+	if (socinfo->v1.format < 6)
+		return err;
+
+	return socinfo_create_files(&soc_sys_device, socinfo_v6_files,
+				ARRAY_SIZE(socinfo_v6_files));
 
 }
 
@@ -463,7 +528,11 @@ arch_initcall(socinfo_init_sysdev);
 
 int __init socinfo_init(void)
 {
-	socinfo = smem_alloc(SMEM_HW_SW_BUILD_ID, sizeof(struct socinfo_v5));
+	socinfo = smem_alloc(SMEM_HW_SW_BUILD_ID, sizeof(struct socinfo_v6));
+
+	if (!socinfo)
+		socinfo = smem_alloc(SMEM_HW_SW_BUILD_ID,
+				sizeof(struct socinfo_v5));
 
 	if (!socinfo)
 		socinfo = smem_alloc(SMEM_HW_SW_BUILD_ID,
@@ -537,6 +606,19 @@ int __init socinfo_init(void)
 			socinfo->v2.raw_id, socinfo->v2.raw_version,
 			socinfo->v3.hw_platform, socinfo->v4.platform_version,
 			socinfo->v5.accessory_chip);
+		break;
+	case 6:
+		pr_info("%s: v%u, id=%u, ver=%u.%u, "
+			 "raw_id=%u, raw_ver=%u, hw_plat=%u,  hw_plat_ver=%u\n"
+			" accessory_chip=%u hw_plat_subtype=%u\n", __func__,
+			socinfo->v1.format,
+			socinfo->v1.id,
+			SOCINFO_VERSION_MAJOR(socinfo->v1.version),
+			SOCINFO_VERSION_MINOR(socinfo->v1.version),
+			socinfo->v2.raw_id, socinfo->v2.raw_version,
+			socinfo->v3.hw_platform, socinfo->v4.platform_version,
+			socinfo->v5.accessory_chip,
+			socinfo->v6.hw_platform_subtype);
 		break;
 	default:
 		pr_err("%s: Unknown format found\n", __func__);

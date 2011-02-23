@@ -2187,6 +2187,7 @@ static int msm_pp_release(struct msm_sync *sync, void __user *arg)
 		}
 		CDBG("%s: delivering pp_snap\n", __func__);
 		msm_enqueue(&sync->pict_q, &sync->pp_snap->list_pict);
+		msm_enqueue(&sync->pict_q, &sync->pp_thumb->list_pict);
 		sync->pp_snap = NULL;
 		sync->pp_thumb = NULL;
 		spin_unlock_irqrestore(&pp_snap_spinlock, flags);
@@ -2777,12 +2778,19 @@ static void msm_vfe_sync(struct msm_vfe_resp *vdata,
 	case VFE_MSG_OUTPUT_T:
 		if (sync->pp_mask & PP_SNAP) {
 			spin_lock_irqsave(&pp_thumb_spinlock, flags);
-			if (!sync->pp_thumb) {
+			sync->thumb_count--;
+			if (!sync->pp_thumb && (0 >= sync->thumb_count)) {
 				CDBG("%s: pp sending thumbnail to config\n",
 					__func__);
 				sync->pp_thumb = qcmd;
+				spin_unlock_irqrestore(&pp_thumb_spinlock,
+					flags);
+				if (atomic_read(&qcmd->on_heap))
+					atomic_add(1, &qcmd->on_heap);
+			} else {
+				spin_unlock_irqrestore(&pp_thumb_spinlock,
+					flags);
 			}
-			spin_unlock_irqrestore(&pp_thumb_spinlock, flags);
 			break;
 		} else {
 			msm_enqueue(&sync->pict_q, &qcmd->list_pict);
@@ -2792,7 +2800,8 @@ static void msm_vfe_sync(struct msm_vfe_resp *vdata,
 	case VFE_MSG_OUTPUT_S:
 		if (sync->pp_mask & PP_SNAP) {
 			spin_lock_irqsave(&pp_snap_spinlock, flags);
-			if (!sync->pp_snap) {
+			sync->snap_count--;
+			if (!sync->pp_snap && (0 >= sync->snap_count)) {
 				CDBG("%s: pp sending main image to config\n",
 					__func__);
 				sync->pp_snap = qcmd;
@@ -2800,8 +2809,10 @@ static void msm_vfe_sync(struct msm_vfe_resp *vdata,
 					flags);
 				if (atomic_read(&qcmd->on_heap))
 					atomic_add(1, &qcmd->on_heap);
+			} else {
+				spin_unlock_irqrestore(&pp_snap_spinlock,
+					flags);
 			}
-			spin_unlock_irqrestore(&pp_snap_spinlock, flags);
 			break;
 		} else {
 			msm_enqueue(&sync->pict_q, &qcmd->list_pict);

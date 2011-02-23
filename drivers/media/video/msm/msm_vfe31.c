@@ -1048,6 +1048,11 @@ static int vfe31_capture(uint32_t num_frames_capture)
 {
 	uint32_t irq_comp_mask = 0;
 	uint32_t temp;
+	struct msm_sync* p_sync = (struct msm_sync *)vfe_syncdata;
+	if (p_sync) {
+		p_sync->snap_count = num_frames_capture;
+		p_sync->thumb_count = num_frames_capture;
+	}
 	/* capture command is valid for both idle and active state. */
 	vfe31_ctrl->outpath.out1.capture_cnt = num_frames_capture;
 	if (vfe31_ctrl->operation_mode == 1) {

@@ -2545,7 +2545,7 @@ static struct kobject *properties_kobj;
 static int cyttsp_fluid_platform_init(struct i2c_client *client)
 {
 	int rc = -EINVAL;
-	struct regulator *pm8058_l5;
+	struct regulator *pm8058_l5, *pm8058_s3;
 
 	pm8058_l5 = regulator_get(NULL, "8058_l5");
 	if (IS_ERR(pm8058_l5)) {
@@ -2558,21 +2558,44 @@ static int cyttsp_fluid_platform_init(struct i2c_client *client)
 	if (rc) {
 		pr_err("%s: regulator_set_voltage of 8058_l5 failed(%d)\n",
 			__func__, rc);
-		goto reg_put;
+		goto reg_l5_put;
 	}
 
 	rc = regulator_enable(pm8058_l5);
 	if (rc) {
 		pr_err("%s: regulator_enable of 8058_l5 failed(%d)\n",
 			__func__, rc);
-		goto reg_put;
+		goto reg_l5_put;
+	}
+
+	/* vote for s3 to enable i2c communication lines */
+	pm8058_s3 = regulator_get(NULL, "8058_s3");
+	if (IS_ERR(pm8058_s3)) {
+		pr_err("%s: regulator get of 8058_s3 failed (%ld)\n",
+			__func__, PTR_ERR(pm8058_s3));
+		rc = PTR_ERR(pm8058_s3);
+		goto reg_l5_disable;
+	}
+
+	rc = regulator_set_voltage(pm8058_s3, 1800000, 1800000);
+	if (rc) {
+		pr_err("%s: regulator_set_voltage() = %d\n",
+			__func__, rc);
+		goto reg_s3_put;
+	}
+
+	rc = regulator_enable(pm8058_s3);
+	if (rc) {
+		pr_err("%s: regulator_enable of 8058_l5 failed(%d)\n",
+			__func__, rc);
+		goto reg_s3_put;
 	}
 
 	/* check this device active by reading first byte/register */
 	rc = i2c_smbus_read_byte_data(client, 0x01);
 	if (rc < 0) {
 		pr_err("%s: i2c sanity check failed\n", __func__);
-		goto reg_disable;
+		goto reg_s3_disable;
 	}
 
 	/* configure touchscreen interrupt gpio */
@@ -2580,7 +2603,7 @@ static int cyttsp_fluid_platform_init(struct i2c_client *client)
 	if (rc) {
 		pr_err("%s: unable to request gpio %d\n",
 			__func__, FLUID_CYTTSP_TS_GPIO_IRQ);
-		goto reg_disable;
+		goto reg_s3_disable;
 	}
 
 	/* virtual keys */
@@ -2596,9 +2619,13 @@ static int cyttsp_fluid_platform_init(struct i2c_client *client)
 
 	return CY_OK;
 
-reg_disable:
+reg_s3_disable:
+	regulator_disable(pm8058_s3);
+reg_s3_put:
+	regulator_put(pm8058_s3);
+reg_l5_disable:
 	regulator_disable(pm8058_l5);
-reg_put:
+reg_l5_put:
 	regulator_put(pm8058_l5);
 	return rc;
 }

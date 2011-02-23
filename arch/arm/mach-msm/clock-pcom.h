@@ -134,8 +134,17 @@
 #define P_GSBI_P_CLK		99
 #define P_CE_CLK		100 /* Crypto engine */
 #define P_CODEC_SSBI_CLK	101
+#define P_TCXO_DIV4_CLK		102
+#define P_GSBI1_QUP_CLK		103
+#define P_GSBI2_QUP_CLK		104
+#define P_GSBI1_QUP_P_CLK	105
+#define P_GSBI2_QUP_P_CLK	106
+#define P_DSI_CLK		107
+#define P_DSI_ESC_CLK		108
+#define P_DSI_PIXEL_CLK		109
+#define P_DSI_BYTE_CLK		110
 
-#define P_NR_CLKS		102
+#define P_NR_CLKS		111
 
 struct clk_ops;
 extern struct clk_ops clk_ops_remote;

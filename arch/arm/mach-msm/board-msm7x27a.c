@@ -85,6 +85,7 @@ static void __init msm7x2x_init(void)
 		platform_add_devices(rumi_sim_devices,
 				ARRAY_SIZE(rumi_sim_devices));
 	}
+	msm_clock_init(msm_clocks_7x27a, msm_num_clocks_7x27a);
 }
 
 static void __init msm7x2x_map_io(void)

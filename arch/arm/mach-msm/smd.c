@@ -1722,9 +1722,6 @@ int smd_core_init(void)
 
 static int __devinit msm_smd_probe(struct platform_device *pdev)
 {
-	/* enable smd and smsm info messages */
-	msm_smd_debug_mask = 0xc;
-
 	SMD_INFO("smd probe\n");
 
 	INIT_WORK(&probe_work, smd_channel_probe_worker);

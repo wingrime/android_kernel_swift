@@ -25,6 +25,10 @@
 #include <linux/platform_device.h>
 #include "timer.h"
 
+static struct platform_device *rumi_sim_devices[] __initdata = {
+	&msm_device_dmov,
+};
+
 static void __init msm7x2x_init_irq(void)
 {
 	msm_init_irq();
@@ -33,6 +37,10 @@ static void __init msm7x2x_init_irq(void)
 
 static void __init msm7x2x_init(void)
 {
+	if (machine_is_msm7x27a_rumi3()) {
+		platform_add_devices(rumi_sim_devices,
+				ARRAY_SIZE(rumi_sim_devices));
+	}
 }
 
 static void __init msm7x2x_map_io(void)

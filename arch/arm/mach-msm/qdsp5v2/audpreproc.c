@@ -21,10 +21,10 @@
 #include <linux/module.h>
 #include <linux/wakelock.h>
 #include <mach/msm_adsp.h>
-
+#include <mach/qdsp5v2/audio_acdbi.h>
 #include <mach/qdsp5v2/audpreproc.h>
 #include <mach/debug_mm.h>
-
+#include <mach/qdsp5v2/qdsp5audpreprocmsg.h>
 
 static DEFINE_MUTEX(audpreproc_lock);
 static struct wake_lock audpre_wake_lock;
@@ -209,6 +209,16 @@ static void audpreproc_dsp_event(void *data, unsigned id, size_t len,
 			&routing_mode_done);
 		break;
 	}
+#ifdef CONFIG_DEBUG_FS
+	case AUDPREPROC_MSG_FEAT_QUERY_DM_DONE:
+	   {
+	    uint16_t msg[3];
+	    getevent(msg, sizeof(msg));
+	    MM_INFO("RTC ACK --> %x %x %x\n", msg[0], msg[1], msg[2]);
+	    acdb_rtc_set_err(msg[2]);
+	   }
+	break;
+#endif
 	default:
 		MM_ERR("Unknown Event %d\n", id);
 	}

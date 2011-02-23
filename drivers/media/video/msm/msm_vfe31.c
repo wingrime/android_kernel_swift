@@ -820,12 +820,6 @@ static void vfe31_reset_internal_variables(void)
 
 	/* this is unsigned 32 bit integer. */
 	vfe31_ctrl->vfeFrameId = 0;
-	vfe31_ctrl->output1Pattern = 0xffffffff;
-	vfe31_ctrl->output1Period  = 31;
-	vfe31_ctrl->output2Pattern = 0xffffffff;
-	vfe31_ctrl->output2Period  = 31;
-	vfe31_ctrl->vfeFrameSkipCount   = 0;
-	vfe31_ctrl->vfeFrameSkipPeriod  = 31;
 	/* Stats control variables. */
 	memset(&(vfe31_ctrl->afStatsControl), 0,
 		sizeof(struct vfe_stats_control));

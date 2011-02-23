@@ -89,7 +89,7 @@ config MT9P012_KM
 
 config MT9E013
 	bool "Sensor mt9e013 module (BAYER 8M)"
-	depends on MSM_CAMERA && ARCH_MSM7X30 && !MSM_CAMERA_V4L2
+	depends on MSM_CAMERA && (ARCH_MSM7X30 || ARCH_MSM8X60) && !MSM_CAMERA_V4L2
 	default y
 	---help---
 	  Aptina 8M Bayer Sensor modules with Autofocus

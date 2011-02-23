@@ -995,6 +995,32 @@ static struct msm_camera_sensor_strobe_flash_data strobe_flash_xenon = {
 };
 #endif
 #endif
+#ifdef CONFIG_MT9E013
+static struct msm_camera_sensor_flash_data flash_mt9e013 = {
+	.flash_type = MSM_CAMERA_FLASH_LED,
+	.flash_src  = &msm_flash_src
+};
+
+static struct msm_camera_sensor_info msm_camera_sensor_mt9e013_data = {
+	.sensor_name    = "mt9e013",
+	.sensor_reset   = GPIO_AUX_CAM_2P7_EN,
+	.sensor_pwd     = 85,
+	.vcm_pwd        = 1,
+	.vcm_enable     = 1,
+	.pdata          = &msm_camera_device_data,
+	.resource       = msm_camera_resources,
+	.num_resources  = ARRAY_SIZE(msm_camera_resources),
+	.flash_data     = &flash_mt9e013,
+	.csi_if         = 1
+};
+
+static struct platform_device msm_camera_sensor_mt9e013 = {
+	.name      = "msm_camera_mt9e013",
+	.dev       = {
+		.platform_data = &msm_camera_sensor_mt9e013_data,
+	},
+};
+#endif
 #ifdef CONFIG_IMX074
 static struct msm_camera_sensor_flash_data flash_imx074 = {
 	.flash_type		= MSM_CAMERA_FLASH_LED,
@@ -1071,6 +1097,12 @@ static struct platform_device msm_camera_sensor_webcam_ov7692 = {
 };
 #endif
 static struct i2c_board_info msm_camera_boardinfo[] __initdata = {
+	#ifdef CONFIG_MT9E013
+	{
+		I2C_BOARD_INFO("mt9e013", 0x6C >> 2),
+	},
+	#endif
+
 	#ifdef CONFIG_IMX074
 	{
 		I2C_BOARD_INFO("imx074", 0x1A),
@@ -2082,6 +2114,9 @@ static struct platform_device *qt_devices[] __initdata = {
 	&hdmi_msm_device,
 #endif /* CONFIG_FB_MSM_HDMI_MSM_PANEL */
 #ifdef CONFIG_MSM_CAMERA
+#ifdef CONFIG_MT9E013
+	&msm_camera_sensor_mt9e013,
+#endif
 #ifdef CONFIG_IMX074
 	&msm_camera_sensor_imx074,
 #endif

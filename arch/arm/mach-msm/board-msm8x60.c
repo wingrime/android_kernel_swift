@@ -3962,12 +3962,13 @@ static int isl_detection_setup(void)
 }
 
 static struct isl_platform_data isl_data __initdata = {
-	.chgcurrent = 700,
-	.valid_n_gpio = PM8058_MPP_PM_TO_SYS(10),
-	.chg_detection_config = isl_detection_setup,
-	.max_system_voltage = 4200,
-	.min_system_voltage = 3200,
-	.term_current = 120,
+	.chgcurrent		= 700,
+	.valid_n_gpio		= PM8058_MPP_PM_TO_SYS(10),
+	.chg_detection_config	= isl_detection_setup,
+	.max_system_voltage	= 4200,
+	.min_system_voltage	= 3200,
+	.term_current		= 120,
+	.input_current		= 2048,
 };
 
 static struct i2c_board_info isl_charger_i2c_info[] __initdata = {

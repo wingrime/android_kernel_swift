@@ -497,6 +497,28 @@ static const struct file_operations kgsl_mh_debug_fops = {
 	.read = kgsl_mh_debug_read,
 };
 
+static ssize_t kgsl_dump_write(struct file *file, const char __user *buff,
+			       size_t count, loff_t *ppos)
+{
+	struct kgsl_device *device = file->private_data;
+
+	if (count > 0) {
+		mutex_lock(&device->mutex);
+		/* Trigger a manual dump */
+		kgsl_postmortem_dump(device, 1);
+		mutex_unlock(&device->mutex);
+	}
+
+	return count;
+}
+
+static const struct file_operations kgsl_dump_fops = {
+	.open = kgsl_dbgfs_open,
+	.release = kgsl_dbgfs_release,
+	.read = NULL,
+	.write = kgsl_dump_write,
+};
+
 #endif /* CONFIG_DEBUG_FS */
 
 #ifdef CONFIG_DEBUG_FS
@@ -518,6 +540,8 @@ int kgsl_yamato_debugfs_init(struct kgsl_device *device)
 			    &kgsl_mh_debug_fops);
 	debugfs_create_file("cff_dump", 0644, device->d_debugfs, device,
 			    &kgsl_cff_dump_enable_fops);
+	debugfs_create_file("dump",  0600, device->d_debugfs, device,
+			    &kgsl_dump_fops);
 	return 0;
 }
 #else

@@ -659,21 +659,79 @@ end:
 	return result;
 }
 
-int kgsl_postmortem_dump(struct kgsl_device *device)
+/**
+ * kgsl_postmortem_dump - Dump the current GPU state
+ * @device - A pointer to the KGSL device to dump
+ * @manual - A flag that indicates if this was a manually triggered
+ *           dump (from debugfs).  If zero, then this is assumed to be a
+ *           dump automaticlaly triggered from a hang
+*/
+
+int kgsl_postmortem_dump(struct kgsl_device *device, int manual)
 {
+	bool saved_nap;
+
 	BUG_ON(device == NULL);
 
 	if (device->id == KGSL_DEVICE_YAMATO) {
-		kgsl_pwrctrl_irq(device, KGSL_PWRFLAGS_IRQ_OFF);
+
+		/* For a manual dump, make sure that the system is idle */
+
+		if (manual) {
+			if (device->active_cnt != 0) {
+				mutex_unlock(&device->mutex);
+				wait_for_completion(&device->suspend_gate);
+				mutex_lock(&device->mutex);
+			}
+
+			if (device->state == KGSL_STATE_ACTIVE)
+				kgsl_idle(device,  KGSL_TIMEOUT_DEFAULT);
+
+		}
+		/* Disable the idle timer so we don't get interrupted */
 		del_timer(&device->idle_timer);
-		device->state = KGSL_STATE_DUMP_AND_RECOVER;
-		KGSL_PWR_INFO("state -> DUMP_AND_RECOVER, device %d\n",
-					 device->id);
+
+		/* Turn off napping to make sure we have the clocks full
+		   attention through the following process */
+		saved_nap = device->pwrctrl.nap_allowed;
+		device->pwrctrl.nap_allowed = false;
+
+		/* Force on the clocks */
+		kgsl_pwrctrl_wake(device);
+
+		/* Disable the irq */
+		kgsl_pwrctrl_irq(device, KGSL_PWRFLAGS_IRQ_OFF);
+
+		/* If this is not a manual trigger, then set up the
+		   state to try to recover */
+
+		if (!manual) {
+			device->state = KGSL_STATE_DUMP_AND_RECOVER;
+			KGSL_PWR_INFO("state -> DUMP_AND_RECOVER, device %d\n",
+				      device->id);
+		}
+
 		KGSL_DRV_ERR("wait for work in workqueue to complete\n");
 		mutex_unlock(&device->mutex);
 		flush_workqueue(device->work_queue);
 		mutex_lock(&device->mutex);
 		kgsl_dump_yamato(device);
+
+		/* Restore nap mode */
+		device->pwrctrl.nap_allowed = saved_nap;
+
+		/* On a manual trigger, turn on the interrupts and put
+		   the clocks to sleep.  They will recover themselves
+		   on the next event.  For a hang, leave things as they
+		   are until recovery kicks in. */
+
+		if (manual) {
+			kgsl_pwrctrl_irq(device, KGSL_PWRFLAGS_IRQ_ON);
+
+			/* try to go into a sleep mode until the next event */
+			device->requested_state = KGSL_STATE_SLEEP;
+			kgsl_pwrctrl_sleep(device);
+		}
 	}
 	else
 		KGSL_DRV_FATAL("Unknown device id - 0x%x\n", device->id);

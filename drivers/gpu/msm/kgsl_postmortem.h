@@ -34,6 +34,6 @@ struct kgsl_device;
 
 void kgsl_postmortem_init(struct dentry *);
 
-int kgsl_postmortem_dump(struct kgsl_device *device);
+int kgsl_postmortem_dump(struct kgsl_device *device, int manual);
 
 #endif /* KGSL_POSTMORTEM_H */

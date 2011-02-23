@@ -1057,7 +1057,8 @@ kgsl_yamato_dump_and_recover(struct kgsl_device *device)
 			result = 0;
 	} else {
 		INIT_COMPLETION(device->recovery_gate);
-		kgsl_postmortem_dump(device);
+		/* Detected a hang - trigger an automatic dump */
+		kgsl_postmortem_dump(device, 0);
 		if (!recovery) {
 			recovery = 1;
 			result = kgsl_yamato_recover_hang(device);

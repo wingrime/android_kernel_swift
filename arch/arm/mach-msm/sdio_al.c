@@ -778,7 +778,7 @@ static int read_mailbox(struct sdio_al_device *sdio_al_dev, int from_isr)
 	}
 
 	if (overflow_pipe || underflow_pipe)
-		pr_info(MODULE_NAME ":Mailbox ERROR "
+		pr_err(MODULE_NAME ":Mailbox ERROR "
 				"overflow=0x%x, underflow=0x%x\n",
 				overflow_pipe, underflow_pipe);
 
@@ -801,7 +801,7 @@ static int read_mailbox(struct sdio_al_device *sdio_al_dev, int from_isr)
 		read_avail = mailbox->pipe_bytes_avail[ch->rx_pipe_index];
 
 		if (read_avail > INVALID_DATA_AVAILABLE) {
-			pr_info(MODULE_NAME
+			pr_err(MODULE_NAME
 				 ":Invalid read_avail 0x%x for pipe %d\n",
 				 read_avail, ch->rx_pipe_index);
 			continue;
@@ -831,7 +831,7 @@ static int read_mailbox(struct sdio_al_device *sdio_al_dev, int from_isr)
 		new_write_avail = mailbox->pipe_bytes_avail[ch->tx_pipe_index];
 
 		if (new_write_avail > INVALID_DATA_AVAILABLE) {
-			pr_info(MODULE_NAME
+			pr_err(MODULE_NAME
 				 ":Invalid write_avail 0x%x for pipe %d\n",
 				 new_write_avail, ch->tx_pipe_index);
 			continue;
@@ -974,7 +974,7 @@ static u32 check_pending_rx_packet(struct sdio_channel *ch, u32 eot)
 		new_packet_size = rx_avail - rx_pending;
 
 		if ((rx_avail <= rx_pending)) {
-			pr_info(MODULE_NAME ":Invalid new packet size."
+			pr_err(MODULE_NAME ":Invalid new packet size."
 					    " rx_avail=%d.\n", rx_avail);
 			new_packet_size = 0;
 			goto exit_err;
@@ -1448,8 +1448,11 @@ static int sdio_al_bootloader_setup(void)
 	/* Upper byte has to be equal - no backward compatibility for unequal */
 	if ((bootloader_dev->sdioc_boot_sw_header->version >> 16) !=
 	    (PEER_SDIOC_BOOT_VERSION_MAJOR)) {
-		pr_err(MODULE_NAME ":SDIOC BOOT SW older version. 0x%x\n",
-			bootloader_dev->sdioc_boot_sw_header->version);
+		pr_err(MODULE_NAME ":HOST(0x%x) and CLIENT(0x%x) BOOT "
+		       "VERSION don't match\n",
+		       ((PEER_SDIOC_BOOT_VERSION_MAJOR<<16)+
+			PEER_SDIOC_BOOT_VERSION_MINOR),
+		       bootloader_dev->sdioc_boot_sw_header->version);
 		sdio_release_host(func1);
 		ret = -EIO;
 		goto exit_err;
@@ -1527,8 +1530,11 @@ static int read_sdioc_software_header(struct sdio_al_device *sdio_al_dev,
 	}
 	/* Upper byte has to be equal - no backward compatibility for unequal */
 	if ((header->version >> 16) != (PEER_SDIOC_VERSION_MAJOR)) {
-		pr_err(MODULE_NAME ":SDIOC SW older version. 0x%x\n",
-			header->version);
+		pr_err(MODULE_NAME ":HOST(0x%x) and CLIENT(0x%x) "
+		       "VERSION don't match\n",
+		       ((PEER_SDIOC_VERSION_MAJOR<<16)+
+			PEER_SDIOC_VERSION_MINOR),
+		       header->version);
 		goto exit_err;
 	}
 
@@ -1615,14 +1621,14 @@ static int read_sdioc_channel_config(struct sdio_channel *ch)
 	ret = sdio_memcpy_fromio(ch->func, sw_mailbox,
 			SDIOC_SW_MAILBOX_ADDR, sizeof(*sw_mailbox));
 	if (ret) {
-		pr_info(MODULE_NAME ":fail to read sw mailbox.\n");
+		pr_err(MODULE_NAME ":fail to read sw mailbox.\n");
 		goto exit_err;
 	}
 
 	ch_config = &sw_mailbox->ch_config[ch->num];
 
 	if (!ch_config->is_ready) {
-		pr_info(MODULE_NAME ":sw mailbox channel not ready.\n");
+		pr_err(MODULE_NAME ":sw mailbox channel not ready.\n");
 		goto exit_err;
 	}
 
@@ -1896,7 +1902,8 @@ static int open_channel(struct sdio_channel *ch)
 	/* Note: Patch Func CIS tuple issue */
 	ret = sdio_set_block_size(ch->func, SDIO_AL_BLOCK_SIZE);
 	if (ret) {
-		pr_info(MODULE_NAME ":sdio_set_block_size() err=%d\n", -ret);
+		pr_err(MODULE_NAME ":sdio_set_block_size()failed, err=%d\n",
+		       -ret);
 		goto exit_err;
 	}
 
@@ -2168,7 +2175,7 @@ static int sdio_al_setup(struct sdio_al_device *sdio_al_dev)
 	int fn = 0;
 
 	if (card == NULL) {
-		pr_info(MODULE_NAME ":sdio_al_setup: No Card detected\n");
+		pr_err(MODULE_NAME ":sdio_al_setup: No Card detected\n");
 		return -ENODEV;
 	}
 
@@ -2205,7 +2212,7 @@ static int sdio_al_setup(struct sdio_al_device *sdio_al_dev)
 
 		ret = sdio_claim_irq(func1, sdio_func_irq);
 		if (ret) {
-			pr_info(MODULE_NAME ":Fail to claim IRQ for card %d\n",
+			pr_err(MODULE_NAME ":Fail to claim IRQ for card %d\n",
 				card->host->index);
 			goto exit_err;
 		}
@@ -2345,7 +2352,7 @@ int sdio_open(const char *name, struct sdio_channel **ret_ch, void *priv,
 
 	ch = find_channel_by_name(name);
 	if (ch == NULL) {
-		pr_info(MODULE_NAME ":Can't find channel name %s\n", name);
+		pr_err(MODULE_NAME ":Can't find channel name %s\n", name);
 		return -EINVAL;
 	}
 
@@ -2365,7 +2372,7 @@ int sdio_open(const char *name, struct sdio_channel **ret_ch, void *priv,
 	}
 
 	if (ch->is_open) {
-		pr_info(MODULE_NAME ":Channel already opened %s\n", name);
+		pr_err(MODULE_NAME ":Channel already opened %s\n", name);
 		return -EPERM;
 	}
 
@@ -2395,7 +2402,7 @@ int sdio_open(const char *name, struct sdio_channel **ret_ch, void *priv,
 	sdio_release_host(sdio_al_dev->card->sdio_func[0]);
 
 	if (ret) {
-		pr_info(MODULE_NAME ":sdio_open %s err=%d\n", name, -ret);
+		pr_err(MODULE_NAME ":sdio_open %s err=%d\n", name, -ret);
 		return ret;
 	}
 
@@ -2502,7 +2509,8 @@ int sdio_read(struct sdio_channel *ch, void *data, int len)
 	}
 
 	if (len > ch->read_avail) {
-		pr_info(MODULE_NAME ":ERR ch %s read %d avail %d.\n",
+		pr_err(MODULE_NAME ":ERR ch %s: reading more bytes (%d) than"
+				   " the avail(%d).\n",
 				ch->name, len, ch->read_avail);
 		return -ENOMEM;
 	}
@@ -2510,7 +2518,7 @@ int sdio_read(struct sdio_channel *ch, void *data, int len)
 	ret = sdio_memcpy_fromio(ch->func, data, PIPE_RX_FIFO_ADDR, len);
 
 	if (ret)
-		pr_info(MODULE_NAME ":sdio_read err=%d\n", -ret);
+		pr_err(MODULE_NAME ":sdio_read err=%d\n", -ret);
 
 	/* Remove handled packet from the list regardless if ret is ok */
 	if (ch->is_packet_mode)
@@ -2552,7 +2560,7 @@ int sdio_write(struct sdio_channel *ch, const void *data, int len)
 	}
 
 	if (!ch->is_open) {
-		pr_info(MODULE_NAME ":writing to closed channel %s\n",
+		pr_err(MODULE_NAME ":writing to closed channel %s\n",
 				 ch->name);
 		return -EINVAL;
 	}
@@ -2572,7 +2580,8 @@ int sdio_write(struct sdio_channel *ch, const void *data, int len)
 		ch->name, len, ch->write_avail);
 
 	if (len > ch->write_avail) {
-		pr_info(MODULE_NAME ":ERR ch %s write %d avail %d.\n",
+		pr_err(MODULE_NAME ":ERR ch %s: write more bytes (%d) than "
+				   " available %d.\n",
 				ch->name, len, ch->write_avail);
 		sdio_release_host(sdio_al_dev->card->sdio_func[0]);
 		return -ENOMEM;
@@ -2935,14 +2944,14 @@ static int mmc_probe(struct mmc_card *card)
 	/* Init Func#1 */
 	ret = sdio_enable_func(func1);
 	if (ret) {
-		pr_info(MODULE_NAME ":Fail to enable Func#%d\n", func1->num);
+		pr_err(MODULE_NAME ":Fail to enable Func#%d\n", func1->num);
 		goto exit;
 	}
 
 	/* Patch Func CIS tuple issue */
 	ret = sdio_set_block_size(func1, SDIO_AL_BLOCK_SIZE);
 	if (ret) {
-		pr_info(MODULE_NAME ":Fail to set block size, Func#%d\n",
+		pr_err(MODULE_NAME ":Fail to set block size, Func#%d\n",
 			func1->num);
 		goto exit;
 	}

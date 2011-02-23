@@ -1,4 +1,4 @@
-/* Copyright (c) 2010 Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2010-2011, Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -42,21 +42,19 @@
 #define ISL9519_CHG_PERIOD	((HZ) * 150)
 
 struct isl9519q_struct {
-	struct i2c_client *client;
-	struct delayed_work charge_work;
-
-	int present;
-	int batt_present;
-	bool charging;
-	int chgcurrent;
-	int term_current;
-	int max_system_voltage;
-	int min_system_voltage;
-
-	int valid_n_gpio;
-	struct dentry *dent;
-
-	struct msm_hardware_charger adapter_hw_chg;
+	struct i2c_client		*client;
+	struct delayed_work		charge_work;
+	int				present;
+	int				batt_present;
+	bool				charging;
+	int				chgcurrent;
+	int				term_current;
+	int				input_current;
+	int				max_system_voltage;
+	int				min_system_voltage;
+	int				valid_n_gpio;
+	struct dentry			*dent;
+	struct msm_hardware_charger	adapter_hw_chg;
 };
 
 static int isl9519q_read_reg(struct i2c_client *client, int reg,
@@ -323,12 +321,14 @@ static int __devinit isl9519q_probe(struct i2c_client *client,
 	isl_chg->client = client;
 	isl_chg->chgcurrent = pdata->chgcurrent;
 	isl_chg->term_current = pdata->term_current;
+	isl_chg->input_current = pdata->input_current;
 	isl_chg->max_system_voltage = pdata->max_system_voltage;
 	isl_chg->min_system_voltage = pdata->min_system_voltage;
 	isl_chg->valid_n_gpio = pdata->valid_n_gpio;
 
-	/* h/w ignores lower 7 bits of charging current */
+	/* h/w ignores lower 7 bits of charging current and input current */
 	isl_chg->chgcurrent &= ~0x7F;
+	isl_chg->input_current &= ~0x7F;
 
 	isl_chg->adapter_hw_chg.type = CHG_TYPE_AC;
 	isl_chg->adapter_hw_chg.rating = 2;
@@ -397,6 +397,18 @@ static int __devinit isl9519q_probe(struct i2c_client *client,
 			"%s couldnt write to MIN_SYS_VOLTAGE_REG ret=%d\n",
 			__func__, ret);
 		goto free_irq;
+	}
+
+	if (isl_chg->input_current) {
+		ret = isl9519q_write_reg(isl_chg->client,
+				INPUT_CURRENT_REG,
+				isl_chg->input_current);
+		if (ret) {
+			dev_err(&client->dev,
+				"%s couldnt write INPUT_CURRENT_REG ret=%d\n",
+				__func__, ret);
+			goto free_irq;
+		}
 	}
 
 	ret = gpio_get_value_cansleep(isl_chg->valid_n_gpio);

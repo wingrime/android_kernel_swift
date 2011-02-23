@@ -225,7 +225,7 @@ static int kgsl_suspend(struct platform_device *dev, pm_message_t state)
 	struct kgsl_device *device;
 	unsigned int nap_allowed_saved;
 
-	KGSL_DRV_DBG("suspend start\n");
+	KGSL_PWR_INFO("suspend start\n");
 
 	for (i = 0; i < KGSL_DEVICE_MAX; i++) {
 		device = kgsl_driver.devp[i];
@@ -258,8 +258,12 @@ static int kgsl_suspend(struct platform_device *dev, pm_message_t state)
 			device->ftbl.device_suspend_context(device);
 			device->ftbl.device_stop(device);
 			device->state = KGSL_STATE_SUSPEND;
+			KGSL_PWR_INFO("state -> SUSPEND, device %d\n",
+				device->id);
 			break;
 		default:
+			KGSL_PWR_ERR("suspend fail, device %d\n",
+					device->id);
 			mutex_unlock(&device->mutex);
 			return KGSL_FAILURE;
 		}
@@ -268,7 +272,7 @@ static int kgsl_suspend(struct platform_device *dev, pm_message_t state)
 
 		mutex_unlock(&device->mutex);
 	}
-	KGSL_DRV_DBG("suspend end\n");
+	KGSL_PWR_INFO("suspend end\n");
 	return KGSL_SUCCESS;
 }
 
@@ -278,7 +282,7 @@ static int kgsl_resume(struct platform_device *dev)
 	int i, status = KGSL_SUCCESS;
 	struct kgsl_device *device;
 
-	KGSL_DRV_DBG("resume start\n");
+	KGSL_PWR_INFO("resume start\n");
 
 	for (i = 0; i < KGSL_DEVICE_MAX; i++) {
 		device = kgsl_driver.devp[i];
@@ -291,8 +295,10 @@ static int kgsl_resume(struct platform_device *dev)
 			status = device->ftbl.device_start(device, 0);
 			if (status == KGSL_SUCCESS) {
 				device->state = KGSL_STATE_ACTIVE;
+				KGSL_PWR_WARN("state -> ACTIVE, device %d\n",
+							 device->id);
 			} else {
-				KGSL_DRV_ERR("resume failed for dev->id=%d\n",
+				KGSL_PWR_ERR("resume failed, device %d\n",
 					device->id);
 				device->state = KGSL_STATE_INIT;
 				mutex_unlock(&device->mutex);
@@ -304,7 +310,7 @@ static int kgsl_resume(struct platform_device *dev)
 		device->requested_state = KGSL_STATE_NONE;
 		mutex_unlock(&device->mutex);
 	}
-	KGSL_DRV_DBG("resume end\n");
+	KGSL_PWR_INFO("resume end\n");
 	return status;
 }
 
@@ -422,6 +428,7 @@ static int kgsl_release(struct inode *inodep, struct file *filep)
 		KGSL_DRV_VDBG("last_release\n");
 		result = device->ftbl.device_stop(device);
 		device->state = KGSL_STATE_INIT;
+		KGSL_PWR_INFO("state -> INIT, device %d\n", device->id);
 	}
 	/* clean up any to-be-freed entries that belong to this
 	 * process and this device
@@ -491,11 +498,13 @@ static int kgsl_open(struct inode *inodep, struct file *filep)
 
 	if (atomic_inc_and_test(&device->open_count)) {
 		result = device->ftbl.device_start(device, KGSL_TRUE);
-		if (result != 0)
+		if (result != 0) {
 			KGSL_DRV_ERR("device_start() failed, minor=%d\n",
 					minor);
-		else
+		} else {
 			device->state = KGSL_STATE_ACTIVE;
+			KGSL_PWR_INFO("state -> ACTIVE, device %d\n", minor);
+		}
 	}
 
 	mutex_unlock(&device->mutex);

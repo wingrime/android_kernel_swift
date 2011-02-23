@@ -100,6 +100,8 @@ void ddl_channel_set(struct ddl_client_context *ddl)
 	struct vcd_fw_details fw_details;
 
 	if (ddl->decoding) {
+		if (vidc_msg_timing)
+			ddl_set_core_start_time(__func__, DEC_OP_TIME);
 		enc_dec_sel = VIDC_720P_DECODER;
 		fw_property_id = VCD_FW_DECODE;
 		vcd_codec = &(ddl->codec_data.decoder.codec.codec);
@@ -177,7 +179,8 @@ void ddl_decode_init_codec(struct ddl_client_context *ddl)
 	struct ddl_decoder_data *decoder = &(ddl->codec_data.decoder);
 	struct vcd_sequence_hdr *seq_hdr = &decoder->decode_config;
 	enum vidc_720p_memory_access_method mem_access_method;
-
+	if (vidc_msg_timing)
+		ddl_set_core_start_time(__func__, DEC_OP_TIME);
 	ddl_metadata_enable(ddl);
 
 	vidc_720p_decode_set_error_control(true);
@@ -769,7 +772,8 @@ u32 ddl_decode_set_buffers(struct ddl_client_context *ddl)
 		VIDC_LOG_STRING("STATE-CRITICAL");
 		return VCD_ERR_FAIL;
 	}
-
+	if (vidc_msg_timing)
+		ddl_set_core_start_time(__func__, DEC_OP_TIME);
 	switch (decoder->codec.codec) {
 	default:
 	case VCD_CODEC_DIVX_4:
@@ -855,7 +859,10 @@ void ddl_decode_frame_run(struct ddl_client_context *ddl)
 	struct ddl_decoder_data *decoder = &ddl->codec_data.decoder;
 	struct vcd_frame_data *bit_stream =
 	    &(ddl->input_frame.vcd_frm);
-
+	if (vidc_msg_timing) {
+		ddl_set_core_start_time(__func__, DEC_OP_TIME);
+		ddl_set_core_start_time(__func__, DEC_IP_TIME);
+	}
 	if (!bit_stream->data_len ||
 		!bit_stream->physical) {
 		ddl_decode_eos_run(ddl);

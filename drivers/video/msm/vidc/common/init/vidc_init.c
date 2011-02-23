@@ -1,4 +1,4 @@
-/* Copyright (c) 2010, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2010-2011, Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -66,6 +66,28 @@ struct workqueue_struct *vidc_wq;
 struct workqueue_struct *vidc_timer_wq;
 static irqreturn_t vidc_isr(int irq, void *dev);
 static spinlock_t vidc_spin_lock;
+
+u32 vidc_msg_timing;
+
+#ifdef VIDC_ENABLE_DBGFS
+struct dentry *vidc_debugfs_root;
+
+struct dentry *vidc_get_debugfs_root(void)
+{
+	if (vidc_debugfs_root == NULL)
+		vidc_debugfs_root = debugfs_create_dir("vidc", NULL);
+	return vidc_debugfs_root;
+}
+
+void vidc_debugfs_file_create(struct dentry *root, const char *name,
+				u32 *var)
+{
+	struct dentry *vidc_debugfs_file =
+	    debugfs_create_u32(name, S_IRUGO | S_IWUSR, root, var);
+	if (!vidc_debugfs_file)
+		ERR("%s(): Error creating/opening file %s\n", __func__, name);
+}
+#endif
 
 static void vidc_timer_fn(unsigned long data)
 {
@@ -210,6 +232,9 @@ static int __init vidc_init(void)
 {
 	int rc = 0;
 	struct device *class_devp;
+#ifdef VIDC_ENABLE_DBGFS
+	struct dentry *root = NULL;
+#endif
 
 	vidc_device_p = kzalloc(sizeof(struct vidc_dev), GFP_KERNEL);
 	if (!vidc_device_p) {
@@ -283,6 +308,14 @@ static int __init vidc_init(void)
 	vidc_device_p->ref_count = 0;
 	vidc_device_p->firmware_refcount = 0;
 	vidc_device_p->get_firmware = 0;
+
+#ifdef VIDC_ENABLE_DBGFS
+	root = vidc_get_debugfs_root();
+	if (root) {
+		vidc_debugfs_file_create(root, "vidc_msg_timing",
+				(u32 *) &vidc_msg_timing);
+	}
+#endif
 	return 0;
 
 error_vidc_platfom_register:

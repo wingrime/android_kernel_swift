@@ -1,4 +1,4 @@
-/* Copyright (c) 2010, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2010-2011, Code Aurora Forum. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -42,7 +42,6 @@
 #define DEBUG   0
 
 #define USE_RES_TRACKER
-#undef  CORE_TIMING_INFO
 
 #ifdef CONFIG_KERNEL_PMEM_SMI_REGION
 #define PMEM_MEMTYPE   PMEM_MEMTYPE_SMI

@@ -567,6 +567,56 @@ static void msm_hs_set_bps_locked(struct uart_port *uport,
 	msm_hs_write(uport, UARTDM_IPR_ADDR, data);
 }
 
+
+static void msm_hs_set_std_bps_locked(struct uart_port *uport,
+			       unsigned int bps)
+{
+	unsigned long rxstale;
+	unsigned long data;
+
+	switch (bps) {
+	case 9600:
+		msm_hs_write(uport, UARTDM_CSR_ADDR, 0x99);
+		rxstale = 2;
+		break;
+	case 14400:
+		msm_hs_write(uport, UARTDM_CSR_ADDR, 0xaa);
+		rxstale = 3;
+		break;
+	case 19200:
+		msm_hs_write(uport, UARTDM_CSR_ADDR, 0xbb);
+		rxstale = 4;
+		break;
+	case 28800:
+		msm_hs_write(uport, UARTDM_CSR_ADDR, 0xcc);
+		rxstale = 6;
+		break;
+	case 38400:
+		msm_hs_write(uport, UARTDM_CSR_ADDR, 0xdd);
+		rxstale = 8;
+		break;
+	case 57600:
+		msm_hs_write(uport, UARTDM_CSR_ADDR, 0xee);
+		rxstale = 16;
+		break;
+	case 115200:
+		msm_hs_write(uport, UARTDM_CSR_ADDR, 0xff);
+		rxstale = 31;
+		break;
+	default:
+		msm_hs_write(uport, UARTDM_CSR_ADDR, 0x99);
+		/* default to 9600 */
+		bps = 9600;
+		rxstale = 2;
+		break;
+	}
+
+	data = rxstale & UARTDM_IPR_STALE_LSB_BMSK;
+	data |= UARTDM_IPR_STALE_TIMEOUT_MSB_BMSK & (rxstale << 2);
+
+	msm_hs_write(uport, UARTDM_IPR_ADDR, data);
+}
+
 /*
  * termios :  new ktermios
  * oldtermios:  old ktermios previous setting
@@ -593,7 +643,11 @@ static void msm_hs_set_termios(struct uart_port *uport,
 	if (bps == 200)
 		bps = 3200000;
 
-	msm_hs_set_bps_locked(uport, bps);
+	uport->uartclk = clk_get_rate(msm_uport->clk);
+	if (!uport->uartclk)
+		msm_hs_set_std_bps_locked(uport, bps);
+	else
+		msm_hs_set_bps_locked(uport, bps);
 
 	data = msm_hs_read(uport, UARTDM_MR2_ADDR);
 	data &= ~UARTDM_MR2_PARITY_MODE_BMSK;

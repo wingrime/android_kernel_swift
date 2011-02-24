@@ -281,6 +281,8 @@ struct msm_sync {
 	spinlock_t pmem_frame_spinlock;
 	spinlock_t pmem_stats_spinlock;
 	spinlock_t abort_pict_lock;
+	int snap_count;
+	int thumb_count;
 };
 
 #define MSM_APPS_ID_V4L2 "msm_v4l2"

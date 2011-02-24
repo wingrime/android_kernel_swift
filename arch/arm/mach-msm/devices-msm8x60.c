@@ -95,7 +95,6 @@
 
 static void charm_ap2mdm_kpdpwr_on(void)
 {
-	gpio_request(132, "AP2MDM_KPDPWR_N");
 	if (machine_is_msm8x60_charm_surf())
 		gpio_direction_output(132, 0);
 	else

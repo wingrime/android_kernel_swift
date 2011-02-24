@@ -1758,7 +1758,7 @@ u32 vcd_handle_input_done(
 			frame->vcd_frm.flags &= ~VCD_FRAME_FLAG_CODECCONFIG;
 		}
 		if (frame->vcd_frm.interlaced)
-			vcd_handle_input_done_for_interlacing(cctxt);
+			vcd_handle_input_done_for_interlacing(cctxt, transc);
 		if (frame->frm_trans_end)
 			vcd_handle_input_done_with_trans_end(cctxt);
 	}
@@ -1846,12 +1846,14 @@ void vcd_handle_input_done_with_codec_config(
 		vcd_release_trans_tbl_entry(transc);
 }
 
-void vcd_handle_input_done_for_interlacing(struct vcd_clnt_ctxt *cctxt)
+void vcd_handle_input_done_for_interlacing(struct vcd_clnt_ctxt *cctxt,
+	struct vcd_transc *transc)
 {
 	cctxt->status.int_field_cnt++;
-	if (cctxt->status.int_field_cnt == 1)
+	if (cctxt->status.int_field_cnt == 1) {
 		cctxt->sched_clnt_hdl->tkns++;
-	else if (cctxt->status.int_field_cnt ==
+		vcd_release_trans_tbl_entry(transc);
+	} else if (cctxt->status.int_field_cnt ==
 		VCD_DEC_NUM_INTERLACED_FIELDS)
 		cctxt->status.int_field_cnt = 0;
 }

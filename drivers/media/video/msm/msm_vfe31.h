@@ -293,7 +293,7 @@ enum  VFE_STATE {
 #define V31_SYNC_TIMER_SETTING    104
 #define V31_ASYNC_TIMER_SETTING   105
 #define V31_LIVESHOT              106
-
+#define V31_ZSL                   107
 #define V31_CAMIF_OFF             0x000001E4
 #define V31_CAMIF_LEN             32
 
@@ -518,11 +518,6 @@ enum VFE_START_INPUT_SOURCE {
 	VFE_START_INPUT_SOURCE_TESTGEN,
 	VFE_START_INPUT_SOURCE_AXI,
 	VFE_START_INPUT_SOURCE_INVALID
-};
-
-enum VFE_START_OPERATION_MODE {
-	VFE_START_OPERATION_MODE_CONTINUOUS,
-	VFE_START_OPERATION_MODE_SNAPSHOT
 };
 
 enum VFE_START_PIXEL_PATTERN {
@@ -868,7 +863,6 @@ struct vfe31_output_ch {
 	int8_t ch0;
 	int8_t ch1;
 	int8_t ch2;
-	uint32_t  capture_cnt;
 	uint32_t  frame_drop_cnt;
 };
 
@@ -1020,7 +1014,8 @@ struct vfe31_ctrl_type {
 	int8_t update_ack_pending;
 	int8_t req_start_video_rec;
 	int8_t req_stop_video_rec;
-
+	int8_t output0_available;
+	int8_t output1_available;
 	spinlock_t  tasklet_lock;
 	struct list_head tasklet_q;
 	int vfeirq;
@@ -1044,6 +1039,7 @@ struct vfe31_ctrl_type {
 	uint32_t output2Period;
 	uint32_t vfeFrameSkipCount;
 	uint32_t vfeFrameSkipPeriod;
+	uint32_t rolloff_update;
 	struct vfe_stats_control afStatsControl;
 	struct vfe_stats_control awbStatsControl;
 	struct vfe_stats_control aecStatsControl;

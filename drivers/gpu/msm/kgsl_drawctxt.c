@@ -437,7 +437,7 @@ static void build_reg_to_mem_range(unsigned int start, unsigned int end,
 
 	for (i = start; i <= end; i++) {
 		*(*cmd)++ = pm4_type3_packet(PM4_REG_TO_MEM, 2);
-		*(*cmd)++ = i | (1 << 30);
+		*(*cmd)++ = i;
 		*(*cmd)++ =
 		    ((drawctxt->gpustate.gpuaddr + REG_OFFSET) & 0xFFFFE000) +
 		    (i - 0x2000) * 4;

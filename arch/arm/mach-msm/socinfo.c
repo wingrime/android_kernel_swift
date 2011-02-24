@@ -37,13 +37,13 @@ enum {
 	HW_PLATFORM_INVALID
 };
 
-char *hw_platform[] = {
-	"Unknown",
-	"Surf",
-	"FFA",
-	"Fluid",
-	"SVLTE_FFA",
-	"SLVTE_SURF"
+const char *hw_platform[] = {
+	[HW_PLATFORM_UNKNOWN] = "Unknown",
+	[HW_PLATFORM_SURF] = "Surf",
+	[HW_PLATFORM_FFA] = "FFA",
+	[HW_PLATFORM_FLUID] = "Fluid",
+	[HW_PLATFORM_SVLTE_FFA] = "SVLTE_FFA",
+	[HW_PLATFORM_SVLTE_SURF] = "SLVTE_SURF"
 };
 
 enum {
@@ -59,11 +59,11 @@ enum {
 	PLATFORM_SUBTYPE_INVALID,
 };
 
-const char  *hw_platform_subtype[] = {
-	"Unknown",
-	"charm",
-	"strange"
-	"strange_2a"
+const char *hw_platform_subtype[] = {
+	[PLATFORM_SUBTYPE_UNKNOWN] = "Unknown",
+	[PLATFORM_SUBTYPE_CHARM] = "charm",
+	[PLATFORM_SUBTYPE_STRANGE] = "strange",
+	[PLATFORM_SUBTYPE_STRANGE_2A] = "strange_2a,"
 };
 
 /* Used to parse shared memory.  Must match the modem. */
@@ -234,7 +234,9 @@ uint32_t socinfo_get_platform_version(void)
 		: 0;
 }
 
-uint32_t socinfo_get_accessory_chip(void)
+/* This information is directly encoded by the machine id */
+/* Thus no external callers rely on this information at the moment */
+static uint32_t socinfo_get_accessory_chip(void)
 {
 	return socinfo ?
 		(socinfo->v1.format >= 5 ? socinfo->v5.accessory_chip : 0)

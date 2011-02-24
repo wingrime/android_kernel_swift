@@ -20,6 +20,8 @@
 #include <mach/irqs.h>
 #include <mach/msm_iomap.h>
 #include <mach/board.h>
+#include <mach/dma.h>
+#include <asm/mach/flash.h>
 
 #include "clock.h"
 #include "clock-dummy.h"
@@ -59,6 +61,34 @@ struct platform_device msm_device_uart1 = {
 	.id	= 0,
 	.num_resources	= ARRAY_SIZE(resources_uart1),
 	.resource	= resources_uart1,
+};
+
+#define MSM_NAND_PHYS		0xA0A00000
+static struct resource resources_nand[] = {
+	[0] = {
+		.name   = "msm_nand_dmac",
+		.start	= DMOV_NAND_CHAN,
+		.end	= DMOV_NAND_CHAN,
+		.flags	= IORESOURCE_DMA,
+	},
+	[1] = {
+		.name   = "msm_nand_phys",
+		.start  = MSM_NAND_PHYS,
+		.end    = MSM_NAND_PHYS + 0x7FF,
+		.flags  = IORESOURCE_MEM,
+	},
+};
+
+struct flash_platform_data msm_nand_data;
+
+struct platform_device msm_device_nand = {
+	.name		= "msm_nand",
+	.id		= -1,
+	.num_resources	= ARRAY_SIZE(resources_nand),
+	.resource	= resources_nand,
+	.dev		= {
+		.platform_data	= &msm_nand_data,
+	},
 };
 
 struct clk_lookup msm_clocks_7x27a[] = {

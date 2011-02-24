@@ -82,6 +82,7 @@ struct kgsl_driver {
 	struct cdev cdev;
 	dev_t major;
 	struct class *class;
+	struct kobject *ptkobj;
 	struct kgsl_device *devp[KGSL_DEVICE_MAX];
 	struct platform_device *pdev;
 

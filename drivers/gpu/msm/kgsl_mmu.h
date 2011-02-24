@@ -96,6 +96,14 @@ struct kgsl_pagetable {
 	/* Maintain filter to manage tlb flushing */
 	struct kgsl_tlbflushfilter tlbflushfilter;
 	unsigned int tlb_flags;
+	struct kobject *kobj;
+
+	struct {
+		unsigned int entries;
+		unsigned int mapped;
+		unsigned int max_mapped;
+		unsigned int max_entries;
+	} stats;
 };
 
 struct kgsl_mmu_reg {

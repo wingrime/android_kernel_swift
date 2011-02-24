@@ -49,6 +49,203 @@ struct kgsl_pte_debug {
 	(MH_INTERRUPT_MASK__AXI_READ_ERROR | \
 	 MH_INTERRUPT_MASK__AXI_WRITE_ERROR)
 
+/* pt_mutex needs to be held in this function */
+
+static struct kgsl_pagetable *
+kgsl_get_pagetable(unsigned long name)
+{
+	struct kgsl_pagetable *pt;
+
+	list_for_each_entry(pt,	&kgsl_driver.pagetable_list, list) {
+		if (pt->name == name)
+			return pt;
+	}
+
+	return NULL;
+}
+
+static struct kgsl_pagetable *
+_get_pt_from_kobj(struct kobject *kobj)
+{
+	unsigned long ptname;
+
+	if (!kobj)
+		return NULL;
+
+	if (sscanf(kobj->name, "%ld", &ptname) != 1)
+		return NULL;
+
+	return kgsl_get_pagetable(ptname);
+}
+
+static ssize_t
+sysfs_show_entries(struct kobject *kobj,
+		   struct kobj_attribute *attr,
+		   char *buf)
+{
+	struct kgsl_pagetable *pt;
+	int ret = 0;
+
+	mutex_lock(&kgsl_driver.pt_mutex);
+	pt = _get_pt_from_kobj(kobj);
+
+	if (pt)
+		ret += sprintf(buf, "%d\n", pt->stats.entries);
+
+	mutex_unlock(&kgsl_driver.pt_mutex);
+	return ret;
+}
+
+static ssize_t
+sysfs_show_mapped(struct kobject *kobj,
+		  struct kobj_attribute *attr,
+		  char *buf)
+{
+	struct kgsl_pagetable *pt;
+	int ret = 0;
+
+	mutex_lock(&kgsl_driver.pt_mutex);
+	pt = _get_pt_from_kobj(kobj);
+
+	if (pt)
+		ret += sprintf(buf, "%d\n", pt->stats.mapped);
+
+	mutex_unlock(&kgsl_driver.pt_mutex);
+	return ret;
+}
+
+static ssize_t
+sysfs_show_va_range(struct kobject *kobj,
+		    struct kobj_attribute *attr,
+		    char *buf)
+{
+	struct kgsl_pagetable *pt;
+	int ret = 0;
+
+	mutex_lock(&kgsl_driver.pt_mutex);
+	pt = _get_pt_from_kobj(kobj);
+
+	if (pt)
+		ret += sprintf(buf, "0x%x\n", pt->va_range);
+
+	mutex_unlock(&kgsl_driver.pt_mutex);
+	return ret;
+}
+
+static ssize_t
+sysfs_show_max_mapped(struct kobject *kobj,
+		      struct kobj_attribute *attr,
+		      char *buf)
+{
+	struct kgsl_pagetable *pt;
+	int ret = 0;
+
+	mutex_lock(&kgsl_driver.pt_mutex);
+	pt = _get_pt_from_kobj(kobj);
+
+	if (pt)
+		ret += sprintf(buf, "%d\n", pt->stats.max_mapped);
+
+	mutex_unlock(&kgsl_driver.pt_mutex);
+	return ret;
+}
+
+static ssize_t
+sysfs_show_max_entries(struct kobject *kobj,
+		       struct kobj_attribute *attr,
+		       char *buf)
+{
+	struct kgsl_pagetable *pt;
+	int ret = 0;
+
+	mutex_lock(&kgsl_driver.pt_mutex);
+	pt = _get_pt_from_kobj(kobj);
+
+	if (pt)
+		ret += sprintf(buf, "%d\n", pt->stats.max_entries);
+
+	mutex_unlock(&kgsl_driver.pt_mutex);
+	return ret;
+}
+
+static struct kobj_attribute attr_entries = {
+	.attr = { .name = "entries", .mode = 0444 },
+	.show = sysfs_show_entries,
+	.store = NULL,
+};
+
+static struct kobj_attribute attr_mapped = {
+	.attr = { .name = "mapped", .mode = 0444 },
+	.show = sysfs_show_mapped,
+	.store = NULL,
+};
+
+static struct kobj_attribute attr_va_range = {
+	.attr = { .name = "va_range", .mode = 0444 },
+	.show = sysfs_show_va_range,
+	.store = NULL,
+};
+
+static struct kobj_attribute attr_max_mapped = {
+	.attr = { .name = "max_mapped", .mode = 0444 },
+	.show = sysfs_show_max_mapped,
+	.store = NULL,
+};
+
+static struct kobj_attribute attr_max_entries = {
+	.attr = { .name = "max_entries", .mode = 0444 },
+	.show = sysfs_show_max_entries,
+	.store = NULL,
+};
+
+static struct attribute *pagetable_attrs[] = {
+	&attr_entries.attr,
+	&attr_mapped.attr,
+	&attr_va_range.attr,
+	&attr_max_mapped.attr,
+	&attr_max_entries.attr,
+	NULL,
+};
+
+static struct attribute_group pagetable_attr_group = {
+	.attrs = pagetable_attrs,
+};
+
+static void
+pagetable_remove_sysfs_objects(struct kgsl_pagetable *pagetable)
+{
+	if (pagetable->kobj)
+		sysfs_remove_group(pagetable->kobj,
+				   &pagetable_attr_group);
+
+	kobject_put(pagetable->kobj);
+}
+
+static int
+pagetable_add_sysfs_objects(struct kgsl_pagetable *pagetable)
+{
+	char ptname[16];
+	int ret = -ENOMEM;
+
+	snprintf(ptname, sizeof(ptname), "%d", pagetable->name);
+	pagetable->kobj = kobject_create_and_add(ptname,
+						 kgsl_driver.ptkobj);
+	if (pagetable->kobj == NULL)
+		goto err;
+
+	ret = sysfs_create_group(pagetable->kobj, &pagetable_attr_group);
+
+err:
+	if (ret) {
+		if (pagetable->kobj)
+			kobject_put(pagetable->kobj);
+
+		pagetable->kobj = NULL;
+	}
+
+	return ret;
+}
+
 static inline uint32_t
 kgsl_pt_entry_get(struct kgsl_pagetable *pt, uint32_t va)
 {
@@ -166,6 +363,9 @@ static struct kgsl_pagetable *kgsl_mmu_createpagetableobject(
 
 	list_add(&pagetable->list, &kgsl_driver.pagetable_list);
 
+	/* Create the sysfs entries */
+	pagetable_add_sysfs_objects(pagetable);
+
 	KGSL_MEM_VDBG("return %p\n", pagetable);
 	return pagetable;
 
@@ -184,6 +384,8 @@ static void kgsl_mmu_destroypagetable(struct kgsl_pagetable *pagetable)
 	KGSL_MEM_VDBG("enter (pagetable=%p)\n", pagetable);
 
 	list_del(&pagetable->list);
+
+	pagetable_remove_sysfs_objects(pagetable);
 
 	kgsl_cleanup_pt(pagetable);
 
@@ -214,19 +416,19 @@ struct kgsl_pagetable *kgsl_mmu_getpagetable(struct kgsl_mmu *mmu,
 
 	mutex_lock(&kgsl_driver.pt_mutex);
 
-	list_for_each_entry(pt,	&kgsl_driver.pagetable_list, list) {
-		if (pt->name == name) {
-			spin_lock(&pt->lock);
-			pt->refcnt++;
-			spin_unlock(&pt->lock);
-			mutex_unlock(&kgsl_driver.pt_mutex);
-			return pt;
-		}
+	pt = kgsl_get_pagetable(name);
+
+	if (pt) {
+		spin_lock(&pt->lock);
+		pt->refcnt++;
+		spin_unlock(&pt->lock);
+		goto done;
 	}
 
 	pt = kgsl_mmu_createpagetableobject(mmu, name);
-	mutex_unlock(&kgsl_driver.pt_mutex);
 
+done:
+	mutex_unlock(&kgsl_driver.pt_mutex);
 	return pt;
 }
 
@@ -504,7 +706,11 @@ kgsl_mmu_map(struct kgsl_pagetable *pagetable,
 
 	*gpuaddr = gen_pool_alloc(pagetable->pool, alloc_size);
 	if (*gpuaddr == 0) {
-		KGSL_MEM_ERR("gen_pool_alloc failed: %d\n", alloc_size);
+		KGSL_MEM_ERR("gen_pool_alloc failed: pt=%d size=%d\n",
+				pagetable->name, alloc_size);
+		KGSL_MEM_ERR("  pt %d allocated=%d, entries=%d\n",
+				pagetable->name, pagetable->stats.mapped,
+				pagetable->stats.entries);
 		return -ENOMEM;
 	}
 
@@ -566,6 +772,18 @@ kgsl_mmu_map(struct kgsl_pagetable *pagetable,
 		address += KGSL_PAGESIZE;
 	}
 
+	/* Keep track of the statistics for the sysfs files */
+	pagetable->stats.entries++;
+	pagetable->stats.mapped += alloc_size;
+
+	/* Keep track of the high watermarks */
+
+	if (pagetable->stats.entries > pagetable->stats.max_entries)
+		pagetable->stats.max_entries = pagetable->stats.entries;
+
+	if (pagetable->stats.mapped > pagetable->stats.max_mapped)
+		pagetable->stats.max_mapped = pagetable->stats.mapped;
+
 	KGSL_MEM_INFO("pt %p p %08x g %08x pte f %d l %d n %d f %d\n",
 		      pagetable, address, *gpuaddr, ptefirst, ptelast,
 		      numpages, flushtlb);
@@ -623,6 +841,10 @@ kgsl_mmu_unmap(struct kgsl_pagetable *pagetable, unsigned int gpuaddr,
 			GSL_TLBFLUSH_FILTER_SETDIRTY(superpte /
 				GSL_PT_SUPER_PTE);
 	}
+
+	/* Remove the statistics */
+	pagetable->stats.entries--;
+	pagetable->stats.mapped -= range;
 
 	mb();
 	spin_unlock(&pagetable->lock);

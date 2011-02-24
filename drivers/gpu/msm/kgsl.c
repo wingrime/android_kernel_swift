@@ -1905,6 +1905,12 @@ kgsl_core_init(void)
 		goto err;
 	}
 
+	/* Make a kobject to store pagetable statistics in */
+
+	kgsl_driver.ptkobj =
+	  kobject_create_and_add("pagetables",
+				 &kgsl_driver.pdev->dev.kobj);
+
 	kgsl_debug_init();
 	kgsl_cffdump_init();
 

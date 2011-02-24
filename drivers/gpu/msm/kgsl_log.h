@@ -124,4 +124,6 @@ int kgsl_debug_init(void);
 #define KGSL_PWR_ERR(fmt, args...)  KGSL_LOG_ERR(kgsl_pwr_log, fmt, ##args)
 #define KGSL_PWR_FATAL(fmt, args...) KGSL_LOG_FATAL(kgsl_pwr_log, fmt, ##args)
 
+int kgsl_yamato_debugfs_init(struct kgsl_device *device);
+
 #endif /* _GSL_LOG_H */

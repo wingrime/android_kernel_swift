@@ -523,6 +523,7 @@ void gsdio_ctrl_wq(struct work_struct *w)
 void gsdio_ctrl_notify_modem(struct gserial *gser, u8 portno, int ctrl_bits)
 {
 	struct gsdio_port *port;
+	int temp;
 
 	if (portno >= n_ports) {
 		pr_err("%s: invalid portno#%d\n", __func__, portno);
@@ -536,11 +537,12 @@ void gsdio_ctrl_notify_modem(struct gserial *gser, u8 portno, int ctrl_bits)
 
 	port = ports[portno].port;
 
-	/* modem is only interested in DTR */
-	if (ctrl_bits & ACM_CTRL_DTR)
-		port->cbits_to_modem = TIOCM_DTR;
+	temp = ctrl_bits & ACM_CTRL_DTR ? TIOCM_DTR : 0;
 
-	port->cbits_to_modem = ctrl_bits;
+	if (port->cbits_to_modem == temp)
+		return;
+
+	 port->cbits_to_modem = temp;
 
 	/* TIOCM_DTR - 0x002 - bit(1) */
 	pr_debug("%s: port:%p port#%d ctrl_bits:%08x\n", __func__,
@@ -552,10 +554,9 @@ void gsdio_ctrl_notify_modem(struct gserial *gser, u8 portno, int ctrl_bits)
 		return;
 	}
 
-	/* whenever DTR is high let laptop know that modem is online too */
-	/* TODO: Sending modem control bits should work, investigate why */
-	if (port->cbits_to_modem && gser->connect)
-		gser->connect(gser);
+	/* whenever DTR is high let laptop know that modem status */
+	if (port->cbits_to_modem && gser->send_modem_ctrl_bits)
+		gser->send_modem_ctrl_bits(gser, port->cbits_to_laptop);
 
 	queue_work(gsdio_wq, &port->notify_modem);
 }
@@ -571,17 +572,18 @@ void gsdio_ctrl_modem_status(int ctrl_bits, void *_dev)
 	pr_debug("%s: port:%p port#%d event:%08x\n", __func__,
 		port, port->port_num, ctrl_bits);
 
+	port->cbits_to_laptop = 0;
 	ctrl_bits &= TIOCM_RI | TIOCM_CD | TIOCM_DSR;
 	if (ctrl_bits & TIOCM_RI)
-		port->cbits_to_laptop = ACM_CTRL_RI;
+		port->cbits_to_laptop |= ACM_CTRL_RI;
 	if (ctrl_bits & TIOCM_CD)
-		port->cbits_to_laptop = ACM_CTRL_DCD;
+		port->cbits_to_laptop |= ACM_CTRL_DCD;
 	if (ctrl_bits & TIOCM_DSR)
-		port->cbits_to_laptop = ACM_CTRL_DSR;
+		port->cbits_to_laptop |= ACM_CTRL_DSR;
 
 	if (port->port_usb && port->port_usb->send_modem_ctrl_bits)
 		port->port_usb->send_modem_ctrl_bits(port->port_usb,
-				port->cbits_to_laptop);
+					port->cbits_to_laptop);
 }
 
 void gsdio_ch_notify(void *_dev, unsigned event)
@@ -645,8 +647,8 @@ static void gsdio_open_work(struct work_struct *w)
 	if (startio) {
 		pr_debug("%s: USB is already open, start io\n", __func__);
 		gsdio_start_io(port);
-		if (gser->connect)
-			gser->connect(gser);
+		 if (gser->send_modem_ctrl_bits)
+			gser->send_modem_ctrl_bits(gser, port->cbits_to_laptop);
 	}
 }
 
@@ -778,13 +780,8 @@ int gsdio_connect(struct gserial *gser, u8 portno)
 	if (port->sdio_open) {
 		pr_debug("%s: sdio is already open, start io\n", __func__);
 		gsdio_start_io(port);
-		/* TODO: Sending modem control bits should work
-		 * investigate on why they are not working
-		 * if (gser->send_modem_ctrl_bits)
-		 * gser->send_modem_ctrl_bits(gser, port->cbits_to_laptop);
-		 */
-		if (gser->connect)
-			gser->connect(gser);
+		 if (gser->send_modem_ctrl_bits)
+			gser->send_modem_ctrl_bits(gser, port->cbits_to_laptop);
 	}
 
 	return 0;

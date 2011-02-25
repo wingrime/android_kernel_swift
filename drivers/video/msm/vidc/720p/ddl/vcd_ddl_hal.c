@@ -196,7 +196,8 @@ void ddl_decode_init_codec(struct ddl_client_context *ddl)
 			   decoder->h264Vsp_temp_buffer.buffer_size);
 	}
 
-	if (decoder->codec.codec == VCD_CODEC_VC1_RCV) {
+	if (decoder->codec.codec == VCD_CODEC_VC1_RCV ||
+		decoder->codec.codec == VCD_CODEC_VC1) {
 		vidc_720p_set_frame_size(decoder->client_frame_size.width,
 			decoder->client_frame_size.height);
 	} else {

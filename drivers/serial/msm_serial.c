@@ -2,7 +2,7 @@
  * drivers/serial/msm_serial.c - driver for msm7k serial device and console
  *
  * Copyright (C) 2007 Google, Inc.
- * Copyright (c) 2009-2010, Code Aurora Forum. All rights reserved.
+ * Copyright (c) 2009-2011, Code Aurora Forum. All rights reserved.
  * Author: Robert Love <rlove@google.com>
  *
  * This software is licensed under the terms of the GNU General Public
@@ -1022,6 +1022,8 @@ static int __init msm_serial_probe(struct platform_device *pdev)
 	if (unlikely(IS_ERR(msm_port->clk)))
 		return PTR_ERR(msm_port->clk);
 	port->uartclk = clk_get_rate(msm_port->clk);
+	if (!port->uartclk)
+		port->uartclk = 19200000;
 
 	resource = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	if (unlikely(!resource))

@@ -288,6 +288,11 @@ struct l2cap_conn {
 	struct l2cap_chan_list chan_list;
 };
 
+struct sock_del_list {
+	struct sock *sk;
+	struct list_head list;
+};
+
 #define L2CAP_INFO_CL_MTU_REQ_SENT	0x01
 #define L2CAP_INFO_FEAT_MASK_REQ_SENT	0x04
 #define L2CAP_INFO_FEAT_MASK_REQ_DONE	0x08
@@ -355,7 +360,6 @@ struct l2cap_pinfo {
 
 	__le16		sport;
 
-	spinlock_t		send_lock;
 	struct timer_list	retrans_timer;
 	struct timer_list	monitor_timer;
 	struct timer_list	ack_timer;

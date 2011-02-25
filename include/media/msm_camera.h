@@ -541,7 +541,9 @@ struct msm_snapshot_pp_status {
 #define CFG_GET_AF_MAX_STEPS		26
 #define CFG_GET_PICT_MAX_EXP_LC		27
 #define CFG_SEND_WB_INFO    28
-#define CFG_MAX 			29
+#define CFG_SENSOR_INIT    29
+#define CFG_GET_3D_CALI_DATA 30
+#define CFG_MAX				31
 
 #define MOVE_NEAR	0
 #define MOVE_FAR	1
@@ -592,6 +594,42 @@ struct wb_info_cfg {
 	uint16_t green_gain;
 	uint16_t blue_gain;
 };
+struct sensor_3d_exp_cfg {
+	uint16_t gain;
+	uint32_t line;
+	uint16_t r_gain;
+	uint16_t b_gain;
+	uint16_t gb_gain;
+};
+struct sensor_3d_cali_data_t{
+	unsigned char left_p_matrix[3][4][8];
+	unsigned char right_p_matrix[3][4][8];
+	unsigned char square_len[8];
+	unsigned char focal_len[8];
+	unsigned char pixel_pitch[8];
+	uint16_t left_r;
+	uint16_t left_b;
+	uint16_t left_gb;
+	uint16_t left_af_far;
+	uint16_t left_af_mid;
+	uint16_t left_af_short;
+	uint16_t left_af_5um;
+	uint16_t left_af_50up;
+	uint16_t left_af_50down;
+	uint16_t right_r;
+	uint16_t right_b;
+	uint16_t right_gb;
+	uint16_t right_af_far;
+	uint16_t right_af_mid;
+	uint16_t right_af_short;
+	uint16_t right_af_5um;
+	uint16_t right_af_50up;
+	uint16_t right_af_50down;
+};
+struct sensor_init_cfg {
+	uint8_t prev_res;
+	uint8_t pict_res;
+};
 struct sensor_cfg_data {
 	int cfgtype;
 	int mode;
@@ -607,12 +645,21 @@ struct sensor_cfg_data {
 		uint16_t pictp_pl;
 		uint32_t pict_max_exp_lc;
 		uint16_t p_fps;
+		struct sensor_init_cfg init_info;
 		struct sensor_pict_fps gfps;
 		struct exp_gain_cfg exp_gain;
 		struct focus_cfg focus;
 		struct fps_cfg fps;
 		struct wb_info_cfg wb_info;
+		struct sensor_3d_exp_cfg sensor_3d_exp;
 	} cfg;
+};
+
+struct sensor_large_data {
+	int cfgtype;
+	union {
+		struct sensor_3d_cali_data_t sensor_3d_cali_data;
+	} data;
 };
 
 enum flash_type {

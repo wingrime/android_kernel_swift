@@ -562,7 +562,7 @@ static int kgsl_open(struct inode *inodep, struct file *filep)
 	kgsl_check_suspended(device);
 
 	if (atomic_inc_and_test(&device->open_count)) {
-		result = device->ftbl.device_start(device, KGSL_TRUE);
+		result = device->ftbl.device_start(device, true);
 		if (result != 0) {
 			KGSL_DRV_ERR("device_start() failed, minor=%d\n",
 					minor);

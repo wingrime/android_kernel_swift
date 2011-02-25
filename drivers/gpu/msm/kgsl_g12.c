@@ -721,13 +721,13 @@ int kgsl_g12_idle(struct kgsl_device *device, unsigned int timeout)
 
 static unsigned int kgsl_g12_isidle(struct kgsl_device *device)
 {
-	int status = 0;
+	int status = false;
 	struct kgsl_g12_device *g12_device = KGSL_G12_DEVICE(device);
 
 	int timestamp = g12_device->timestamp;
 
 	if (timestamp == g12_device->current_timestamp)
-		status = KGSL_TRUE;
+		status = true;
 
 	return status;
 }

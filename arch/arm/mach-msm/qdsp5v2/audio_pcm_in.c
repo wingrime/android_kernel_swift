@@ -312,6 +312,10 @@ static void audrec_dsp_event(void *data, unsigned id, size_t len,
 		audpcm_in_get_dsp_frames(audio);
 		break;
 	}
+	case ADSP_MESSAGE_ID: {
+		MM_DBG("Received ADSP event :module audrectask\n");
+		break;
+	}
 	default:
 		MM_ERR("Unknown Event id %d\n", id);
 	}

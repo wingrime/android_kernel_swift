@@ -412,6 +412,10 @@ static void audrec_dsp_event(void *data, unsigned id, size_t len,
 		MM_DBG("flush ack recieved\n");
 		break;
 	}
+	case ADSP_MESSAGE_ID: {
+		MM_DBG("Received ADSP event:module audrectask\n");
+		break;
+	}
 	default:
 		MM_ERR("Unknown Event id %d\n", id);
 	}

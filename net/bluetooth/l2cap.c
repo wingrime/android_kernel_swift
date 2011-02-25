@@ -1431,11 +1431,8 @@ static int l2cap_ertm_send(struct sock *sk)
 	u16 control, fcs;
 	int nsent = 0;
 
-	if (pi->conn_state & L2CAP_CONN_WAIT_F)
-		return 0;
 
-	while ((skb = sk->sk_send_head) && (!l2cap_tx_window_full(sk)) &&
-			!(pi->conn_state & L2CAP_CONN_REMOTE_BUSY)) {
+	while ((skb = sk->sk_send_head) && (!l2cap_tx_window_full(sk))) {
 
 		if (pi->remote_max_tx &&
 				bt_cb(skb)->retries == pi->remote_max_tx) {
@@ -1808,6 +1805,11 @@ static int l2cap_sock_sendmsg(struct kiocb *iocb, struct socket *sock, struct ms
 		if (pi->mode == L2CAP_MODE_STREAMING) {
 			err = l2cap_streaming_send(sk);
 		} else {
+			if (pi->conn_state & L2CAP_CONN_REMOTE_BUSY &&
+					pi->conn_state && L2CAP_CONN_WAIT_F) {
+				err = len;
+				break;
+			}
 			spin_lock_bh(&pi->send_lock);
 			err = l2cap_ertm_send(sk);
 			spin_unlock_bh(&pi->send_lock);
@@ -3398,8 +3400,6 @@ static inline void l2cap_send_i_or_rr_or_rnr(struct sock *sk)
 	if (pi->conn_state & L2CAP_CONN_REMOTE_BUSY && pi->unacked_frames > 0)
 		__mod_retrans_timer();
 
-	pi->conn_state &= ~L2CAP_CONN_REMOTE_BUSY;
-
 	spin_lock_bh(&pi->send_lock);
 	l2cap_ertm_send(sk);
 	spin_unlock_bh(&pi->send_lock);
@@ -3768,7 +3768,7 @@ static void l2cap_check_srej_gap(struct sock *sk, u8 tx_seq)
 		l2cap_ertm_reassembly_sdu(sk, skb, control);
 		l2cap_pi(sk)->buffer_seq_srej =
 			(l2cap_pi(sk)->buffer_seq_srej + 1) % 64;
-		tx_seq++;
+		tx_seq = (tx_seq + 1) % 64;
 	}
 }
 
@@ -3804,10 +3804,11 @@ static void l2cap_send_srejframe(struct sock *sk, u8 tx_seq)
 		l2cap_send_sframe(pi, control);
 
 		new = kzalloc(sizeof(struct srej_list), GFP_ATOMIC);
-		new->tx_seq = pi->expected_tx_seq++;
+		new->tx_seq = pi->expected_tx_seq;
+		pi->expected_tx_seq = (pi->expected_tx_seq + 1) % 64;
 		list_add_tail(&new->list, SREJ_LIST(sk));
 	}
-	pi->expected_tx_seq++;
+	pi->expected_tx_seq = (pi->expected_tx_seq + 1) % 64;
 }
 
 static inline int l2cap_data_channel_iframe(struct sock *sk, u16 rx_control, struct sk_buff *skb)
@@ -4136,7 +4137,7 @@ static inline int l2cap_data_channel(struct l2cap_conn *conn, u16 cid, struct sk
 		skb_pull(skb, 2);
 		len = skb->len;
 
-		if (__is_sar_start(control))
+		if (__is_sar_start(control) && __is_iframe(control))
 			len -= 2;
 
 		if (pi->fcs == L2CAP_FCS_CRC16)

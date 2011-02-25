@@ -29,11 +29,6 @@ mpath=`dirname $$mdpath`; rm -rf $$mpath;\
 fi
 endef
 
-file := $(TARGET_OUT)/lib/modules/oprofile.ko
-ALL_PREBUILT += $(file)
-$(file) : $(TARGET_PREBUILT_KERNEL) | $(ACP)
-	$(transform-prebuild-to-target)
-
 $(KERNEL_OUT):
 	mkdir -p $(KERNEL_OUT)
 

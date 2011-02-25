@@ -1151,7 +1151,7 @@ int hci_recv_fragment(struct hci_dev *hdev, int type, void *data, int count)
 	if (type < HCI_ACLDATA_PKT || type > HCI_EVENT_PKT)
 		return -EILSEQ;
 
-	do {
+	while (count) {
 		rem = hci_reassembly(hdev, type, data, count,
 						type - 1, GFP_ATOMIC);
 		if (rem < 0)
@@ -1159,7 +1159,7 @@ int hci_recv_fragment(struct hci_dev *hdev, int type, void *data, int count)
 
 		data += (count - rem);
 		count = rem;
-	} while (count);
+	};
 
 	return rem;
 }
@@ -1172,7 +1172,7 @@ int hci_recv_stream_fragment(struct hci_dev *hdev, void *data, int count)
 	int type;
 	int rem = 0;
 
-	do {
+	while (count) {
 		struct sk_buff *skb = hdev->reassembly[STREAM_REASSEMBLY];
 
 		if (!skb) {
@@ -1194,7 +1194,7 @@ int hci_recv_stream_fragment(struct hci_dev *hdev, void *data, int count)
 
 		data += (count - rem);
 		count = rem;
-	} while (count);
+	};
 
 	return rem;
 }

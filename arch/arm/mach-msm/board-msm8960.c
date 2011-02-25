@@ -27,6 +27,9 @@
 #include <mach/board.h>
 #include <mach/msm_iomap.h>
 #include <asm/mach/mmc.h>
+#include <mach/msm_hsusb.h>
+#include <mach/usbdiag.h>
+#include <linux/usb/android_composite.h>
 
 #include "timer.h"
 
@@ -76,8 +79,74 @@ static void __init msm8960_init_mmc(void)
 	msm_add_sdcc(1, &msm8960_sdc1_data);
 }
 
+static struct msm_otg_platform_data msm_otg_pdata;
+
+static struct usb_diag_platform_data usb_diag_pdata = {
+	.ch_name = DIAG_LEGACY,
+};
+
+static char *usb_functions_default[] = {
+	"diag",
+};
+
+static char *usb_functions_default_adb[] = {
+	"diag",
+	"adb",
+};
+
+static char *usb_functions_all[] = {
+	"diag",
+	"adb",
+};
+
+struct android_usb_product usb_products[] = {
+	{
+		.product_id	= 0x901D,
+		.num_functions	= ARRAY_SIZE(usb_functions_default_adb),
+		.functions	= usb_functions_default_adb,
+	},
+	{
+		.product_id	= 0x900E,
+		.num_functions	= ARRAY_SIZE(usb_functions_default),
+		.functions	= usb_functions_default,
+	},
+};
+
+static struct android_usb_platform_data android_usb_pdata = {
+	.vendor_id	= 0x05C6,
+	.product_id	= 0x901D,
+	.version	= 0x0100,
+	.product_name		= "Qualcomm HSUSB Device",
+	.manufacturer_name	= "Qualcomm Incorporated",
+	.num_products = ARRAY_SIZE(usb_products),
+	.products = usb_products,
+	.num_functions = ARRAY_SIZE(usb_functions_all),
+	.functions = usb_functions_all,
+	.serial_number = "1234567890ABCDEF",
+};
+
+struct platform_device usb_diag_device = {
+	.name	= "usb_diag",
+	.id	= 0,
+	.dev	= {
+		.platform_data = &usb_diag_pdata,
+	},
+};
+
+struct platform_device android_usb_device = {
+	.name	= "android_usb",
+	.id	= -1,
+	.dev	= {
+		.platform_data = &android_usb_pdata,
+	},
+};
+
 static struct platform_device *sim_devices[] __initdata = {
 	&msm8960_device_uart_gsbi2,
+	&msm_device_otg,
+	&msm_device_gadget_peripheral,
+	&android_usb_device,
+	&usb_diag_device,
 };
 
 static struct platform_device *rumi3_devices[] __initdata = {
@@ -87,6 +156,7 @@ static struct platform_device *rumi3_devices[] __initdata = {
 static void __init msm8960_sim_init(void)
 {
 	msm_clock_init(msm_clocks_8960, msm_num_clocks_8960);
+	msm_device_otg.dev.platform_data = &msm_otg_pdata;
 	platform_add_devices(sim_devices, ARRAY_SIZE(sim_devices));
 	msm8960_init_mmc();
 }

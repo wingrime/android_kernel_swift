@@ -59,4 +59,7 @@
 #define MSM_GPT_BASE		(MSM_TMR_BASE + 0x4)
 #define MSM_DGT_BASE		(MSM_TMR_BASE + 0x24)
 
+#define MSM_HSUSB_PHYS		0x12500000
+#define MSM_HSUSB_SIZE		SZ_4K
+
 #endif

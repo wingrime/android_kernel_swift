@@ -209,8 +209,6 @@ enum clk_sources {
 	NUM_SRC
 };
 
-extern struct clk_local soc_clk_local_tbl_mxo[];
-
 struct pll_rate {
 	const uint32_t	l_val;
 	const uint32_t	m_val;

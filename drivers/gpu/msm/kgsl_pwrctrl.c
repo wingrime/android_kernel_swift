@@ -75,20 +75,65 @@ static int kgsl_pwrctrl_gpuclk_show(struct device *dev,
 			pwr->pwrlevels[pwr->active_pwrlevel].gpu_freq);
 }
 
+static int kgsl_pwrctrl_pwrnap_store(struct device *dev,
+				     struct device_attribute *attr,
+				     const char *buf, size_t count)
+{
+	char temp[20];
+	unsigned long val;
+	struct kgsl_device *device = kgsl_device_from_dev(dev);
+	struct kgsl_pwrctrl *pwr = &device->pwrctrl;
+
+	snprintf(temp, sizeof(temp), "%.*s",
+			 (int)min(count, sizeof(temp) - 1), buf);
+	strict_strtoul(temp, 0, &val);
+
+	mutex_lock(&device->mutex);
+
+	if (val == 1)
+		pwr->nap_allowed = true;
+	else if (val == 0)
+		pwr->nap_allowed = false;
+
+	mutex_unlock(&device->mutex);
+
+	return count;
+}
+
+static int kgsl_pwrctrl_pwrnap_show(struct device *dev,
+				    struct device_attribute *attr,
+				    char *buf)
+{
+	struct kgsl_device *device = kgsl_device_from_dev(dev);
+	struct kgsl_pwrctrl *pwr = &device->pwrctrl;
+	return sprintf(buf, "%d\n", pwr->nap_allowed);
+}
+
 static struct device_attribute gpuclk_attr = {
 	.attr = { .name = "gpuclk", .mode = 0644, },
 	.show = kgsl_pwrctrl_gpuclk_show,
 	.store = kgsl_pwrctrl_gpuclk_store,
 };
 
+static struct device_attribute pwrnap_attr = {
+	.attr = { .name = "pwrnap", .mode = 0644, },
+	.show = kgsl_pwrctrl_pwrnap_show,
+	.store = kgsl_pwrctrl_pwrnap_store,
+};
+
 int kgsl_pwrctrl_init_sysfs(struct kgsl_device *device)
 {
-	return device_create_file(device->dev, &gpuclk_attr);
+	int ret = 0;
+	ret = device_create_file(device->dev, &pwrnap_attr);
+	if (ret == 0)
+		ret = device_create_file(device->dev, &gpuclk_attr);
+	return ret;
 }
 
 void kgsl_pwrctrl_uninit_sysfs(struct kgsl_device *device)
 {
 	device_remove_file(device->dev, &gpuclk_attr);
+	device_remove_file(device->dev, &pwrnap_attr);
 }
 
 int kgsl_pwrctrl_clk(struct kgsl_device *device, unsigned int pwrflag)

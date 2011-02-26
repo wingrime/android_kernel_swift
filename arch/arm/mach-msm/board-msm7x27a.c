@@ -51,6 +51,7 @@ static struct platform_device smc91x_device = {
 static struct platform_device *rumi_sim_devices[] __initdata = {
 	&msm_device_dmov,
 	&smc91x_device,
+	&msm_device_uart1,
 };
 
 static void __init msm7x27a_init_ebi2(void)

@@ -27,12 +27,60 @@
 #include "clock.h"
 #include "clock-dummy.h"
 #include "devices.h"
+#include <mach/msm_iomap.h>
+#include <mach/msm_hsusb.h>
 
 #define MSM_GSBI2_PHYS		0x16100000
 #define MSM_UART2DM_PHYS	(MSM_GSBI2_PHYS + 0x40000)
 
 #define MSM_GSBI5_PHYS		0x16400000
 #define MSM_UART5DM_PHYS	(MSM_GSBI5_PHYS + 0x40000)
+
+static struct resource resources_otg[] = {
+	{
+		.start	= MSM_HSUSB_PHYS,
+		.end	= MSM_HSUSB_PHYS + MSM_HSUSB_SIZE,
+		.flags	= IORESOURCE_MEM,
+	},
+	{
+		.start	= USB1_HS_IRQ,
+		.end	= USB1_HS_IRQ,
+		.flags	= IORESOURCE_IRQ,
+	},
+};
+
+struct platform_device msm_device_otg = {
+	.name		= "msm_otg",
+	.id		= -1,
+	.num_resources	= ARRAY_SIZE(resources_otg),
+	.resource	= resources_otg,
+	.dev		= {
+		.coherent_dma_mask	= 0xffffffff,
+	},
+};
+
+static struct resource resources_hsusb[] = {
+	{
+		.start	= MSM_HSUSB_PHYS,
+		.end	= MSM_HSUSB_PHYS + MSM_HSUSB_SIZE,
+		.flags	= IORESOURCE_MEM,
+	},
+	{
+		.start	= USB1_HS_IRQ,
+		.end	= USB1_HS_IRQ,
+		.flags	= IORESOURCE_IRQ,
+	},
+};
+
+struct platform_device msm_device_gadget_peripheral = {
+	.name		= "msm_hsusb",
+	.id		= -1,
+	.num_resources	= ARRAY_SIZE(resources_hsusb),
+	.resource	= resources_hsusb,
+	.dev		= {
+		.coherent_dma_mask	= 0xffffffff,
+	},
+};
 
 static struct resource resources_uart_gsbi2[] = {
 	{

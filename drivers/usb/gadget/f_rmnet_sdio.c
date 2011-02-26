@@ -35,6 +35,7 @@
 #include <linux/usb/composite.h>
 #include <linux/usb/ch9.h>
 #include <linux/usb/android_composite.h>
+#include <linux/termios.h>
 
 #include <mach/sdio_cmux.h>
 #include <mach/sdio_dmux.h>
@@ -728,6 +729,17 @@ static void rmnet_free_buf(struct rmnet_dev *dev)
 
 static void rmnet_disconnect_work(struct work_struct *w)
 {
+	struct rmnet_dev *dev;
+
+	dev = container_of(w, struct rmnet_dev, disconnect_work);
+
+	if (!atomic_read(&dev->sdio_open))
+		return;
+
+	pr_debug("%s: de-assert: DTR\n", __func__);
+
+	sdio_cmux_tiocmset(rmnet_sdio_ctl_ch, 0, TIOCM_DTR);
+
 	/* REVISIT: Push all the data to sdio if anythign is pending */
 }
 

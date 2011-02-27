@@ -1016,6 +1016,8 @@ static void sdio_dld_close(struct tty_struct *tty, struct file *file)
 		   sdio_dld.dld_main_thread.exit_wait.wake_up_signal);
 	pr_debug(MODULE_NAME ": %s - CLOSING - WOKE UP...", __func__);
 
+	del_timer_sync(&sdio_dld.timer);
+
 	sdio_dld_dealloc_local_buffers();
 
 	tty_unregister_device(sdio_dld.tty_drv, 0);

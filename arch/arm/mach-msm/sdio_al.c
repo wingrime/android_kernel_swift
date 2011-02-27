@@ -546,7 +546,7 @@ static int enable_eot_interrupt(struct sdio_al_device *sdio_al_dev,
 static int enable_threshold_interrupt(struct sdio_al_device *sdio_al_dev,
 				      int pipe_index, int enable);
 static void sdio_func_irq(struct sdio_func *func);
-static void timer_handler(unsigned long data);
+static void sdio_al_timer_handler(unsigned long data);
 static int get_min_poll_time_msec(struct sdio_al_device *sdio_al_dev);
 static u32 check_pending_rx_packet(struct sdio_channel *ch, u32 eot);
 static u32 remove_handled_rx_packet(struct sdio_channel *ch);
@@ -1926,7 +1926,7 @@ static int open_channel(struct sdio_channel *ch)
 
 		init_timer(&sdio_al_dev->timer);
 		sdio_al_dev->timer.data = (unsigned long) sdio_al_dev;
-		sdio_al_dev->timer.function = timer_handler;
+		sdio_al_dev->timer.function = sdio_al_timer_handler;
 		sdio_al_dev->timer.expires = jiffies +
 			msecs_to_jiffies(sdio_al_dev->poll_delay_msec);
 		add_timer(&sdio_al_dev->timer);
@@ -2137,7 +2137,7 @@ static void sdio_func_irq(struct sdio_func *func)
  *  Timer Expire Handler
  *
  */
-static void timer_handler(unsigned long data)
+static void sdio_al_timer_handler(unsigned long data)
 {
 	struct sdio_al_device *sdio_al_dev = (struct sdio_al_device *)data;
 	if (sdio_al_dev == NULL) {

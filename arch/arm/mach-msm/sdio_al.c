@@ -486,8 +486,6 @@ struct sdio_al_work {
  *
  *  @poll_delay_msec - timer delay for polling the mailbox.
  *
- *  @use_irq - allow to work in polling mode or interrupt mode.
- *
  *  @is_err - error detected.
  *
  *  @signature - Context Validity Check.
@@ -525,8 +523,6 @@ struct sdio_al_device {
 	struct timer_list timer;
 	u32 poll_delay_msec;
 	int is_timer_initialized;
-
-	int use_irq;
 
 	int is_err;
 
@@ -1291,10 +1287,7 @@ static void set_default_channels_config(struct sdio_al_device *sdio_al_dev)
 		ch->read_threshold  = DEFAULT_READ_THRESHOLD;
 		ch->write_threshold = DEFAULT_WRITE_THRESHOLD;
 		ch->min_write_avail = DEFAULT_MIN_WRITE_THRESHOLD;
-		if (sdio_al_dev->use_irq)
-			ch->poll_delay_msec = 0;
-		else
-			ch->poll_delay_msec = DEFAULT_POLL_DELAY_MSEC;
+		ch->poll_delay_msec = 0;
 		ch->is_packet_mode = true;
 		ch->peer_tx_buf_size = DEFAULT_PEER_TX_BUF_SIZE;
 		ch->is_valid = 0;
@@ -1552,10 +1545,7 @@ static int read_sdioc_software_header(struct sdio_al_device *sdio_al_dev,
 		ch->min_write_avail = DEFAULT_MIN_WRITE_THRESHOLD;
 		ch->is_packet_mode = true;
 		ch->peer_tx_buf_size = DEFAULT_PEER_TX_BUF_SIZE;
-		if (sdio_al_dev->use_irq)
-			ch->poll_delay_msec = 0;
-		else
-			ch->poll_delay_msec = DEFAULT_POLL_DELAY_MSEC;
+		ch->poll_delay_msec = 0;
 
 		ch->num = i;
 
@@ -2205,19 +2195,15 @@ static int sdio_al_setup(struct sdio_al_device *sdio_al_dev)
 	for (fn = 1 ; fn <= card->sdio_funcs; fn++)
 		sdio_disable_func(card->sdio_func[fn-1]);
 
-	if (sdio_al_dev->use_irq) {
-		sdio_set_drvdata(func1, sdio_al_dev);
-		pr_info(MODULE_NAME ":claim IRQ for card %d\n",
-				card->host->index);
+	sdio_set_drvdata(func1, sdio_al_dev);
+	pr_info(MODULE_NAME ":claim IRQ for card %d\n",
+			card->host->index);
 
-		ret = sdio_claim_irq(func1, sdio_func_irq);
-		if (ret) {
-			pr_err(MODULE_NAME ":Fail to claim IRQ for card %d\n",
-				card->host->index);
-			goto exit_err;
-		}
-	} else {
-		pr_debug(MODULE_NAME ":Not using IRQ\n");
+	ret = sdio_claim_irq(func1, sdio_func_irq);
+	if (ret) {
+		pr_err(MODULE_NAME ":Fail to claim IRQ for card %d\n",
+			card->host->index);
+		goto exit_err;
 	}
 
 	sdio_release_host(func1);
@@ -2412,11 +2398,6 @@ int sdio_open(const char *name, struct sdio_channel **ret_ch, void *priv,
 		sdio_al_dev->lpm_chan = ch->num;
 	}
 
-	/* Read the mailbox after the channel is open to detect
-	   pending rx packets */
-	if (!sdio_al_dev->use_irq)
-		ask_reading_mailbox(sdio_al_dev);
-
 	return 0;
 }
 EXPORT_SYMBOL(sdio_open);
@@ -2530,8 +2511,7 @@ int sdio_read(struct sdio_channel *ch, void *data, int len)
 	DATA_DEBUG(MODULE_NAME ":end ch %s read %d avail %d total %d.\n",
 		ch->name, len, ch->read_avail, ch->total_rx_bytes);
 
-	if ((ch->read_avail == 0) &&
-	    !((ch->is_packet_mode) && (sdio_al_dev->use_irq)))
+	if ((ch->read_avail == 0) && !(ch->is_packet_mode))
 		ask_reading_mailbox(sdio_al_dev);
 
 	sdio_release_host(sdio_al_dev->card->sdio_func[0]);
@@ -2911,8 +2891,6 @@ static int mmc_probe(struct mmc_card *card)
 	}
 
 	sdio_al_dev->is_ready = false;
-
-	sdio_al_dev->use_irq = true;
 
 	sdio_al_dev->signature = SDIO_AL_SIGNATURE;
 

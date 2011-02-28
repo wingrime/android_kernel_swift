@@ -44,6 +44,7 @@
 #define MVS_MODE_AMR_WB 13
 #define MVS_MODE_G729A 14
 #define MVS_MODE_G711A 15
+#define MVS_MODE_G722 16
 
 enum msm_audio_amr_mode {
 	MVS_AMR_MODE_0475, /* AMR 4.75 kbps */
@@ -89,6 +90,14 @@ enum msm_audio_amr_frame_type {
 enum msm_audio_g711a_mode {
 	MVS_G711A_MODE_MULAW,
 	MVS_G711A_MODE_ALAW
+};
+
+enum mvs_g722_mode_type {
+	MVS_G722_MODE_01,
+	MVS_G722_MODE_02,
+	MVS_G722_MODE_03,
+	MVS_G722_MODE_MAX,
+	MVS_G722_MODE_UNDEF
 };
 
 enum msm_audio_g711a_frame_type {

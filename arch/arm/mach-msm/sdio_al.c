@@ -162,7 +162,7 @@ struct sdio_al_debug {
 /* Polling time for the inactivity timer for devices that doesn't have
  * a streaming channel
  */
-#define SDIO_AL_POLL_TIME_NO_STREAMING 100
+#define SDIO_AL_POLL_TIME_NO_STREAMING 30
 
 #define CHAN_TO_FUNC(x) ((x) + 2 - 1)
 

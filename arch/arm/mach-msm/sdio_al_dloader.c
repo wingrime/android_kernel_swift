@@ -891,15 +891,16 @@ static void start_timer(void)
 }
 
 /**
-  * timer_handler - this is the timer handler.
-  * whenever it is invoked, it wakes up the main loop task, and the write
-  * callback, and starts the timer again.
+  * sdio_dld_timer_handler
+  * this is the timer handler. whenever it is invoked, it wakes
+  * up the main loop task, and the write callback, and starts
+  * the timer again.
   *
   * @data: a pointer to the tty device driver structure.
   * @return None.
   */
 
-static void timer_handler(unsigned long data)
+static void sdio_dld_timer_handler(unsigned long data)
 {
 	pr_debug(MODULE_NAME " Timer Expired\n");
 	spin_lock_irqsave(&lock2, lock_flags2);
@@ -979,7 +980,7 @@ static int sdio_dld_open(struct tty_struct *tty, struct file *file)
 	sdio_dld.poll_ms = TIMER_DURATION;
 	init_timer(&sdio_dld.timer);
 	sdio_dld.timer.data = (unsigned long) &sdio_dld;
-	sdio_dld.timer.function = timer_handler;
+	sdio_dld.timer.function = sdio_dld_timer_handler;
 	sdio_dld.timer.expires = jiffies +
 		msecs_to_jiffies(sdio_dld.poll_ms);
 	add_timer(&sdio_dld.timer);

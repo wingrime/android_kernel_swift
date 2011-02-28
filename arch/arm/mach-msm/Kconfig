@@ -838,7 +838,7 @@ config MSM_SDIO_CTL
 
 config MSM_ONCRPCROUTER
 	depends on MSM_SMD
-	default y
+	default n
 	bool "MSM ONCRPC router support"
 	help
 	  Support for the MSM ONCRPC router for communication between

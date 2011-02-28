@@ -1,4 +1,4 @@
-/* Copyright (c) 2010, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2010-2011, Code Aurora Forum. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -39,6 +39,7 @@
 #define MVS_MODE_IS127 2
 #define MVS_MODE_AMR 5
 #define MVS_MODE_LINEAR_PCM 9
+#define MVS_MODE_G711 10
 #define MVS_MODE_PCM 12
 #define MVS_MODE_AMR_WB 13
 #define MVS_MODE_G729A 14

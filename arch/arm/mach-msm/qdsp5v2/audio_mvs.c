@@ -38,6 +38,7 @@
 #define MVS_AMR_SET_AMR_MODE_PROC 7
 #define MVS_AMR_SET_AWB_MODE_PROC 8
 #define MVS_VOC_SET_FRAME_RATE_PROC 10
+#define MVS_G729A_SET_MODE_PROC 12
 #define MVS_G711_GET_MODE_PROC 14
 #define MVS_G711_SET_MODE_PROC 15
 #define MVS_SET_DTX_MODE_PROC 22
@@ -58,6 +59,9 @@
 #define MVS_FRAME_MODE_G711_DL 10
 #define MVS_FRAME_MODE_PCM_UL 13
 #define MVS_FRAME_MODE_PCM_DL 14
+#define MVS_FRAME_MODE_G729A_UL 17
+#define MVS_FRAME_MODE_G729A_DL 18
+
 
 #define MVS_PKT_CONTEXT_ISR 0x00000001
 
@@ -159,6 +163,12 @@ struct audio_mvs_set_g711_mode_msg {
 	uint32_t g711_mode;
 };
 
+/* Parameters for G729 mode */
+struct audio_mvs_set_g729_mode_msg {
+	struct rpc_request_hdr rpc_hdr;
+	uint32_t g729_mode;
+};
+
 union audio_mvs_event_data {
 	struct mvs_ev_command_type {
 		uint32_t event;
@@ -245,6 +255,7 @@ struct audio_mvs_info_type {
 	uint32_t mvs_mode;
 	uint32_t buf_free_cnt;
 	uint32_t rate_type;
+	uint32_t dtx_mode;
 
 	struct msm_rpc_endpoint *rpc_endpt;
 	uint32_t rpc_prog;
@@ -410,6 +421,40 @@ static int audio_mvs_setup_mode(struct audio_mvs_info_type *audio)
 			rc = 0;
 		} else {
 		       pr_err("%s: RPC write for set g711 mode failed %d\n",
+			      __func__, rc);
+		}
+		break;
+	}
+	case MVS_MODE_G729A: {
+		struct audio_mvs_set_g729_mode_msg set_g729_mode_msg;
+
+		/* Set G729 mode. */
+		memset(&set_g729_mode_msg, 0, sizeof(set_g729_mode_msg));
+		set_g729_mode_msg.g729_mode = cpu_to_be32(audio->dtx_mode);
+
+		pr_debug("%s: mode of g729:%d\n",
+			       __func__, set_g729_mode_msg.g729_mode);
+
+		msm_rpc_setup_req(&set_g729_mode_msg.rpc_hdr,
+				 audio->rpc_prog,
+				 audio->rpc_ver,
+				 MVS_G729A_SET_MODE_PROC);
+
+		audio->rpc_status = RPC_STATUS_FAILURE;
+		rc = msm_rpc_write(audio->rpc_endpt,
+				  &set_g729_mode_msg,
+				  sizeof(set_g729_mode_msg));
+
+		if (rc >= 0) {
+			pr_debug("%s: RPC write for set g729 mode done\n",
+			       __func__);
+
+			/* Save the MVS configuration information. */
+			audio->frame_mode = MVS_FRAME_MODE_G729A_DL;
+
+			rc = 0;
+		} else {
+		       pr_err("%s: RPC write for set g729 mode failed %d\n",
 			      __func__, rc);
 		}
 		break;
@@ -724,6 +769,12 @@ static void audio_mvs_process_rpc_request(uint32_t procedure,
 
 				pr_debug("%s: UL G711 frame_type %d\n",
 					__func__, be32_to_cpu(*args));
+			} else if (frame_mode == MVS_FRAME_MODE_G729A_UL) {
+				/* Extract G729 frame type. */
+				buf_node->frame.frame_type = be32_to_cpu(*args);
+
+				pr_debug("%s: UL G729 frame_type %d\n",
+					__func__, be32_to_cpu(*args));
 			} else {
 				pr_debug("%s: UL Unknown frame mode %d\n",
 				       __func__, frame_mode);
@@ -812,6 +863,10 @@ static void audio_mvs_process_rpc_request(uint32_t procedure,
 				dl_reply.param1 = cpu_to_be32(audio->rate_type);
 				dl_reply.param2 = 0;
 			} else if (frame_mode == MVS_FRAME_MODE_G711_DL) {
+				dl_reply.param1 = cpu_to_be32(
+				       buf_node->frame.frame_type);
+				dl_reply.param2 = cpu_to_be32(audio->rate_type);
+			} else if (frame_mode == MVS_FRAME_MODE_G729A_DL) {
 				dl_reply.param1 = cpu_to_be32(
 				       buf_node->frame.frame_type);
 				dl_reply.param2 = cpu_to_be32(audio->rate_type);
@@ -1256,6 +1311,7 @@ static long audio_mvs_ioctl(struct file *file,
 			if (audio->state == AUDIO_MVS_OPENED) {
 				audio->mvs_mode = config.mvs_mode;
 				audio->rate_type = config.rate_type;
+				audio->dtx_mode = config.dtx_mode;
 			} else {
 				pr_err("%s: Set confg called in state %d\n",
 				       __func__, audio->state);

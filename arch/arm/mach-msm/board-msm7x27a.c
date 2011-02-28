@@ -31,6 +31,24 @@
 
 #define MSM_EBI2_PHYS 0xa0d00000
 
+static void gsbi_qup_i2c_gpio_config(int adap_id, int config_type)
+{
+}
+
+static struct msm_i2c_platform_data msm_gsbi0_qup_i2c_pdata = {
+	.clk_freq		= 100000,
+	.clk			= "gsbi_qup_clk",
+	.pclk			= "gsbi_qup_pclk",
+	.msm_i2c_config_gpio	= gsbi_qup_i2c_gpio_config,
+};
+
+static struct msm_i2c_platform_data msm_gsbi1_qup_i2c_pdata = {
+	.clk_freq		= 100000,
+	.clk			= "gsbi_qup_clk",
+	.pclk			= "gsbi_qup_pclk",
+	.msm_i2c_config_gpio	= gsbi_qup_i2c_gpio_config,
+};
+
 static struct resource smc91x_resources[] = {
 	[0] = {
 		.start = 0x90000300,
@@ -123,7 +141,15 @@ static struct platform_device *rumi_sim_devices[] __initdata = {
 	&msm_device_uart1,
 	&msm_device_nand,
 	&msm_device_uart_dm1,
+	&msm_gsbi0_qup_i2c_device,
+	&msm_gsbi1_qup_i2c_device,
 };
+
+static void __init msm_device_i2c_init(void){
+
+	msm_gsbi0_qup_i2c_device.dev.platform_data = &msm_gsbi0_qup_i2c_pdata;
+	msm_gsbi1_qup_i2c_device.dev.platform_data = &msm_gsbi1_qup_i2c_pdata;
+}
 
 static void __init msm7x27a_init_ebi2(void)
 {
@@ -153,6 +179,7 @@ static void __init msm7x2x_init(void)
 {
 	if (machine_is_msm7x27a_rumi3()) {
 		msm7x27a_init_ebi2();
+		msm_device_i2c_init();
 		platform_add_devices(rumi_sim_devices,
 				ARRAY_SIZE(rumi_sim_devices));
 		msm7x27a_init_mmc();

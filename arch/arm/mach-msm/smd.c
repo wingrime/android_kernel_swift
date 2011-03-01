@@ -39,12 +39,17 @@
 #include "proc_comm.h"
 #include "modem_notifier.h"
 
-#if defined(CONFIG_ARCH_QSD8X50) || defined(CONFIG_ARCH_MSM8X60)
+#if defined(CONFIG_ARCH_QSD8X50) || defined(CONFIG_ARCH_MSM8X60) \
+	|| defined(CONFIG_ARCH_MSM8960)
 #define CONFIG_QDSP6 1
 #endif
 
-#if defined(CONFIG_ARCH_MSM8X60)
+#if defined(CONFIG_ARCH_MSM8X60) || defined(CONFIG_ARCH_MSM8960)
 #define CONFIG_DSPS 1
+#endif
+
+#if defined(CONFIG_ARCH_MSM8960)
+#define CONFIG_WCNSS 1
 #endif
 
 #define MODULE_NAME "msm_smd"
@@ -116,18 +121,28 @@ static unsigned last_heap_free = 0xffffffff;
 #define MSM_TRIG_A2M_SMSM_INT    (writel(1 << 5, MSM_GCC_BASE + 0x8))
 #define MSM_TRIG_A2Q6_SMSM_INT   (writel(1 << 8, MSM_GCC_BASE + 0x8))
 #define MSM_TRIG_A2DSPS_SMD_INT
+#define MSM_TRIG_A2WCNSS_SMD_INT
 #elif defined(CONFIG_ARCH_MSM8X60)
 #define MSM_TRIG_A2M_SMD_INT     (writel(1 << 3, MSM_GCC_BASE + 0x8))
 #define MSM_TRIG_A2Q6_SMD_INT    (writel(1 << 15, MSM_GCC_BASE + 0x8))
 #define MSM_TRIG_A2M_SMSM_INT    (writel(1 << 4, MSM_GCC_BASE + 0x8))
 #define MSM_TRIG_A2Q6_SMSM_INT   (writel(1 << 14, MSM_GCC_BASE + 0x8))
 #define MSM_TRIG_A2DSPS_SMD_INT  (writel(1, MSM_SIC_NON_SECURE_BASE + 0x4080))
+#define MSM_TRIG_A2WCNSS_SMD_INT
+#elif defined(CONFIG_ARCH_MSM8960)
+#define MSM_TRIG_A2M_SMD_INT     (writel(1 << 3, MSM_APCS_GCC_BASE + 0x8))
+#define MSM_TRIG_A2Q6_SMD_INT    (writel(1 << 15, MSM_APCS_GCC_BASE + 0x8))
+#define MSM_TRIG_A2M_SMSM_INT    (writel(1 << 4, MSM_APCS_GCC_BASE + 0x8))
+#define MSM_TRIG_A2Q6_SMSM_INT   (writel(1 << 14, MSM_APCS_GCC_BASE + 0x8))
+#define MSM_TRIG_A2DSPS_SMD_INT  (writel(1, MSM_SIC_NON_SECURE_BASE + 0x4080))
+#define MSM_TRIG_A2WCNSS_SMD_INT  (writel(1 << 25, MSM_APCS_GCC_BASE + 0x8))
 #else
 #define MSM_TRIG_A2M_SMD_INT     (writel(1, MSM_CSR_BASE + 0x400 + (0) * 4))
 #define MSM_TRIG_A2Q6_SMD_INT    (writel(1, MSM_CSR_BASE + 0x400 + (8) * 4))
 #define MSM_TRIG_A2M_SMSM_INT    (writel(1, MSM_CSR_BASE + 0x400 + (5) * 4))
 #define MSM_TRIG_A2Q6_SMSM_INT   (writel(1, MSM_CSR_BASE + 0x400 + (8) * 4))
 #define MSM_TRIG_A2DSPS_SMD_INT
+#define MSM_TRIG_A2WCNSS_SMD_INT
 #endif
 
 #define SMD_LOOPBACK_CID 100
@@ -145,7 +160,7 @@ static void notify_other_smsm(uint32_t smsm_entry, uint32_t notify_mask)
 
 	if (smsm_info.intr_mask &&
 	    (readl(SMSM_INTR_MASK_ADDR(smsm_entry, SMSM_Q6)) & notify_mask)) {
-#if !defined(CONFIG_ARCH_MSM8X60)
+#if !defined(CONFIG_ARCH_MSM8X60) && !defined(MCONFIG_ARCH_MSM8960)
 		uint32_t mux_val;
 
 		if (smsm_info.intr_mux) {
@@ -171,6 +186,11 @@ static inline void notify_dsp_smd(void)
 static inline void notify_dsps_smd(void)
 {
 	MSM_TRIG_A2DSPS_SMD_INT;
+}
+
+static inline void notify_wcnss_smd(void)
+{
+	MSM_TRIG_A2WCNSS_SMD_INT;
 }
 
 void smd_diag(void)
@@ -284,6 +304,7 @@ static LIST_HEAD(smd_ch_closed_list);
 static LIST_HEAD(smd_ch_list_modem);
 static LIST_HEAD(smd_ch_list_dsp);
 static LIST_HEAD(smd_ch_list_dsps);
+static LIST_HEAD(smd_ch_list_wcnss);
 
 static unsigned char smd_ch_allocated[64];
 static struct work_struct probe_work;
@@ -316,7 +337,7 @@ static void smd_channel_probe_worker(struct work_struct *work)
 		   processor is involved */
 		type = SMD_CHANNEL_TYPE(shared[n].type);
 		if ((type != SMD_APPS_MODEM) && (type != SMD_APPS_QDSP) &&
-		    (type != SMD_APPS_DSPS))
+		    (type != SMD_APPS_DSPS) && (type != SMD_APPS_WCNSS))
 			continue;
 		if (!shared[n].ref_count)
 			continue;
@@ -359,7 +380,8 @@ void smd_channel_reset(void)
 		if (shared2) {
 			if ((type == SMD_APPS_MODEM) ||
 			    (type == SMD_APPS_QDSP) ||
-			    (type == SMD_APPS_DSPS))
+			    (type == SMD_APPS_DSPS) ||
+			    (type == SMD_APPS_WCNSS))
 				shared2->ch0.tail = shared2->ch0.head = 0;
 			else
 				memset(&shared2->ch0, 0,
@@ -373,7 +395,8 @@ void smd_channel_reset(void)
 		if (shared1) {
 			if ((type == SMD_APPS_MODEM) ||
 			    (type == SMD_APPS_QDSP) ||
-			    (type == SMD_APPS_DSPS))
+			    (type == SMD_APPS_DSPS) ||
+			    (type == SMD_APPS_WCNSS))
 				shared1->ch0.tail = shared1->ch0.head = 0;
 			else
 				memset(&shared1->ch0, 0,
@@ -677,11 +700,20 @@ static irqreturn_t smd_dsps_irq_handler(int irq, void *data)
 }
 #endif
 
+#if defined(CONFIG_WCNSS)
+static irqreturn_t smd_wcnss_irq_handler(int irq, void *data)
+{
+	handle_smd_irq(&smd_ch_list_wcnss, notify_wcnss_smd);
+	return IRQ_HANDLED;
+}
+#endif
+
 static void smd_fake_irq_handler(unsigned long arg)
 {
 	handle_smd_irq(&smd_ch_list_modem, notify_modem_smd);
 	handle_smd_irq(&smd_ch_list_dsp, notify_dsp_smd);
 	handle_smd_irq(&smd_ch_list_dsps, notify_dsps_smd);
+	handle_smd_irq(&smd_ch_list_wcnss, notify_wcnss_smd);
 }
 
 static DECLARE_TASKLET(smd_fake_irq_tasklet, smd_fake_irq_handler, 0);
@@ -717,6 +749,12 @@ void smd_sleep_exit(void)
 		}
 	}
 	list_for_each_entry(ch, &smd_ch_list_dsps, ch_list) {
+		if (smd_need_int(ch)) {
+			need_int = 1;
+			break;
+		}
+	}
+	list_for_each_entry(ch, &smd_ch_list_wcnss, ch_list) {
 		if (smd_need_int(ch)) {
 			need_int = 1;
 			break;
@@ -959,8 +997,10 @@ static int smd_alloc_channel(struct smd_alloc_elm *alloc_elm)
 		ch->notify_other_cpu = notify_modem_smd;
 	else if (ch->type == SMD_APPS_QDSP)
 		ch->notify_other_cpu = notify_dsp_smd;
-	else
+	else if (ch->type == SMD_APPS_DSPS)
 		ch->notify_other_cpu = notify_dsps_smd;
+	else
+		ch->notify_other_cpu = notify_wcnss_smd;
 
 	if (smd_is_packet(alloc_elm)) {
 		ch->read = smd_packet_read;
@@ -1127,6 +1167,8 @@ int smd_named_open_on_edge(const char *name, uint32_t edge,
 		list_add(&ch->ch_list, &smd_ch_list_dsp);
 	else if (SMD_CHANNEL_TYPE(ch->type) == SMD_APPS_DSPS)
 		list_add(&ch->ch_list, &smd_ch_list_dsps);
+	else if (SMD_CHANNEL_TYPE(ch->type) == SMD_APPS_WCNSS)
+		list_add(&ch->ch_list, &smd_ch_list_wcnss);
 	else
 		list_add(&ch->ch_list, &smd_ch_list_loopback);
 
@@ -1707,6 +1749,24 @@ int smd_core_init(void)
 	if (r < 0)
 		pr_err("smd_core_init: "
 		       "enable_irq_wake failed for INT_ADSP_A11\n");
+#endif
+
+#if defined(CONFIG_WCNSS)
+	r = request_irq(INT_WCNSS_A11, smd_wcnss_irq_handler,
+			flags, "smd_dev", smd_wcnss_irq_handler);
+	if (r < 0) {
+		free_irq(INT_A9_M2A_0, 0);
+		free_irq(INT_A9_M2A_5, 0);
+		free_irq(INT_ADSP_A11, smd_dsp_irq_handler);
+		free_irq(INT_ADSP_A11_SMSM, smsm_irq_handler);
+		free_irq(INT_DSPS_A11, smd_dsps_irq_handler);
+		return r;
+	}
+
+	r = enable_irq_wake(INT_WCNSS_A11);
+	if (r < 0)
+		pr_err("smd_core_init: "
+		       "enable_irq_wake failed for INT_WCNSS_A11\n");
 #endif
 
 	/* we may have missed a signal while booting -- fake

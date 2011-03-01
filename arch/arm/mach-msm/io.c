@@ -176,6 +176,13 @@ static struct map_desc msm8960_io_desc[] __initdata = {
 	MSM_DEVICE(TMR),
 	MSM_DEVICE(TMR0),
 	MSM_DEVICE(DMOV),
+	MSM_DEVICE(SIC_NON_SECURE),
+	MSM_DEVICE(APCS_GCC),
+	{
+		.virtual =  (unsigned long) MSM_SHARED_RAM_BASE,
+		.length =   MSM_SHARED_RAM_SIZE,
+		.type =     MT_DEVICE,
+	},
 };
 
 void __init msm_map_msm8960_io(void)

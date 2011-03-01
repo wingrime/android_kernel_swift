@@ -267,6 +267,11 @@ struct platform_device msm_device_sdc5 = {
 	},
 };
 
+struct platform_device msm_device_smd = {
+	.name		= "msm_smd",
+	.id		= -1,
+};
+
 static struct platform_device *msm_sdcc_devices[] __initdata = {
 	&msm_device_sdc1,
 	&msm_device_sdc2,

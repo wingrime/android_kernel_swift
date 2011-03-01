@@ -3174,52 +3174,6 @@ static int msm_open_control(struct inode *inode, struct file *filep)
 	return rc;
 }
 
-static int __msm_v4l2_control(struct msm_sync *sync,
-		struct msm_ctrl_cmd *out)
-{
-	int rc = 0;
-
-	struct msm_queue_cmd *qcmd = NULL, *rcmd = NULL;
-	struct msm_ctrl_cmd *ctrl;
-	struct msm_device_queue *v4l2_ctrl_q = &g_v4l2_control_device->ctrl_q;
-
-	/* wake up config thread, 4 is for V4L2 application */
-	qcmd = kmalloc(sizeof(struct msm_queue_cmd), GFP_KERNEL);
-	if (!qcmd) {
-		pr_err("%s: cannot allocate buffer\n", __func__);
-		rc = -ENOMEM;
-		goto end;
-	}
-	qcmd->type = MSM_CAM_Q_V4L2_REQ;
-	qcmd->command = out;
-	atomic_set(&qcmd->on_heap, 1);
-
-	if (out->type == V4L2_CAMERA_EXIT) {
-		rcmd = __msm_control(sync, NULL, qcmd, out->timeout_ms);
-		if (rcmd == NULL) {
-			rc = PTR_ERR(rcmd);
-			goto end;
-		}
-	}
-
-	rcmd = __msm_control(sync, v4l2_ctrl_q, qcmd, out->timeout_ms);
-
-	if (IS_ERR(rcmd)) {
-		rc = PTR_ERR(rcmd);
-		goto end;
-	}
-
-	ctrl = (struct msm_ctrl_cmd *)(rcmd->command);
-	/* FIXME: we should just set out->length = ctrl->length; */
-	BUG_ON(out->length < ctrl->length);
-	memcpy(out->value, ctrl->value, ctrl->length);
-
-end:
-	free_qcmd(rcmd);
-	CDBG("%s: rc %d\n", __func__, rc);
-	return rc;
-}
-
 static const struct file_operations msm_fops_config = {
 	.owner = THIS_MODULE,
 	.open = msm_open,
@@ -3288,33 +3242,6 @@ static int msm_tear_down_cdev(struct msm_cam_device *msm, dev_t devno)
 	device_destroy(msm_class, devno);
 	return 0;
 }
-
-int msm_v4l2_register(struct msm_v4l2_driver *drv)
-{
-	/* FIXME: support multiple sensors */
-	if (list_empty(&msm_sensors))
-		return -ENODEV;
-
-	drv->sync = list_first_entry(&msm_sensors, struct msm_sync, list);
-	drv->open      = __msm_open;
-	drv->release   = __msm_release;
-	drv->ctrl      = __msm_v4l2_control;
-	drv->reg_pmem  = __msm_register_pmem;
-	drv->get_frame = __msm_get_frame;
-	drv->put_frame = __msm_put_frame_buf;
-	drv->get_pict  = __msm_get_pic;
-	drv->drv_poll  = __msm_poll_frame;
-
-	return 0;
-}
-EXPORT_SYMBOL(msm_v4l2_register);
-
-int msm_v4l2_unregister(struct msm_v4l2_driver *drv)
-{
-	drv->sync = NULL;
-	return 0;
-}
-EXPORT_SYMBOL(msm_v4l2_unregister);
 
 static int msm_sync_init(struct msm_sync *sync,
 		struct platform_device *pdev,

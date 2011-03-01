@@ -1404,7 +1404,7 @@ static char *svlte2_usb_functions_default[] = {
 	"diag_mdm",
 	"modem",
 	"nmea",
-	"rmnet_sdio",
+	"rmnet_smd_sdio",
 	"usb_mass_storage",
 };
 
@@ -1414,7 +1414,7 @@ static char *svlte2_usb_functions_default_adb[] = {
 	"adb",
 	"modem",
 	"nmea",
-	"rmnet_sdio",
+	"rmnet_smd_sdio",
 	"usb_mass_storage",
 };
 
@@ -1480,8 +1480,8 @@ static char *svlte2_usb_functions_all[] = {
 	"modem",
 	"nmea",
 #endif
-#ifdef CONFIG_USB_ANDROID_RMNET_SDIO
-	"rmnet_sdio",
+#ifdef CONFIG_USB_ANDROID_RMNET_SMD_SDIO
+	"rmnet_smd_sdio",
 #endif
 	"usb_mass_storage",
 #ifdef CONFIG_USB_ANDROID_ACM

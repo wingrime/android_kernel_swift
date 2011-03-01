@@ -79,4 +79,5 @@ obj-$(CONFIG_USB_ANDROID_RNDIS)	+= f_rndis.o u_ether.o
 obj-$(CONFIG_USB_ANDROID_DIAG)	+= f_diag.o
 obj-$(CONFIG_USB_ANDROID_RMNET)	+= f_rmnet.o
 obj-$(CONFIG_USB_ANDROID_RMNET_SDIO)   += f_rmnet_sdio.o
+obj-$(CONFIG_USB_ANDROID_RMNET_SMD_SDIO)   += f_rmnet_smd_sdio.o
 

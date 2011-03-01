@@ -140,6 +140,31 @@ read/write of a packet.  Based on these SMD/SDIO notifications all the
 pending read/write requests will be handled. Tasklets(SMD)/Workqueues(SDIO)
 are used to get the requests done.
 
-This driver doesn't expose any of its interfaces to either kernelspace
-or userspace.
+There is another variant of rmnet driver called rmnet_smd_sdio which is used
+on some boards.  This driver allows the transport (SMD/SDIO) to be chosen
+at runtime. This is required because either MDM processor or MODEM processor
+is only active at a time for data transfers. As SMD and SDIO interfaces
+are different, different endpoint completion handlers are used. This driver
+leverage the existing rmnet over smd and rmnet over sdio drivers. The control
+messages (QMI) always routed over SDIO. After the control messages exchange,
+user space will come to know about the available data transport (SMD/SDIO).
+User space notify the same to driver and the corresponding transport is
+activated. It is assumed that transport will not change while a USB cable
+is connected.
+
+Rmnet over SMD and rmnet over SDIO doesn't expose any of its interfaces to
+either kernelspace or userspace. But rmnet over smd/sdio expose a sysfs
+interface for userspace to notify the available transport to driver.
+
+The sysfs file can be found at
+/sys/class/usb_composite/rmnet_smd_sdio/transport
+
+The below command activates the SMD transport
+echo 0 > /sys/class/usb_composite/rmnet_smd_sdio/transport
+
+The below command activates the SDIO transport
+echo 1 > /sys/class/usb_composite/rmnet_smd_sdio/transport
+
+-EINVAL is returned if a write is attempted to transport when a USB cable
+is not connected.
 

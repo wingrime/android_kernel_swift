@@ -32,7 +32,6 @@
 #include "smd_private.h"
 #endif
 #include "timer.h"
-#include "clock-8x60.h"
 
 enum {
 	MSM_TIMER_DEBUG_SYNC = 1U << 0,

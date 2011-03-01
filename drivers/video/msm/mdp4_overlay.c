@@ -1244,6 +1244,8 @@ struct mdp4_overlay_pipe *mdp4_overlay_pipe_alloc(
 	}
 
 	if (found) {
+		init_completion(&pipe->comp);
+		init_completion(&pipe->dmas_comp);
 		pr_debug("%s: pipe=%x ndx=%d num=%d share=%d cnt=%d\n",
 			__func__, (int)pipe, pipe->pipe_ndx, pipe->pipe_num,
 			pd->share, pd->ref_cnt);

@@ -362,7 +362,7 @@ static void android_set_function_mask(struct android_usb_product *up)
 
 	list_for_each_entry(func, &android_config_driver.functions, list) {
 		/* adb function enable/disable handled separetely */
-		if (!strcmp(func->name, "adb"))
+		if (!strcmp(func->name, "adb") && !func->disabled)
 			continue;
 		func->disabled = 1;
 		for (index = 0; index < up->num_functions; index++) {

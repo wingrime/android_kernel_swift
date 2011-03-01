@@ -1433,9 +1433,6 @@ static char *charm_usb_functions_all[] = {
 	"modem",
 	"nmea",
 #endif
-#ifdef CONFIG_USB_ANDROID_RMNET
-	"rmnet",
-#endif
 #ifdef CONFIG_USB_ANDROID_RMNET_SDIO
 	"rmnet_sdio",
 #endif

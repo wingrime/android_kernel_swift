@@ -2224,8 +2224,10 @@ static int msmsdcc_pm_resume(struct device *dev)
 #endif
 /* LGE_CHANGE_E [jisung.yang@lge.com] 2011-3-4, <Support Host Wakeup> */
 
-	if (host->plat->status_irq)
+	if (host->plat->status_irq) {
+		msmsdcc_check_status((unsigned long)host);
 		enable_irq(host->plat->status_irq);
+	}
 
 	/* Update the run-time PM status */
 	pm_runtime_disable(dev);

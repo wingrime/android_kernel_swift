@@ -36,8 +36,14 @@
 	(AUDIO_MAX_COMMON_IOCTL_NUM + 1), unsigned)
 
 /* MVS modes */
+#define MVS_MODE_IS733 1
 #define MVS_MODE_IS127 2
+#define MVS_MODE_4GV_NB 3
+#define MVS_MODE_4GV_WB 4
 #define MVS_MODE_AMR 5
+#define MVS_MODE_EFR 6
+#define MVS_MODE_FR 7
+#define MVS_MODE_HR 8
 #define MVS_MODE_LINEAR_PCM 9
 #define MVS_MODE_G711 10
 #define MVS_MODE_PCM 12

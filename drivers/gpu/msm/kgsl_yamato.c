@@ -998,7 +998,7 @@ kgsl_yamato_recover_hang(struct kgsl_device *device)
 	ret = kgsl_yamato_stop(device);
 	if (ret)
 		goto done;
-	ret = kgsl_yamato_start(device, KGSL_TRUE);
+	ret = kgsl_yamato_start(device, true);
 	if (ret)
 		goto done;
 	KGSL_DRV_ERR("Device has been restarted after hang\n");
@@ -1228,7 +1228,7 @@ err:
 
 static unsigned int kgsl_yamato_isidle(struct kgsl_device *device)
 {
-	int status = KGSL_FALSE;
+	int status = false;
 	struct kgsl_yamato_device *yamato_device = KGSL_YAMATO_DEVICE(device);
 	struct kgsl_ringbuffer *rb = &yamato_device->ringbuffer;
 	unsigned int rbbm_status;
@@ -1241,7 +1241,7 @@ static unsigned int kgsl_yamato_isidle(struct kgsl_device *device)
 			kgsl_yamato_regread(device, REG_RBBM_STATUS,
 					    &rbbm_status);
 			if (rbbm_status == 0x110)
-				status = KGSL_TRUE;
+				status = true;
 		}
 	} else {
 		KGSL_DRV_ERR("ERROR RB not STARTED\n");

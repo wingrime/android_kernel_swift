@@ -128,9 +128,6 @@ enum kgsl_status {
 	KGSL_FAILURE = 1
 };
 
-#define KGSL_TRUE 1
-#define KGSL_FALSE 0
-
 #ifdef CONFIG_MSM_KGSL_MMU_PAGE_FAULT
 #define MMU_CONFIG 2
 #else

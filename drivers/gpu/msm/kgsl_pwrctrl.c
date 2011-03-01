@@ -230,7 +230,7 @@ int kgsl_pwrctrl_pwrrail(struct kgsl_device *device, unsigned int pwrflag)
 	case KGSL_PWRFLAGS_POWER_OFF:
 		if (pwr->power_flags & KGSL_PWRFLAGS_POWER_ON) {
 			KGSL_PWR_DBG("power off, device %d\n", device->id);
-			if (internal_pwr_rail_ctl(pwr->pwr_rail, KGSL_FALSE)) {
+			if (internal_pwr_rail_ctl(pwr->pwr_rail, false)) {
 				KGSL_DRV_ERR(
 					"call internal_pwr_rail_ctl failed\n");
 				return KGSL_FAILURE;
@@ -246,7 +246,7 @@ int kgsl_pwrctrl_pwrrail(struct kgsl_device *device, unsigned int pwrflag)
 	case KGSL_PWRFLAGS_POWER_ON:
 		if (pwr->power_flags & KGSL_PWRFLAGS_POWER_OFF) {
 			KGSL_PWR_DBG("power on, device %d\n", device->id);
-			if (internal_pwr_rail_ctl(pwr->pwr_rail, KGSL_TRUE)) {
+			if (internal_pwr_rail_ctl(pwr->pwr_rail, true)) {
 				KGSL_PWR_ERR(
 					"call internal_pwr_rail_ctl failed\n");
 				return KGSL_FAILURE;

@@ -1,6 +1,6 @@
 /*
    BlueZ - Bluetooth protocol stack for Linux
-   Copyright (c) 2000-2001, 2010, Code Aurora Forum. All rights reserved.
+   Copyright (c) 2000-2001, 2010-2011, Code Aurora Forum. All rights reserved.
 
    Written 2000,2001 by Maxim Krasnyansky <maxk@qualcomm.com>
 
@@ -62,6 +62,11 @@ struct hci_conn_hash {
 	unsigned int     sco_num;
 };
 
+struct hci_chan_list {
+	struct list_head list;
+	spinlock_t       lock;
+};
+
 struct bdaddr_list {
 	struct list_head list;
 	bdaddr_t bdaddr;
@@ -97,16 +102,33 @@ struct hci_dev {
 	__u16		sniff_min_interval;
 	__u16		sniff_max_interval;
 
+	__u8		amp_status;
+	__u32		amp_total_bw;
+	__u32		amp_max_bw;
+	__u32		amp_min_latency;
+	__u32		amp_max_pdu;
+	__u8		amp_type;
+	__u16		amp_pal_cap;
+	__u16		amp_assoc_size;
+	__u32		amp_max_flush_to;
+	__u32		amp_be_flush_to;
+
 	unsigned long	quirks;
 
 	atomic_t	cmd_cnt;
 	unsigned int	acl_cnt;
 	unsigned int	sco_cnt;
 
+	__u8	flow_ctl_mode;
+
 	unsigned int	acl_mtu;
 	unsigned int	sco_mtu;
 	unsigned int	acl_pkts;
 	unsigned int	sco_pkts;
+
+	unsigned int	max_acl_len;
+	unsigned int	data_block_len;
+	unsigned int	num_blocks;
 
 	unsigned long	cmd_last_tx;
 	unsigned long	acl_last_tx;
@@ -132,6 +154,7 @@ struct hci_dev {
 
 	struct inquiry_cache	inq_cache;
 	struct hci_conn_hash	conn_hash;
+	struct hci_chan_list	chan_list;
 	struct list_head	blacklist;
 
 	struct hci_dev_stats	stat;
@@ -168,6 +191,7 @@ struct hci_conn {
 	spinlock_t	 lock;
 
 	bdaddr_t	 dst;
+	__u8		 dst_id;
 	__u16		 handle;
 	__u16		 state;
 	__u8             mode;
@@ -205,7 +229,20 @@ struct hci_conn {
 	void		*sco_data;
 	void		*priv;
 
+	__u8             link_key[16];
+	__u8             key_type;
+
 	struct hci_conn	*link;
+};
+
+struct hci_chan {
+	struct list_head list;
+	struct hci_dev	*hdev;
+	__u16		state;
+	atomic_t	refcnt;
+	__u16		ll_handle;
+	struct hci_conn	*conn;
+	void		*l2cap_sk;
 };
 
 extern struct hci_proto *hci_proto[];
@@ -233,7 +270,7 @@ static inline void inquiry_cache_init(struct hci_dev *hdev)
 static inline int inquiry_cache_empty(struct hci_dev *hdev)
 {
 	struct inquiry_cache *c = &hdev->inq_cache;
-	return (c->list == NULL);
+	return c->list == NULL;
 }
 
 static inline long inquiry_cache_age(struct hci_dev *hdev)
@@ -303,6 +340,13 @@ static inline struct hci_conn *hci_conn_hash_lookup_handle(struct hci_dev *hdev,
 	return NULL;
 }
 
+static inline void hci_chan_list_init(struct hci_dev *hdev)
+{
+	struct hci_chan_list *h = &hdev->chan_list;
+	INIT_LIST_HEAD(&h->list);
+	spin_lock_init(&h->lock);
+}
+
 static inline struct hci_conn *hci_conn_hash_lookup_ba(struct hci_dev *hdev,
 					__u8 type, bdaddr_t *ba)
 {
@@ -313,6 +357,21 @@ static inline struct hci_conn *hci_conn_hash_lookup_ba(struct hci_dev *hdev,
 	list_for_each(p, &h->list) {
 		c = list_entry(p, struct hci_conn, list);
 		if (c->type == type && !bacmp(&c->dst, ba))
+			return c;
+	}
+	return NULL;
+}
+
+static inline struct hci_conn *hci_conn_hash_lookup_id(struct hci_dev *hdev,
+					bdaddr_t *ba, __u8 id)
+{
+	struct hci_conn_hash *h = &hdev->conn_hash;
+	struct list_head *p;
+	struct hci_conn  *c;
+
+	list_for_each(p, &h->list) {
+		c = list_entry(p, struct hci_conn, list);
+		if (!bacmp(&c->dst, ba) && (c->dst_id == id))
 			return c;
 	}
 	return NULL;
@@ -333,6 +392,36 @@ static inline struct hci_conn *hci_conn_hash_lookup_state(struct hci_dev *hdev,
 	return NULL;
 }
 
+static inline struct hci_chan *hci_chan_list_lookup_handle(struct hci_dev *hdev,
+					__u16 handle)
+{
+	struct hci_chan_list *l = &hdev->chan_list;
+	struct list_head *p;
+	struct hci_chan  *c;
+
+	list_for_each(p, &l->list) {
+		c = list_entry(p, struct hci_chan, list);
+		if (c->ll_handle == handle)
+			return c;
+	}
+	return NULL;
+}
+
+static inline struct hci_chan *hci_chan_list_lookup_id(struct hci_dev *hdev,
+					__u8 handle)
+{
+	struct hci_chan_list *l = &hdev->chan_list;
+	struct list_head *p;
+	struct hci_chan  *c;
+
+	list_for_each(p, &l->list) {
+		c = list_entry(p, struct hci_chan, list);
+		if (c->conn->handle == handle)
+			return c;
+	}
+	return NULL;
+}
+
 void hci_acl_connect(struct hci_conn *conn);
 void hci_acl_disconn(struct hci_conn *conn, __u8 reason);
 void hci_add_sco(struct hci_conn *conn, __u16 handle);
@@ -345,6 +434,17 @@ int hci_conn_del(struct hci_conn *conn);
 void hci_conn_hash_flush(struct hci_dev *hdev);
 void hci_conn_check_pending(struct hci_dev *hdev);
 
+struct hci_chan *hci_chan_add(struct hci_dev *hdev);
+int hci_chan_del(struct hci_chan *chan);
+static inline void hci_chan_hold(struct hci_chan *chan)
+{
+	atomic_inc(&chan->refcnt);
+}
+void hci_chan_put(struct hci_chan *chan);
+
+struct hci_chan *hci_chan_accept(__u8 id, bdaddr_t *dst);
+struct hci_chan *hci_chan_create(__u8 id, bdaddr_t *dst);
+
 struct hci_conn *hci_connect(struct hci_dev *hdev, int type,
 					__u16 pkt_type, bdaddr_t *dst,
 					__u8 sec_level, __u8 auth_type);
@@ -352,6 +452,8 @@ int hci_conn_check_link_mode(struct hci_conn *conn);
 int hci_conn_security(struct hci_conn *conn, __u8 sec_level, __u8 auth_type);
 int hci_conn_change_link_key(struct hci_conn *conn);
 int hci_conn_switch_role(struct hci_conn *conn, __u8 role);
+void hci_disconnect(struct hci_conn *conn, __u8 reason);
+void hci_disconnect_amp(struct hci_conn *conn, __u8 reason);
 
 void hci_conn_enter_active_mode(struct hci_conn *conn);
 void hci_conn_enter_sniff_mode(struct hci_conn *conn);
@@ -416,6 +518,7 @@ static inline struct hci_dev *hci_dev_hold(struct hci_dev *d)
 
 struct hci_dev *hci_dev_get(int index);
 struct hci_dev *hci_get_route(bdaddr_t *src, bdaddr_t *dst);
+struct hci_dev *hci_dev_get_type(__u8 amp_type);
 
 struct hci_dev *hci_alloc_dev(void);
 void hci_free_dev(struct hci_dev *hdev);
@@ -476,6 +579,8 @@ struct hci_proto {
 	int (*recv_acldata)	(struct hci_conn *conn, struct sk_buff *skb, __u16 flags);
 	int (*recv_scodata)	(struct hci_conn *conn, struct sk_buff *skb);
 	int (*security_cfm)	(struct hci_conn *conn, __u8 status, __u8 encrypt);
+	int (*create_cfm)	(struct hci_chan *chan, __u8 status);
+	int (*destroy_cfm)	(struct hci_chan *chan, __u8 status);
 };
 
 static inline int hci_proto_connect_ind(struct hci_dev *hdev, bdaddr_t *bdaddr, __u8 type)
@@ -568,6 +673,24 @@ static inline void hci_proto_encrypt_cfm(struct hci_conn *conn, __u8 status, __u
 		hp->security_cfm(conn, status, encrypt);
 }
 
+static inline void hci_proto_create_cfm(struct hci_chan *chan, __u8 status)
+{
+	register struct hci_proto *hp;
+
+	hp = hci_proto[HCI_PROTO_L2CAP];
+	if (hp && hp->create_cfm)
+		hp->create_cfm(chan, status);
+}
+
+static inline void hci_proto_destroy_cfm(struct hci_chan *chan, __u8 status)
+{
+	register struct hci_proto *hp;
+
+	hp = hci_proto[HCI_PROTO_L2CAP];
+	if (hp && hp->destroy_cfm)
+		hp->destroy_cfm(chan, status);
+}
+
 int hci_register_proto(struct hci_proto *hproto);
 int hci_unregister_proto(struct hci_proto *hproto);
 
@@ -653,8 +776,29 @@ int hci_unregister_cb(struct hci_cb *hcb);
 int hci_register_notifier(struct notifier_block *nb);
 int hci_unregister_notifier(struct notifier_block *nb);
 
+/* AMP Manager event callbacks */
+struct amp_mgr_cb {
+	struct list_head list;
+	void (*amp_cmd_complete_event) (struct hci_dev *hdev, __u16 opcode,
+					struct sk_buff *skb);
+	void (*amp_cmd_status_event) (struct hci_dev *hdev, __u16 opcode,
+					__u8 status);
+	void (*amp_event) (struct hci_dev *hdev, __u8 ev_code,
+					struct sk_buff *skb);
+};
+
+void hci_amp_cmd_complete(struct hci_dev *hdev, __u16 opcode,
+			struct sk_buff *skb);
+void hci_amp_cmd_status(struct hci_dev *hdev, __u16 opcode, __u8 status);
+void hci_amp_event_packet(struct hci_dev *hdev, __u8 ev_code,
+			struct sk_buff *skb);
+
+int hci_register_amp(struct amp_mgr_cb *acb);
+int hci_unregister_amp(struct amp_mgr_cb *acb);
+
 int hci_send_cmd(struct hci_dev *hdev, __u16 opcode, __u32 plen, void *param);
-void hci_send_acl(struct hci_conn *conn, struct sk_buff *skb, __u16 flags);
+void hci_send_acl(struct hci_conn *conn, struct hci_chan *chan,
+		struct sk_buff *skb, __u16 flags);
 void hci_send_sco(struct hci_conn *conn, struct sk_buff *skb);
 
 void *hci_sent_cmd_data(struct hci_dev *hdev, __u16 opcode);

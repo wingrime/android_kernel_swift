@@ -162,7 +162,8 @@ struct msm_cam_v4l2_device {
 	 */
 	struct msm_device_queue ctrl_q;
 
-	struct msm_isp_ctrl_cmd ctrl_cmd_returned;
+	uint8_t ctrl_data[max_control_command_size];
+	struct msm_ctrl_cmd ctrl;
 };
 
 /* ISP related functions */
@@ -176,6 +177,8 @@ int msm_isp_streamon(struct msm_cam_v4l2_device *pcam);
 int msm_isp_streamoff(struct msm_cam_v4l2_device *pcam);
 int msm_isp_s_ctrl(struct msm_cam_v4l2_device *pcam, struct v4l2_control *ctrl);
 int msm_isp_g_ctrl(struct msm_cam_v4l2_device *pcam, struct v4l2_control *ctrl);
+int msm_isp_q_ctrl(struct msm_cam_v4l2_device *pcam,
+		struct v4l2_queryctrl *queryctrl);
 
 void msm_isp_vfe_dev_init(struct v4l2_subdev *vd);
 int msm_isp_register(struct msm_cam_v4l2_device *pcam);

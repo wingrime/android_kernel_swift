@@ -200,17 +200,6 @@ struct msm_ctrl_cmd {
 	int resp_fd; /* FIXME: to be used by the kernel, pass-through for now */
 };
 
-struct msm_isp_ctrl_cmd {
-	uint16_t type;
-	uint16_t length;
-	uint16_t status;
-	uint32_t timeout_ms;
-	int resp_fd; /* FIXME: to be used by the kernel, pass-through for now */
-	/* maximum possible data size that can be sent to user space is only
-		64 bytes */
-	char value[40];
-};
-
 struct msm_vfe_evt_msg {
 	unsigned short type;	/* 1 == event (RPC), 0 == message (adsp) */
 	unsigned short msg_id;
@@ -220,14 +209,15 @@ struct msm_vfe_evt_msg {
 };
 
 struct msm_isp_evt_msg {
-	unsigned short type;	/* 1 == event (RPC), 0 == message (adsp) */
-	unsigned short msg_id;
-	unsigned int len;	/* size in, number of bytes out */
-	/* maximum possible data size that can be
-i	  sent to user space as v4l2 data structure
-	  is only of 64 bytes */
-	uint8_t data[48];
+ unsigned short type;        /* 1 == event (RPC), 0 == message (adsp) */
+ unsigned short msg_id;
+ unsigned int len;   /* size in, number of bytes out */
+ /* maximum possible data size that can be
+   sent to user space as v4l2 data structure
+   is only of 64 bytes */
+ uint8_t data[48];
 };
+
 struct msm_vpe_evt_msg {
 	unsigned short type; /* 1 == event (RPC), 0 == message (adsp) */
 	unsigned short msg_id;
@@ -239,7 +229,7 @@ struct msm_isp_stats_event_ctrl {
 	unsigned short resptype;
 	union {
 		struct msm_isp_evt_msg isp_msg;
-		struct msm_isp_ctrl_cmd ctrl;
+		struct msm_ctrl_cmd ctrl;
 	} isp_data;
 };
 

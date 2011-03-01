@@ -86,6 +86,14 @@ static int sdio_dld_write_callback(struct tty_struct *tty,
 static int sdio_dld_main_task(void *card);
 
 /* STRUCTURES AND TYPES */
+enum sdio_dld_op_mode {
+	 SDIO_DLD_NO_MODE = 0,
+	 SDIO_DLD_NORMAL_MODE = 1,
+	 SDIO_DLD_BOOT_TEST_MODE = 2,
+	 SDIO_DLD_AMSS_TEST_MODE = 3,
+	 SDIO_DLD_NUM_OF_MODES,
+};
+
 struct sdioc_reg_sequential_chunk_ptrs {
 	unsigned int dl_wr_ptr;
 	unsigned int dl_rd_ptr;

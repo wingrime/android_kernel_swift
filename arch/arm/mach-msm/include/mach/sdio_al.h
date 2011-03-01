@@ -50,14 +50,6 @@ struct sdio_channel; /* Forward Declaration */
 #define SDIO_EVENT_DATA_READ_AVAIL      0x01
 #define SDIO_EVENT_DATA_WRITE_AVAIL     0x02
 
-enum sdio_dld_op_mode {
-	 SDIO_DLD_NO_MODE = 0,
-	 SDIO_DLD_NORMAL_MODE = 1,
-	 SDIO_DLD_BOOT_TEST_MODE = 2,
-	 SDIO_DLD_AMSS_TEST_MODE = 3,
-	 SDIO_DLD_NUM_OF_MODES,
-};
-
 struct sdio_al_platform_data {
 	int (*config_mdm2ap_status)(int);
 	int (*get_mdm2ap_status)(void);
@@ -185,7 +177,6 @@ int sdio_downloader_setup(struct mmc_card *card,
 			  int func_number,
 			  int(*func)(void));
 
-
 /**
  * test_channel_init
  * initializes a test channel
@@ -195,18 +186,5 @@ int sdio_downloader_setup(struct mmc_card *card,
  *
  */
 int test_channel_init(char *name);
-
-/**
- * sdio_dld_set_op_mode
- * this function sets the operation mode of the flashless boot
- * driver which later on will be used to notify the SDIOC client
- * what is the operation mode
- *
- * @op_mode: the operation mode
- * @return 0 on success or negative value on error.
- *
- *
- */
-int sdio_dld_set_op_mode(enum sdio_dld_op_mode op_mode);
 
 #endif /* __SDIO_AL__ */

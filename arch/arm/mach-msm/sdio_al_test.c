@@ -1060,14 +1060,6 @@ ssize_t test_write(struct file *filp, const char __user *buf, size_t size,
 		    set_params_smem_test(test_ctx->test_ch_arr[SDIO_SMEM]))
 			return size;
 		break;
-	case 11:
-		pr_debug(TEST_MODULE_NAME " --Boot test--.\n");
-		sdio_dld_set_op_mode(SDIO_DLD_BOOT_TEST_MODE);
-		break;
-	case 12:
-		pr_debug(TEST_MODULE_NAME " --Boot test--.\n");
-		sdio_dld_set_op_mode(SDIO_DLD_AMSS_TEST_MODE);
-		break;
 	case 98:
 		pr_info(TEST_MODULE_NAME " set runtime debug on");
 		test_ctx->runtime_debug = 1;

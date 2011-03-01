@@ -205,6 +205,8 @@ msmsdcc_request_end(struct msmsdcc_host *host, struct mmc_request *mrq)
 	host->curr.mrq = NULL;
 	host->curr.cmd = NULL;
 
+	del_timer(&host->req_tout_timer);
+
 	if (mrq->data)
 		mrq->data->bytes_xfered = host->curr.data_xfered;
 	if (mrq->cmd->error == -ETIMEDOUT)
@@ -345,7 +347,7 @@ msmsdcc_dma_complete_tlet(unsigned long data)
 			host->curr.mrq = NULL;
 			host->curr.cmd = NULL;
 			mrq->data->bytes_xfered = host->curr.data_xfered;
-
+			del_timer(&host->req_tout_timer);
 			spin_unlock_irqrestore(&host->lock, flags);
 
 #ifdef CONFIG_MMC_MSM_PROG_DONE_SCAN
@@ -550,6 +552,13 @@ msmsdcc_start_command_deferred(struct msmsdcc_host *host,
 		       mmc_hostname(host->mmc));
 	}
 	host->curr.cmd = cmd;
+
+	/*
+	 * Kick the software command timeout timer here.
+	 * Timer expires in 10 secs.
+	 */
+	mod_timer(&host->req_tout_timer,
+			(jiffies + msecs_to_jiffies(MSM_MMC_REQ_TIMEOUT)));
 }
 
 static void
@@ -1567,6 +1576,25 @@ static void msmsdcc_late_resume(struct early_suspend *h)
 };
 #endif
 
+static void msmsdcc_req_tout_timer_hdlr(unsigned long data)
+{
+	struct msmsdcc_host *host = (struct msmsdcc_host *)data;
+	struct mmc_command *cmd;
+	unsigned long flags;
+
+	spin_lock_irqsave(&host->lock, flags);
+	cmd = host->curr.cmd;
+	if (cmd) {
+		pr_info("%s: %s CMD%d\n", mmc_hostname(host->mmc),
+			__func__, cmd->opcode);
+		if (!cmd->error)
+			cmd->error = -ETIMEDOUT;
+		msmsdcc_reset_and_restore(host);
+		msmsdcc_request_end(host, cmd->mrq);
+	}
+	spin_unlock_irqrestore(&host->lock, flags);
+}
+
 static int
 msmsdcc_probe(struct platform_device *pdev)
 {
@@ -1869,6 +1897,8 @@ msmsdcc_probe(struct platform_device *pdev)
 		pm_runtime_enable(&(pdev)->dev);
 	}
 #endif
+	setup_timer(&host->req_tout_timer, msmsdcc_req_tout_timer_hdlr,
+			(unsigned long)host);
 
 	mmc_add_host(mmc);
 
@@ -1919,6 +1949,7 @@ msmsdcc_probe(struct platform_device *pdev)
 	return 0;
 
  platform_irq_free:
+	del_timer_sync(&host->req_tout_timer);
 	pm_runtime_disable(&(pdev)->dev);
 	pm_runtime_set_suspended(&(pdev)->dev);
 
@@ -1980,6 +2011,7 @@ static int msmsdcc_remove(struct platform_device *pdev)
 	if (!plat->status_irq)
 		sysfs_remove_group(&pdev->dev.kobj, &dev_attr_grp);
 
+	del_timer_sync(&host->req_tout_timer);
 	tasklet_kill(&host->dma_tlet);
 	mmc_remove_host(mmc);
 

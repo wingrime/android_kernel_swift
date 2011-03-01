@@ -60,7 +60,7 @@
 static int disable_ertm = 0;
 
 static u32 l2cap_feat_mask = L2CAP_FEAT_FIXED_CHAN;
-static u8 l2cap_fixed_chan[8] = { 0x02, };
+static u8 l2cap_fixed_chan[8] = { L2CAP_FC_L2CAP | L2CAP_FC_A2MP, };
 
 static const struct proto_ops l2cap_sock_ops;
 
@@ -504,7 +504,8 @@ static void __l2cap_chan_add(struct l2cap_conn *conn, struct sock *sk, struct so
 
 	l2cap_pi(sk)->conn = conn;
 
-	if (sk->sk_type == SOCK_SEQPACKET || sk->sk_type == SOCK_STREAM) {
+	if (!l2cap_pi(sk)->fixed_channel &&
+		(sk->sk_type == SOCK_SEQPACKET || sk->sk_type == SOCK_STREAM)) {
 		/* Alloc CID for connection-oriented socket */
 		l2cap_pi(sk)->scid = l2cap_alloc_cid(l);
 	} else if (sk->sk_type == SOCK_DGRAM) {
@@ -512,12 +513,15 @@ static void __l2cap_chan_add(struct l2cap_conn *conn, struct sock *sk, struct so
 		l2cap_pi(sk)->scid = L2CAP_CID_CONN_LESS;
 		l2cap_pi(sk)->dcid = L2CAP_CID_CONN_LESS;
 		l2cap_pi(sk)->omtu = L2CAP_DEFAULT_MTU;
-	} else {
+	} else if (sk->sk_type == SOCK_RAW) {
 		/* Raw socket can send/recv signalling messages only */
 		l2cap_pi(sk)->scid = L2CAP_CID_SIGNALING;
 		l2cap_pi(sk)->dcid = L2CAP_CID_SIGNALING;
 		l2cap_pi(sk)->omtu = L2CAP_DEFAULT_MTU;
 	}
+	/* Otherwise, do not set scid/dcid/omtu.  These will be set up
+	 * by l2cap_fixed_channel_config()
+	 */
 
 	__l2cap_chan_link(l, sk);
 
@@ -540,7 +544,8 @@ static void l2cap_chan_del(struct sock *sk, int err)
 		/* Unlink from channel list */
 		l2cap_chan_unlink(&conn->chan_list, sk);
 		l2cap_pi(sk)->conn = NULL;
-		hci_conn_put(conn->hcon);
+		if (!l2cap_pi(sk)->fixed_channel)
+			hci_conn_put(conn->hcon);
 	}
 
 	sk->sk_state = BT_CLOSED;
@@ -1362,15 +1367,24 @@ static int l2cap_do_connect(struct sock *sk)
 		}
 	}
 
-	hcon = hci_connect(hdev, ACL_LINK, 0, dst,
-					l2cap_pi(sk)->sec_level, auth_type);
-	if (!hcon)
-		goto done;
+	if (l2cap_pi(sk)->fixed_channel) {
+		/* Fixed channels piggyback on existing ACL connections */
+		hcon = hci_conn_hash_lookup_ba(hdev, ACL_LINK, dst);
+		if (!hcon || !hcon->l2cap_data)
+			goto done;
 
-	conn = l2cap_conn_add(hcon, 0);
-	if (!conn) {
-		hci_conn_put(hcon);
-		goto done;
+		conn = hcon->l2cap_data;
+	} else {
+		hcon = hci_connect(hdev, ACL_LINK, 0, dst,
+				l2cap_pi(sk)->sec_level, auth_type);
+		if (!hcon)
+			goto done;
+
+		conn = l2cap_conn_add(hcon, 0);
+		if (!conn) {
+			hci_conn_put(hcon);
+			goto done;
+		}
 	}
 
 	err = 0;
@@ -1380,16 +1394,25 @@ static int l2cap_do_connect(struct sock *sk)
 
 	l2cap_chan_add(conn, sk, NULL);
 
-	sk->sk_state = BT_CONNECT;
-	l2cap_sock_set_timer(sk, sk->sk_sndtimeo);
+	BT_DBG("hcon->state %d", (int) hcon->state);
 
-	if (hcon->state == BT_CONNECTED) {
-		if (sk->sk_type != SOCK_SEQPACKET &&
+	if (l2cap_pi(sk)->fixed_channel) {
+		sk->sk_state = BT_CONNECTED;
+		sk->sk_state_change(sk);
+	} else {
+		sk->sk_state = BT_CONNECT;
+		l2cap_sock_set_timer(sk, sk->sk_sndtimeo);
+		sk->sk_state_change(sk);
+
+		if (hcon->state == BT_CONNECTED) {
+			if (sk->sk_type != SOCK_SEQPACKET &&
 				sk->sk_type != SOCK_STREAM) {
-			l2cap_sock_clear_timer(sk);
-			sk->sk_state = BT_CONNECTED;
-		} else
-			l2cap_do_start(sk);
+				l2cap_sock_clear_timer(sk);
+				sk->sk_state = BT_CONNECTED;
+				sk->sk_state_change(sk);
+			} else
+				l2cap_do_start(sk);
+		}
 	}
 
 done:
@@ -1421,7 +1444,7 @@ static int l2cap_sock_connect(struct socket *sock, struct sockaddr *addr, int al
 	lock_sock(sk);
 
 	if ((sk->sk_type == SOCK_SEQPACKET || sk->sk_type == SOCK_STREAM)
-			&& !la.l2_psm) {
+		&& (!la.l2_psm && !l2cap_pi(sk)->fixed_channel)) {
 		err = -EINVAL;
 		goto done;
 	}
@@ -1463,6 +1486,7 @@ static int l2cap_sock_connect(struct socket *sock, struct sockaddr *addr, int al
 
 	/* PSM must be odd and lsb of upper byte must be 0 */
 	if ((__le16_to_cpu(la.l2_psm) & 0x0101) != 0x0001 &&
+		!l2cap_pi(sk)->fixed_channel &&
 		sk->sk_type != SOCK_RAW) {
 		BT_DBG("Bad PSM 0x%x", (int)__le16_to_cpu(la.l2_psm));
 		err = -EINVAL;
@@ -4393,6 +4417,12 @@ static inline int l2cap_information_rsp(struct l2cap_conn *conn, struct l2cap_cm
 
 			l2cap_conn_start(conn);
 		}
+	} else if (type == L2CAP_IT_FIXED_CHAN) {
+		conn->fc_mask = rsp->data[0];
+		conn->info_state |= L2CAP_INFO_FEAT_MASK_REQ_DONE;
+		conn->info_ident = 0;
+
+		l2cap_conn_start(conn);
 	}
 
 	return 0;
@@ -5383,6 +5413,38 @@ static int l2cap_ertm_rx(struct sock *sk, struct bt_l2cap_control *control,
 	return err;
 }
 
+void l2cap_fixed_channel_config(struct sock *sk, struct l2cap_options *opt,
+				u16 cid, u16 mps)
+{
+	lock_sock(sk);
+
+	l2cap_pi(sk)->fixed_channel = 1;
+
+	l2cap_pi(sk)->dcid = cid;
+	l2cap_pi(sk)->scid = cid;
+
+	l2cap_pi(sk)->imtu = opt->imtu;
+	l2cap_pi(sk)->omtu = opt->omtu;
+	l2cap_pi(sk)->remote_mps = mps;
+	l2cap_pi(sk)->mps = mps;
+	l2cap_pi(sk)->flush_to = opt->flush_to;
+	l2cap_pi(sk)->mode = opt->mode;
+	l2cap_pi(sk)->fcs = opt->fcs;
+	l2cap_pi(sk)->max_tx = opt->max_tx;
+	l2cap_pi(sk)->remote_max_tx = opt->max_tx;
+	l2cap_pi(sk)->tx_win = opt->txwin_size;
+	l2cap_pi(sk)->remote_tx_win = opt->txwin_size;
+	l2cap_pi(sk)->retrans_timeout = L2CAP_DEFAULT_RETRANS_TO;
+	l2cap_pi(sk)->monitor_timeout = L2CAP_DEFAULT_MONITOR_TO;
+
+	if (opt->mode == L2CAP_MODE_ERTM ||
+		l2cap_pi(sk)->mode == L2CAP_MODE_STREAMING)
+		l2cap_ertm_init(sk);
+
+	release_sock(sk);
+
+	return;
+}
 
 static const u8 l2cap_ertm_rx_func_to_event[4] = {
 	L2CAP_ERTM_EVENT_RECV_RR, L2CAP_ERTM_EVENT_RECV_REJ,

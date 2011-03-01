@@ -2545,6 +2545,13 @@ int sdio_write(struct sdio_channel *ch, const void *data, int len)
 		return -EINVAL;
 	}
 
+
+	if (len == 0) {
+		pr_err(MODULE_NAME ":channel %s trying to write 0 bytes\n",
+			ch->name);
+		return -EINVAL;
+	}
+
 	sdio_claim_host(sdio_al_dev->card->sdio_func[0]);
 	if (sdio_al_dev->is_ok_to_sleep) {
 		ret = sdio_al_wake_up(sdio_al_dev, 1);

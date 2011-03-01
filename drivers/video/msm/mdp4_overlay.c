@@ -1244,8 +1244,6 @@ struct mdp4_overlay_pipe *mdp4_overlay_pipe_alloc(
 	}
 
 	if (found) {
-		init_completion(&pipe->comp);
-		init_completion(&pipe->dmas_comp);
 		pr_debug("%s: pipe=%x ndx=%d num=%d share=%d cnt=%d\n",
 			__func__, (int)pipe, pipe->pipe_ndx, pipe->pipe_num,
 			pd->share, pd->ref_cnt);
@@ -1772,12 +1770,12 @@ int mdp4_overlay_unset(struct fb_info *info, int ndx)
 #ifdef CONFIG_FB_MSM_MIPI_DSI
 		if (ctrl->panel_mode & MDP4_PANEL_DSI_CMD) {
 			if (mfd->panel_power_on)
-				mdp4_dsi_cmd_dma_busy_wait(mfd, pipe);
+				mdp4_dsi_cmd_dma_busy_wait(mfd);
 		}
 #else
 		if (ctrl->panel_mode & MDP4_PANEL_MDDI) {
 			if (mfd->panel_power_on)
-				mdp4_mddi_dma_busy_wait(mfd, pipe);
+				mdp4_mddi_dma_busy_wait(mfd);
 		}
 #endif
 	}
@@ -1953,14 +1951,14 @@ int mdp4_overlay_play(struct fb_info *info, struct msmfb_overlay_data *req,
 #ifdef CONFIG_FB_MSM_MIPI_DSI
 			if (ctrl->panel_mode & MDP4_PANEL_DSI_CMD) {
 				if (mfd->panel_power_on) {
-					mdp4_dsi_cmd_dma_busy_wait(mfd, pipe);
+					mdp4_dsi_cmd_dma_busy_wait(mfd);
 					mdp4_dsi_cmd_kickoff_video(mfd, pipe);
 				}
 			}
 #else
 			if (ctrl->panel_mode & MDP4_PANEL_MDDI) {
 				if (mfd->panel_power_on) {
-					mdp4_mddi_dma_busy_wait(mfd, pipe);
+					mdp4_mddi_dma_busy_wait(mfd);
 					mdp4_mddi_kickoff_video(mfd, pipe);
 				}
 			}

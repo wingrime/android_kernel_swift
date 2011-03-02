@@ -990,6 +990,10 @@ static void tavarua_handle_interrupts(struct tavarua_device *radio)
 			tavarua_q_event(radio, TAVARUA_EVT_NEW_SRCH_LIST);
 			radio->xfr_in_progress = 0;
 			break;
+		case PHY_TXGAIN:
+			FMDBG("read PHY_TXGAIN is successful");
+			complete(&radio->sync_req_done);
+			break;
 		case (0x80 | RX_CONFIG):
 		case (0x80 | RADIO_CONFIG):
 		case (0x80 | RDS_CONFIG):
@@ -1021,6 +1025,10 @@ static void tavarua_handle_interrupts(struct tavarua_device *radio)
 			FMDBG("xfr interrupt PS data Sent\n");
 			complete(&radio->sync_req_done);
 			break;
+		case (0x80 | PHY_TXGAIN):
+			FMDBG("write PHY_TXGAIN is successful");
+			complete(&radio->sync_req_done);
+			break;
 		default:
 			FMDERR("UNKNOWN XFR = %d\n", xfr_status);
 		}
@@ -1031,7 +1039,7 @@ static void tavarua_handle_interrupts(struct tavarua_device *radio)
 
 	/* Error occurred. Read ERRCODE to determine cause */
 	if (radio->registers[STATUS_REG3] & ERROR) {
-#if FM_DEBUG
+#ifdef FM_DEBUG
 		unsigned char xfr_buf[XFR_REG_NUM];
 		int retval = sync_read_xfr(radio, ERROR_CODE, xfr_buf);
 		FMDBG("retval of ERROR_CODE read : %d\n", retval);
@@ -2451,6 +2459,7 @@ static int tavarua_vidioc_s_ext_ctrls(struct file *file, void *priv,
 		/* send payload to FM hardware */
 		while (bytes_left) {
 			chunk_index++;
+			FMDBG("chunk is %d", chunk_index);
 			bytes_to_copy = min(bytes_left, XFR_REG_NUM);
 			/*Clear the tx_data */
 			memset(tx_data, 0, XFR_REG_NUM);
@@ -2472,7 +2481,7 @@ static int tavarua_vidioc_s_ext_ctrls(struct file *file, void *priv,
 		extra_name_byte = (bytes_copied%8) ? 1 : 0;
 		name_bytes = (bytes_copied/8) + extra_name_byte;
 		/*8 bytes are grouped as 1 name */
-		tx_data[0] = (name_bytes)&MASK_TXREPCOUNT;
+		tx_data[0] = (name_bytes) & MASK_TXREPCOUNT;
 		tx_data[1] = radio->pty & MASK_PTY; /* PTY */
 		tx_data[2] = ((radio->pi & MASK_PI_MSB) >> 8);
 		tx_data[3] = radio->pi & MASK_PI_LSB;
@@ -2749,7 +2758,7 @@ static int tavarua_vidioc_s_ctrl(struct file *file, void *priv,
 
 		} break;
 
-    case V4L2_CID_PRIVATE_TAVARUA_STOP_RDS_TX_RT: {
+	case V4L2_CID_PRIVATE_TAVARUA_STOP_RDS_TX_RT: {
 			memset(tx_data, '0', XFR_REG_NUM);
 			FMDBG("Writing RT header\n");
 			retval = sync_write_xfr(radio, RDS_RT_0, tx_data);
@@ -2760,6 +2769,34 @@ static int tavarua_vidioc_s_ctrl(struct file *file, void *priv,
 	case V4L2_CID_PRIVATE_TAVARUA_TX_SETPSREPEATCOUNT: {
 			radio->ps_repeatcount = ctrl->value;
 		} break;
+	case V4L2_CID_TUNE_POWER_LEVEL: {
+		unsigned char tx_power_lvl_config[FM_TX_PWR_LVL_MAX+1] = {
+			0x85, /* tx_da<5:3> = 0  lpf<2:0> = 5*/
+			0x95, /* tx_da<5:3> = 2  lpf<2:0> = 5*/
+			0x9D, /* tx_da<5:3> = 3  lpf<2:0> = 5*/
+			0xA5, /* tx_da<5:3> = 4  lpf<2:0> = 5*/
+			0xAD, /* tx_da<5:3> = 5  lpf<2:0> = 5*/
+			0xB5, /* tx_da<5:3> = 6  lpf<2:0> = 5*/
+			0xBD, /* tx_da<5:3> = 7  lpf<2:0> = 5*/
+			0xBF  /* tx_da<5:3> = 7  lpf<2:0> = 7*/
+		};
+		if (ctrl->value > FM_TX_PWR_LVL_MAX)
+			ctrl->value = FM_TX_PWR_LVL_MAX;
+		if (ctrl->value < FM_TX_PWR_LVL_0)
+			ctrl->value = FM_TX_PWR_LVL_0;
+		retval = sync_read_xfr(radio, PHY_TXGAIN, xfr_buf);
+		FMDBG("return for PHY_TXGAIN is %d", retval);
+		if (retval < 0) {
+			FMDBG("read failed");
+			break;
+		}
+		xfr_buf[2] = tx_power_lvl_config[ctrl->value];
+		retval = sync_write_xfr(radio, PHY_TXGAIN, xfr_buf);
+		FMDBG("return for write PHY_TXGAIN is %d", retval);
+		if (retval < 0)
+			FMDBG("write failed");
+	} break;
+
 	default:
 		retval = -EINVAL;
 	}

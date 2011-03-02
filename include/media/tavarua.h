@@ -334,6 +334,9 @@ enum radio_state_t {
 #define	RDSPROC		(1 << 1) /* Dynamic RDS Processing complete */
 #define	ERROR		(1 << 7) /* Err occurred.Read code to determine cause */
 
+
+#define	FM_TX_PWR_LVL_0		0 /* Lowest power lvl that can be set for Tx */
+#define	FM_TX_PWR_LVL_MAX	7 /* Max power lvl for Tx */
 /* Transfer */
 enum tavarua_xfr_ctrl_t {
 	RDS_PS_0 = 0x01,
@@ -388,7 +391,8 @@ enum tavarua_xfr_ctrl_t {
 	DIG_MOST,
 	DIG_TX_0,
 	DIG_TX_1,
-	PHY_CONFIG = 0x3C,
+	PHY_TXGAIN = 0x3B,
+	PHY_CONFIG,
 	PHY_TXBLOCK,
 	PHY_TCB,
 	TAVARUA_XFR_CTRL_MAX

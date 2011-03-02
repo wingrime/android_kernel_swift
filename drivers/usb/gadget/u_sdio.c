@@ -375,6 +375,31 @@ void gsdio_write_complete(struct usb_ep *ep, struct usb_request *req)
 	return;
 }
 
+void gsdio_read_pending(struct gsdio_port *port)
+{
+	struct sdio_channel *ch;
+	char buf[1024];
+	int avail;
+
+	if (!port) {
+		pr_err("%s: port is null\n", __func__);
+		return;
+	}
+
+	ch = port->sport_info->ch;
+
+	if (!ch)
+		return;
+
+	while ((avail = sdio_read_avail(ch))) {
+		if (avail > 1024)
+			avail = 1024;
+		sdio_read(ch, buf, avail);
+
+		pr_debug("%s: flushed out %d bytes\n", __func__, avail);
+	}
+}
+
 void gsdio_tx_pull(struct work_struct *w)
 {
 	struct gsdio_port *port = container_of(w, struct gsdio_port, pull);
@@ -385,6 +410,10 @@ void gsdio_tx_pull(struct work_struct *w)
 
 	if (!port->port_usb) {
 		pr_err("%s: usb disconnected\n", __func__);
+
+		/* take out all the pending data from sdio */
+		gsdio_read_pending(port);
+
 		return;
 	}
 

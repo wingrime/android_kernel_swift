@@ -184,9 +184,9 @@ static int sx150x_get_io(struct sx150x_chip *chip, unsigned offset)
 	return err;
 }
 
-static void sx150x_set_oscio(struct sx150x_chip *chip, int val)
+static s32 sx150x_set_oscio(struct sx150x_chip *chip, int val)
 {
-	sx150x_i2c_write(chip->client,
+	return sx150x_i2c_write(chip->client,
 			chip->dev_cfg->reg_clock,
 			(val ? 0x1f : 0x10));
 }
@@ -281,11 +281,13 @@ static int sx150x_gpio_direction_output(struct gpio_chip *gc,
 
 	chip = container_of(gc, struct sx150x_chip, gpio_chip);
 
-	if (!offset_is_oscio(chip, offset)) {
-		mutex_lock(&chip->lock);
+	mutex_lock(&chip->lock);
+	if (offset_is_oscio(chip, offset))
+		status = sx150x_set_oscio(chip, val);
+	else
 		status = sx150x_io_output(chip, offset, val);
-		mutex_unlock(&chip->lock);
-	}
+	mutex_unlock(&chip->lock);
+
 	return status;
 }
 

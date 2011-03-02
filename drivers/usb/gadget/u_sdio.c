@@ -24,6 +24,7 @@
 #include <linux/delay.h>
 #include <linux/slab.h>
 #include <linux/termios.h>
+#include <linux/debugfs.h>
 #include <mach/usb_gadget_fserial.h>
 
 #include <mach/sdio_al.h>
@@ -77,6 +78,10 @@ struct gsdio_port {
 #define ACM_CTRL_RTS	(1 << 1)	/* unused with full duplex */
 #define ACM_CTRL_DTR	(1 << 0)	/* host is ready for data r/w */
 	int				cbits_to_modem;
+
+	/* pkt logging */
+	unsigned long			nbytes_tolaptop;
+	unsigned long			nbytes_tomodem;
 };
 
 void gsdio_free_req(struct usb_ep *ep, struct usb_request *req)
@@ -255,6 +260,8 @@ int gsdio_write(struct gsdio_port *port, struct usb_request *req)
 		/* try again later */
 		return ret;
 	}
+
+	port->nbytes_tomodem += size;
 
 	if (size + n == req->actual)
 		port->n_read = 0;
@@ -480,6 +487,8 @@ void gsdio_tx_pull(struct work_struct *w)
 				list_add(&req->list, pool);
 			goto tx_pull_end;
 		}
+
+		port->nbytes_tolaptop += avail;
 	}
 tx_pull_end:
 	spin_unlock_irq(&port->port_lock);
@@ -839,6 +848,8 @@ void gsdio_disconnect(struct gserial *gser, u8 portno)
 
 	spin_lock_irqsave(&port->port_lock, flags);
 	port->port_usb = 0;
+	port->nbytes_tomodem = 0;
+	port->nbytes_tolaptop = 0;
 	spin_unlock_irqrestore(&port->port_lock, flags);
 
 	/* disable endpoints, aborting down any active I/O */
@@ -854,6 +865,84 @@ void gsdio_disconnect(struct gserial *gser, u8 portno)
 	gsdio_free_requests(gser->in, &port->write_pool);
 	spin_unlock_irqrestore(&port->port_lock, flags);
 }
+
+#if defined(CONFIG_DEBUG_FS)
+static char debug_buffer[PAGE_SIZE];
+
+static ssize_t debug_read_stats(struct file *file, char __user *ubuf,
+		size_t count, loff_t *ppos)
+{
+	struct gsdio_port *port;
+	char *buf = debug_buffer;
+	unsigned long flags;
+	int i = 0;
+	int temp = 0;
+
+	while (i < n_ports) {
+		port = ports[i].port;
+		spin_lock_irqsave(&port->port_lock, flags);
+		temp += scnprintf(buf + temp, PAGE_SIZE - temp,
+				"###PORT:%d###\n"
+				"nbytes_tolaptop: %lu\n"
+				"nbytes_tomodem:  %lu\n"
+				"cbits_to_modem:  %u\n"
+				"cbits_to_laptop: %u\n",
+				i, port->nbytes_tolaptop, port->nbytes_tomodem,
+				port->cbits_to_modem, port->cbits_to_laptop);
+		spin_unlock_irqrestore(&port->port_lock, flags);
+		i++;
+	}
+
+	return simple_read_from_buffer(ubuf, count, ppos, buf, temp);
+}
+
+static ssize_t debug_reset_stats(struct file *file, const char __user *buf,
+				 size_t count, loff_t *ppos)
+{
+	struct gsdio_port *port;
+	unsigned long flags;
+	int i = 0;
+
+	while (i < n_ports) {
+		port = ports[i].port;
+
+		spin_lock_irqsave(&port->port_lock, flags);
+		port->nbytes_tolaptop = 0;
+		port->nbytes_tomodem = 0;
+		spin_unlock_irqrestore(&port->port_lock, flags);
+		i++;
+	}
+
+	return count;
+}
+
+static int debug_open(struct inode *inode, struct file *file)
+{
+	return 0;
+}
+
+static const struct file_operations debug_gsdio_ops = {
+	.open = debug_open,
+	.read = debug_read_stats,
+	.write = debug_reset_stats,
+};
+
+static void gsdio_debugfs_init(void)
+{
+	struct dentry *dent;
+
+	dent = debugfs_create_dir("usb_gsdio", 0);
+	if (IS_ERR(dent))
+		return;
+
+	debugfs_create_file("status", 0444, dent, 0, &debug_gsdio_ops);
+}
+#else
+static void gsdio_debugfs_init(void)
+{
+	return;
+}
+#endif
 
 /* connect, disconnect, alloc_requests, free_requests */
 int gsdio_setup(struct usb_gadget *g, unsigned count, struct sdio_port_info *pi)
@@ -908,6 +997,8 @@ int gsdio_setup(struct usb_gadget *g, unsigned count, struct sdio_port_info *pi)
 #endif
 
 	}
+
+	gsdio_debugfs_init();
 
 	return 0;
 

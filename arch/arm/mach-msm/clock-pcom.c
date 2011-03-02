@@ -164,7 +164,7 @@ unsigned pc_clk_get_rate(unsigned id)
 		return id;
 }
 
-unsigned pc_clk_is_enabled(unsigned id)
+int pc_clk_is_enabled(unsigned id)
 {
 	if (msm_proc_comm(PCOM_CLKCTL_RPC_ENABLED, &id, NULL))
 		return 0;

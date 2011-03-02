@@ -241,7 +241,7 @@ static unsigned rpm_clk_get_rate(unsigned id)
 	return iv.value * 1000;
 }
 
-static unsigned rpm_clk_is_enabled(unsigned id)
+static int rpm_clk_is_enabled(unsigned id)
 {
 	return !!(rpm_clk_get_rate(id));
 }

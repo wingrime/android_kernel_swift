@@ -679,7 +679,7 @@ unsigned local_clk_get_rate(unsigned id)
 }
 
 /* Check if a clock is currently enabled. */
-unsigned local_clk_is_enabled(unsigned id)
+int local_clk_is_enabled(unsigned id)
 {
 	struct clk_local *clk = &soc_clk_local_tbl[id];
 

@@ -84,7 +84,7 @@ static int clock_debug_enable_get(void *data, u64 *val)
 }
 
 DEFINE_SIMPLE_ATTRIBUTE(clock_enable_fops, clock_debug_enable_get,
-			clock_debug_enable_set, "%llu\n");
+			clock_debug_enable_set, "%lld\n");
 
 static int clock_debug_local_get(void *data, u64 *val)
 {

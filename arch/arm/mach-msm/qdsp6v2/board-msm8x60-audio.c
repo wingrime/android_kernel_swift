@@ -1374,6 +1374,7 @@ static struct platform_device *snd_devices_qt[] __initdata = {
 	&msm_headset_mic_device,
 	&msm_ispkr_stereo_device,
 	&msm_qt_dual_dmic_d0_device,
+	&msm_snddev_hdmi_stereo_rx_device,
 };
 
 static struct platform_device *snd_devices_common[] __initdata = {

@@ -110,6 +110,7 @@ struct test_channel {
 	wait_queue_head_t   wait_q;
 	atomic_t rx_notify_count;
 	atomic_t tx_notify_count;
+	atomic_t any_notify_count;
 
 	int wait_counter;
 
@@ -506,32 +507,6 @@ exit_err:
 	return;
 }
 
-int wait_any_notify(struct test_channel *test_ch)
-{
-	int max_wait_time_msec = 60*1000; /* 60 seconds */
-	unsigned long expire_time = jiffies +
-		msecs_to_jiffies(max_wait_time_msec);
-
-	test_ch->wait_counter++;
-
-	TEST_DBG(TEST_MODULE_NAME ":Waiting for event %d ...\n",
-		 test_ch->wait_counter);
-	while (time_before(jiffies, expire_time)) {
-		if (atomic_read(&test_ch->tx_notify_count) > 0)
-			return 0;
-
-		if (atomic_read(&test_ch->rx_notify_count) > 0)
-			return 0;
-
-		schedule();
-	}
-
-	pr_info(TEST_MODULE_NAME ":Wait for event %d sec.\n",
-		max_wait_time_msec/1000);
-
-	return -1;
-}
-
 /**
  * A2 Perf Test
  */
@@ -580,9 +555,9 @@ static void a2_performance_test(struct test_channel *test_ch)
 			test_ch->name, write_avail, read_avail,
 			test_ch->name);
 		if ((write_avail == 0) && (read_avail == 0)) {
-			ret = wait_any_notify(test_ch);
-			if (ret)
-				goto exit_err;
+			wait_event(test_ch->wait_q,
+				   atomic_read(&test_ch->any_notify_count));
+			atomic_set(&test_ch->any_notify_count, 0);
 		}
 
 		write_avail = sdio_write_avail(test_ch->ch);
@@ -592,8 +567,6 @@ static void a2_performance_test(struct test_channel *test_ch)
 			size = min(packet_size, write_avail) ;
 			pr_debug(TEST_MODULE_NAME ":tx size = %d for chan %s\n",
 				 size, test_ch->name);
-			if (atomic_read(&test_ch->tx_notify_count) > 0)
-				atomic_dec(&test_ch->tx_notify_count);
 			test_ch->buf[0] = tx_packet_count;
 			test_ch->buf[(size/4)-1] = tx_packet_count;
 
@@ -614,13 +587,12 @@ static void a2_performance_test(struct test_channel *test_ch)
 		if (read_avail > 0) {
 			size = min(packet_size, read_avail);
 			pr_debug(TEST_MODULE_NAME ":rx size = %d.\n", size);
-			if (atomic_read(&test_ch->rx_notify_count) > 0)
-				atomic_dec(&test_ch->rx_notify_count);
 			ret = sdio_read(test_ch->ch, test_ch->buf, size);
 			if (ret) {
-				pr_info(TEST_MODULE_NAME ": sdio_read err=%d"
+				pr_info(TEST_MODULE_NAME ": sdio_read size %d "
+							 " err=%d"
 							 " for chan %s\n",
-					-ret, test_ch->name);
+					size, -ret, test_ch->name);
 				goto exit_err;
 			}
 			rx_packet_count++;
@@ -748,21 +720,29 @@ static void notify(void *priv, unsigned channel_event)
 	switch (channel_event) {
 	case SDIO_EVENT_DATA_READ_AVAIL:
 		atomic_inc(&test_ch->rx_notify_count);
-		pr_debug(TEST_MODULE_NAME ":rx_notify_count=%d.\n",
+		atomic_set(&test_ch->any_notify_count, 1);
+		TEST_DBG(TEST_MODULE_NAME ":SDIO_EVENT_DATA_READ_AVAIL, "
+					  "any_notify_count=%d, "
+					  "rx_notify_count=%d\n",
+			 atomic_read(&test_ch->any_notify_count),
 			 atomic_read(&test_ch->rx_notify_count));
-		wake_up(&test_ch->wait_q);
 		break;
 
 	case SDIO_EVENT_DATA_WRITE_AVAIL:
 		atomic_inc(&test_ch->tx_notify_count);
-		pr_debug(TEST_MODULE_NAME ":tx_notify_count=%d.\n",
+		atomic_set(&test_ch->any_notify_count, 1);
+		TEST_DBG(TEST_MODULE_NAME ":SDIO_EVENT_DATA_WRITE_AVAIL, "
+					  "any_notify_count=%d, "
+					  "tx_notify_count=%d\n",
+			 atomic_read(&test_ch->any_notify_count),
 			 atomic_read(&test_ch->tx_notify_count));
-		wake_up(&test_ch->wait_q);
 		break;
 
 	default:
 		BUG();
 	}
+	wake_up(&test_ch->wait_q);
+
 }
 
 #ifdef CONFIG_MSM_SDIO_SMEM
@@ -857,6 +837,7 @@ static int test_start(void)
 
 		atomic_set(&tch->tx_notify_count, 0);
 		atomic_set(&tch->rx_notify_count, 0);
+		atomic_set(&tch->any_notify_count, 0);
 
 		memset(tch->buf, 0x00, tch->buf_size);
 		tch->test_result = TEST_NO_RESULT;

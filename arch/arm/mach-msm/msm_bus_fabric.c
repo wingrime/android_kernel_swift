@@ -25,8 +25,8 @@
 #include <linux/radix-tree.h>
 #include <mach/clk.h>
 #include <mach/board.h>
+#include <mach/rpm.h>
 #include "msm_bus_core.h"
-#include "rpm.h"
 
 #define BWMASK 0x7FFF
 #define TIERMASK 0x8000

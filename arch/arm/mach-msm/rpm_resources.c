@@ -24,9 +24,9 @@
 #include <linux/mutex.h>
 #include <linux/proc_fs.h>
 #include <linux/spinlock.h>
+#include <mach/rpm.h>
 
 #include "mpm.h"
-#include "rpm.h"
 #include "rpm_resources.h"
 
 /******************************************************************************

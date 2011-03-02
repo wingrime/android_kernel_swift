@@ -1,4 +1,4 @@
-/* Copyright (c) 2010, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2010-2011, Code Aurora Forum. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -30,8 +30,9 @@
 #ifndef __ARCH_ARM_MACH_MSM_RPM_RESOURCES_H
 #define __ARCH_ARM_MACH_MSM_RPM_RESOURCES_H
 
+#include <mach/rpm.h>
 #include "pm.h"
-#include "rpm.h"
+
 
 struct msm_rpmrs_limits {
 	uint32_t pxo;

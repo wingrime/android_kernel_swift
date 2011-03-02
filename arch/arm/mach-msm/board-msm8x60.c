@@ -88,12 +88,12 @@
 #include <linux/regulator/consumer.h>
 #include <linux/regulator/machine.h>
 #include <mach/sdio_al.h>
+#include <mach/rpm.h>
 
 #include "devices.h"
 #include "devices-msm8x60.h"
 #include "cpuidle.h"
 #include "pm.h"
-#include "rpm.h"
 #include "mpm.h"
 #include "spm.h"
 #include "rpm_log.h"

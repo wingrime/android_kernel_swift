@@ -23,8 +23,8 @@
 #include <mach/msm_bus.h>
 #include <mach/msm_bus_board.h>
 #include <mach/board.h>
+#include <mach/rpm.h>
 #include "msm_bus_core.h"
-#include "rpm.h"
 
 #define NMASTERS 39
 #define NSLAVES 67

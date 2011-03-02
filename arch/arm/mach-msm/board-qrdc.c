@@ -66,6 +66,7 @@
 #include <mach/msm_bus_board.h>
 #include <mach/tpm_st_i2c.h>
 #include <mach/socinfo.h>
+#include <mach/rpm.h>
 #ifdef CONFIG_USB_ANDROID
 #include <linux/usb/android_composite.h>
 #endif
@@ -76,7 +77,6 @@
 #include "devices-msm8x60.h"
 #include "cpuidle.h"
 #include "pm.h"
-#include "rpm.h"
 #include "spm.h"
 #include "rpm_log.h"
 #include "timer.h"

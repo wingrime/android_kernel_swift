@@ -490,9 +490,6 @@ struct sdio_al_work {
  *
  *  @signature - Context Validity Check.
  *
- *  @use_default_conf - A flag to indicate if we need to use the default channels names,
- *    or to use the list of channels given by the 9K
- *
  *  @flashless_boot_on - flag to indicate if sdio_al is in
  *    flshless boot mode
  *
@@ -531,8 +528,6 @@ struct sdio_al_device {
 	unsigned int clock;
 
 	unsigned int is_suspended;
-
-	int use_default_conf;
 
 	int flashless_boot_on;
 };
@@ -1266,62 +1261,6 @@ static int sdio_ch_write(struct sdio_channel *ch, const u8 *buf, u32 len)
 	return ret;
 }
 
-/**
- * Set Channels Configuration.
- *
- * @todo read channel configuration from platform data rather
- *  	  than hard-coded.
- *
- * @note  When agregation is used there is No EOT interrupt
- *  	  for Rx packet ready, therefore need polling.
- */
-static void set_default_channels_config(struct sdio_al_device *sdio_al_dev)
-{
-	int i;
-
-	/* Set Default Channels configuration */
-	for (i = 0; i < SDIO_AL_MAX_CHANNELS; i++) {
-		struct sdio_channel *ch = &sdio_al_dev->channel[i];
-
-		ch->num = i;
-		ch->read_threshold  = DEFAULT_READ_THRESHOLD;
-		ch->write_threshold = DEFAULT_WRITE_THRESHOLD;
-		ch->min_write_avail = DEFAULT_MIN_WRITE_THRESHOLD;
-		ch->poll_delay_msec = 0;
-		ch->is_packet_mode = true;
-		ch->peer_tx_buf_size = DEFAULT_PEER_TX_BUF_SIZE;
-		ch->is_valid = 0;
-	}
-
-	strncpy(sdio_al_dev->channel[0].name, "SDIO_RPC",
-		sizeof(sdio_al_dev->channel[0].name));
-	sdio_al_dev->channel[0].is_valid = 1;
-	sdio_al_dev->channel[0].sdio_al_dev = sdio_al_dev;
-
-	strncpy(sdio_al_dev->channel[1].name, "SDIO_RMNT",
-		sizeof(sdio_al_dev->channel[1].name));
-	sdio_al_dev->channel[1].is_packet_mode = false; /* No EOT for Rx Data */
-	sdio_al_dev->channel[1].poll_delay_msec =
-		DEFAULT_POLL_DELAY_NOPACKET_MSEC;
-	sdio_al_dev->channel[1].read_threshold  = 14*1024;
-	sdio_al_dev->channel[1].write_threshold = 2*1024;
-	sdio_al_dev->channel[1].min_write_avail = 1600;
-	sdio_al_dev->channel[1].is_valid = 1;
-	sdio_al_dev->lpm_chan = 1;
-	sdio_al_dev->channel[1].sdio_al_dev = sdio_al_dev;
-
-	strncpy(sdio_al_dev->channel[2].name, "SDIO_QMI",
-		sizeof(sdio_al_dev->channel[2].name));
-	sdio_al_dev->channel[2].is_valid = 1;
-	sdio_al_dev->channel[2].sdio_al_dev = sdio_al_dev;
-
-	strncpy(sdio_al_dev->channel[3].name, "SDIO_DIAG",
-		sizeof(sdio_al_dev->channel[3].name));
-	sdio_al_dev->channel[3].is_valid = 1;
-	sdio_al_dev->channel[3].sdio_al_dev = sdio_al_dev;
-}
-
-
 static int sdio_al_bootloader_completed(void)
 {
 	int i;
@@ -1534,7 +1473,6 @@ static int read_sdioc_software_header(struct sdio_al_device *sdio_al_dev,
 	pr_info(MODULE_NAME ":SDIOC SW version 0x%x\n", header->version);
 
 	sdio_al_dev->flashless_boot_on = false;
-	sdio_al_dev->use_default_conf = 1;
 
 	for (i = 0; i < SDIO_AL_MAX_CHANNELS; i++) {
 		struct sdio_channel *ch = &sdio_al_dev->channel[i];
@@ -1559,17 +1497,11 @@ static int read_sdioc_software_header(struct sdio_al_device *sdio_al_dev,
 			       PEER_CHANNEL_NAME_SIZE);
 
 			ch->is_valid = 1;
-			sdio_al_dev->use_default_conf = 0;
 			ch->sdio_al_dev = sdio_al_dev;
 		}
 
 		pr_info(MODULE_NAME ":Channel=%s, is_valid=%d\n", ch->name,
 			ch->is_valid);
-	}
-	/* Backwards compatiblity - use def values when no info from client */
-	if (sdio_al_dev->use_default_conf) {
-		set_default_channels_config(sdio_al_dev);
-		pr_err("Using default config\n");
 	}
 
 	return 0;
@@ -1651,15 +1583,11 @@ static int read_sdioc_channel_config(struct sdio_channel *ch)
 	pr_info(MODULE_NAME ":ch %s min_write_avail=%d.\n",
 		ch->name, ch->min_write_avail);
 
-	if (!sdio_al_dev->use_default_conf) {
-		ch->is_packet_mode = ch_config->is_packet_mode;
-
-		if (!ch->is_packet_mode)
-			ch->poll_delay_msec = DEFAULT_POLL_DELAY_NOPACKET_MSEC;
-	}
+	ch->is_packet_mode = ch_config->is_packet_mode;
+	if (!ch->is_packet_mode)
+		ch->poll_delay_msec = DEFAULT_POLL_DELAY_NOPACKET_MSEC;
 	pr_info(MODULE_NAME ":ch %s is_packet_mode=%d.\n",
 		ch->name, ch->is_packet_mode);
-
 
 	ch->peer_tx_buf_size = ch_config->tx_buf_size;
 

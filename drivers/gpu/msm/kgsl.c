@@ -1810,6 +1810,11 @@ static void kgsl_driver_cleanup(void)
 	kgsl_yamato_close();
 	kgsl_g12_close();
 
+	if (kgsl_driver.ptpool) {
+		dma_pool_destroy(kgsl_driver.ptpool);
+		kgsl_driver.ptpool = NULL;
+	}
+
 	kgsl_driver.pdev = NULL;
 }
 
@@ -1926,6 +1931,11 @@ kgsl_core_init(void)
 	kgsl_driver.ptpool = dma_pool_create("kgsl-ptpool", NULL,
 					     kgsl_driver.ptsize,
 					     4096, 0);
+	if (kgsl_driver.ptpool == NULL) {
+		ret = -ENOMEM;
+		KGSL_DRV_ERR("failed to create dma_pool kgsl-ptpool");
+		goto err;
+	}
 
 	ret = kgsl_drm_init(kgsl_driver.pdev);
 

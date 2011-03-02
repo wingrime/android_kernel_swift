@@ -40,7 +40,7 @@ static void ddl_print_buffer_port(struct ddl_context *ddl_context,
 void *ddl_pmem_alloc(struct ddl_buf_addr *addr, size_t sz, u32 alignment)
 {
 	u32 alloc_size, offset = 0;
-
+	DBG_PMEM("\n%s() IN: Requested alloc size(%u)", __func__, (u32)sz);
 	alloc_size = (sz + alignment);
 	addr->physical_base_addr = (u8 *) pmem_kalloc(alloc_size,
 		PMEM_MEMTYPE_SMI | PMEM_ALIGNMENT_4K);
@@ -66,16 +66,19 @@ void *ddl_pmem_alloc(struct ddl_buf_addr *addr, size_t sz, u32 alignment)
 			addr->physical_base_addr);
 	addr->align_virtual_addr = addr->virtual_base_addr + offset;
 	addr->buffer_size = sz;
-	DDL_MSG_LOW("%s() : pmem alloc physical aligned addr/sz 0x%x/ %d\n",\
-		__func__, (u32)addr->align_physical_addr, sz);
-	DDL_MSG_LOW("%s() : pmem alloc virtual aligned addr/sz 0x%x / %d\n",\
-		__func__, (u32)addr->virtual_base_addr, sz);
+	DDL_MSG_LOW("\n%s() : alig_phy_addr(%p) alig_vir_addr(%p)",
+		__func__, addr->align_physical_addr, addr->align_virtual_addr);
+	DBG_PMEM("\n%s() OUT: phy_addr(%p) vir_addr(%p) size(%u)",
+		__func__, addr->physical_base_addr, addr->virtual_base_addr,
+		addr->buffer_size);
 	return addr->virtual_base_addr;
 }
 
 void ddl_pmem_free(struct ddl_buf_addr *addr)
 {
-	DDL_MSG_LOW("ddl_pmem_free:");
+	DBG_PMEM("\n%s() IN: phy_addr(%p) vir_addr(%p) size(%u)",
+		__func__, addr->physical_base_addr, addr->virtual_base_addr,
+		addr->buffer_size);
 	if (addr->virtual_base_addr)
 		iounmap((void *)addr->virtual_base_addr);
 	if ((addr->physical_base_addr) &&
@@ -83,6 +86,9 @@ void ddl_pmem_free(struct ddl_buf_addr *addr)
 		DDL_MSG_LOW("\n %s(): Error in Freeing Physical Address %p",\
 			__func__, addr->physical_base_addr);
 	}
+	DBG_PMEM("\n%s() OUT: phy_addr(%p) vir_addr(%p) size(%u)",
+		__func__, addr->physical_base_addr, addr->virtual_base_addr,
+		addr->buffer_size);
 	addr->physical_base_addr   = NULL;
 	addr->virtual_base_addr    = NULL;
 	addr->align_virtual_addr   = NULL;

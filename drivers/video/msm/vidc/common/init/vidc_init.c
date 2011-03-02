@@ -32,6 +32,7 @@
 #include <linux/android_pmem.h>
 #include <linux/clk.h>
 #include <linux/delay.h>
+#include <linux/debugfs.h>
 #include <mach/internal_power_rail.h>
 #include <mach/clk.h>
 #include <linux/pm_runtime.h>
@@ -67,7 +68,7 @@ struct workqueue_struct *vidc_timer_wq;
 static irqreturn_t vidc_isr(int irq, void *dev);
 static spinlock_t vidc_spin_lock;
 
-u32 vidc_msg_timing;
+u32 vidc_msg_timing, vidc_msg_pmem;
 
 #ifdef VIDC_ENABLE_DBGFS
 struct dentry *vidc_debugfs_root;
@@ -308,12 +309,13 @@ static int __init vidc_init(void)
 	vidc_device_p->ref_count = 0;
 	vidc_device_p->firmware_refcount = 0;
 	vidc_device_p->get_firmware = 0;
-
 #ifdef VIDC_ENABLE_DBGFS
 	root = vidc_get_debugfs_root();
 	if (root) {
 		vidc_debugfs_file_create(root, "vidc_msg_timing",
 				(u32 *) &vidc_msg_timing);
+		vidc_debugfs_file_create(root, "vidc_msg_pmem",
+				(u32 *) &vidc_msg_pmem);
 	}
 #endif
 	return 0;

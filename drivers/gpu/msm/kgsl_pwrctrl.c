@@ -109,6 +109,46 @@ static int kgsl_pwrctrl_pwrnap_show(struct device *dev,
 	return sprintf(buf, "%d\n", pwr->nap_allowed);
 }
 
+
+static int kgsl_pwrctrl_idle_timer_store(struct device *dev,
+					struct device_attribute *attr,
+					const char *buf, size_t count)
+{
+	char temp[20];
+	unsigned long val;
+	struct kgsl_device *device = kgsl_device_from_dev(dev);
+	struct kgsl_pwrctrl *pwr = &device->pwrctrl;
+	const long div = 1000/HZ;
+	static unsigned int org_interval_timeout = 1;
+
+	snprintf(temp, sizeof(temp), "%.*s",
+			 (int)min(count, sizeof(temp) - 1), buf);
+	strict_strtoul(temp, 0, &val);
+
+	if (org_interval_timeout == 1)
+		org_interval_timeout = pwr->interval_timeout;
+
+	mutex_lock(&device->mutex);
+
+	/* Let the timeout be requested in ms, but convert to jiffies. */
+	val /= div;
+	if (val >= org_interval_timeout)
+		pwr->interval_timeout = val;
+
+	mutex_unlock(&device->mutex);
+
+	return count;
+}
+
+static int kgsl_pwrctrl_idle_timer_show(struct device *dev,
+					struct device_attribute *attr,
+					char *buf)
+{
+	struct kgsl_device *device = kgsl_device_from_dev(dev);
+	struct kgsl_pwrctrl *pwr = &device->pwrctrl;
+	return sprintf(buf, "%d\n", pwr->interval_timeout);
+}
+
 static struct device_attribute gpuclk_attr = {
 	.attr = { .name = "gpuclk", .mode = 0644, },
 	.show = kgsl_pwrctrl_gpuclk_show,
@@ -121,12 +161,20 @@ static struct device_attribute pwrnap_attr = {
 	.store = kgsl_pwrctrl_pwrnap_store,
 };
 
+static struct device_attribute idle_timer_attr = {
+	.attr = { .name = "idle_timer", .mode = 0644, },
+	.show = kgsl_pwrctrl_idle_timer_show,
+	.store = kgsl_pwrctrl_idle_timer_store,
+};
+
 int kgsl_pwrctrl_init_sysfs(struct kgsl_device *device)
 {
 	int ret = 0;
 	ret = device_create_file(device->dev, &pwrnap_attr);
 	if (ret == 0)
 		ret = device_create_file(device->dev, &gpuclk_attr);
+	if (ret == 0)
+		ret = device_create_file(device->dev, &idle_timer_attr);
 	return ret;
 }
 
@@ -134,6 +182,7 @@ void kgsl_pwrctrl_uninit_sysfs(struct kgsl_device *device)
 {
 	device_remove_file(device->dev, &gpuclk_attr);
 	device_remove_file(device->dev, &pwrnap_attr);
+	device_remove_file(device->dev, &idle_timer_attr);
 }
 
 int kgsl_pwrctrl_clk(struct kgsl_device *device, unsigned int pwrflag)
@@ -446,7 +495,8 @@ int kgsl_pwrctrl_wake(struct kgsl_device *device)
 	/* Re-enable HW access */
 	device->state = KGSL_STATE_ACTIVE;
 	KGSL_PWR_INFO("state -> ACTIVE, device %d\n", device->id);
-	mod_timer(&device->idle_timer, jiffies + FIRST_TIMEOUT);
+	mod_timer(&device->idle_timer,
+				jiffies + device->pwrctrl.interval_timeout);
 
 	KGSL_PWR_DBG("wake return value %d, device %d\n",
 				  status, device->id);

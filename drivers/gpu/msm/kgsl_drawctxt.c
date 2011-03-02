@@ -1495,21 +1495,6 @@ create_gmem_shadow(struct kgsl_yamato_device *yamato_device,
 	return 0;
 }
 
-/* init draw context */
-
-int kgsl_drawctxt_init(struct kgsl_device *device)
-{
-	return 0;
-}
-
-/* close draw context */
-int kgsl_drawctxt_close(struct kgsl_device *device)
-{
-	struct kgsl_yamato_device *yamato_device = KGSL_YAMATO_DEVICE(device);
-	yamato_device->drawctxt_active = NULL;
-	return 0;
-}
-
 /* create a new drawing context */
 
 int

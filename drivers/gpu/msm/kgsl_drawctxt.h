@@ -115,10 +115,6 @@ int kgsl_drawctxt_create(struct kgsl_device_private *dev_priv,
 int kgsl_drawctxt_destroy(struct kgsl_device *device,
 			  struct kgsl_context *context);
 
-int kgsl_drawctxt_init(struct kgsl_device *device);
-
-int kgsl_drawctxt_close(struct kgsl_device *device);
-
 void kgsl_drawctxt_switch(struct kgsl_yamato_device *yamato_device,
 				struct kgsl_yamato_context *drawctxt,
 				unsigned int flags);

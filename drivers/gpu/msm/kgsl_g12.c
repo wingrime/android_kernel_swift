@@ -295,27 +295,29 @@ kgsl_g12_init_pwrctrl(struct kgsl_device *device,
 	const char *pclk_name;
 	struct clk *clk, *pclk;
 	struct kgsl_platform_data *pdata = pdev->dev.platform_data;
+	struct kgsl_device_platform_data *pdata_dev = NULL;
+	struct kgsl_device_pwr_data *pdata_pwr = NULL;
 	struct kgsl_g12_device *g12_device = KGSL_G12_DEVICE(device);
 	struct msm_bus_scale_pdata *bus_table = NULL;
 
-	if (device->id == KGSL_DEVICE_2D0) {
-		clk = clk_get(&pdev->dev, pdata->grp2d0_clk_name);
-		pclk = clk_get(&pdev->dev, pdata->grp2d0_pclk_name);
-		pclk_name = pdata->grp2d0_pclk_name;
-		bus_table = pdata->grp2d0_bus_scale_table;
-	} else {
-		clk = clk_get(&pdev->dev, pdata->grp2d1_clk_name);
-		pclk = clk_get(&pdev->dev, pdata->grp2d1_pclk_name);
-		pclk_name = pdata->grp2d1_pclk_name;
-		bus_table = pdata->grp2d1_bus_scale_table;
-	}
+	if (device->id == KGSL_DEVICE_2D0)
+		pdata_dev = pdata->dev_2d0;
+	else
+		pdata_dev = pdata->dev_2d1;
+
+	pdata_pwr = &pdata_dev->pwr_data;
+
+	clk = clk_get(&pdev->dev, pdata_dev->clk.name.clk);
+	pclk = clk_get(&pdev->dev, pdata_dev->clk.name.pclk);
+	pclk_name = pdata_dev->clk.name.pclk;
+	bus_table = pdata_dev->clk.bus_scale_table;
 
 	/* error check resources */
 	if (IS_ERR(clk)) {
 		clk = NULL;
 		result = PTR_ERR(clk);
 		KGSL_DRV_ERR("clk_get(%s) returned %d\n",
-						pdata->grp2d0_clk_name, result);
+				pdata_dev->clk.name.clk, result);
 		goto done;
 	}
 
@@ -343,36 +345,37 @@ kgsl_g12_init_pwrctrl(struct kgsl_device *device,
 	}
 
 	/* save resources to pwrctrl struct */
-	if (pdata->set_grp2d_async != NULL)
-		pdata->set_grp2d_async();
+	if (pdata_pwr->set_grp_async != NULL)
+		pdata_pwr->set_grp_async();
 
-	if (pdata->num_levels_2d > KGSL_MAX_PWRLEVELS) {
+	if (pdata_pwr->num_levels > KGSL_MAX_PWRLEVELS) {
 		result = -EINVAL;
 		goto done;
 	}
-	device->pwrctrl.num_pwrlevels = pdata->num_levels_2d;
-	device->pwrctrl.active_pwrlevel = pdata->init_level_2d;
-	for (i = 0; i < pdata->num_levels_2d; i++) {
+	device->pwrctrl.num_pwrlevels = pdata_pwr->num_levels;
+	device->pwrctrl.active_pwrlevel = pdata_pwr->init_level;
+	for (i = 0; i < pdata_pwr->num_levels; i++) {
 		device->pwrctrl.pwrlevels[i].gpu_freq =
-			(pdata->pwrlevel_2d[i].gpu_freq > 0) ?
-			clk_round_rate(clk, pdata->pwrlevel_2d[i].gpu_freq) : 0;
+			(pdata_pwr->pwrlevel[i].gpu_freq > 0) ?
+			clk_round_rate(clk,
+			pdata_pwr->pwrlevel[i].gpu_freq) : 0;
 		device->pwrctrl.pwrlevels[i].bus_freq =
-			pdata->pwrlevel_2d[i].bus_freq;
+			pdata_pwr->pwrlevel[i].bus_freq;
 	}
 	/* Do not set_rate for cores in sync with AXI. */
-	if (pdata->pwrlevel_2d[0].gpu_freq > 0)
+	if (pdata_pwr->pwrlevel[0].gpu_freq > 0)
 		clk_set_rate(clk, device->pwrctrl.
 			pwrlevels[KGSL_DEFAULT_PWRLEVEL]. gpu_freq);
 
 	device->pwrctrl.power_flags = KGSL_PWRFLAGS_CLK_OFF |
 		KGSL_PWRFLAGS_AXI_OFF | KGSL_PWRFLAGS_POWER_OFF |
 		KGSL_PWRFLAGS_IRQ_OFF;
-	device->pwrctrl.nap_allowed = pdata->nap_allowed;
+	device->pwrctrl.nap_allowed = pdata_pwr->nap_allowed;
 	device->pwrctrl.grp_clk = clk;
 	device->pwrctrl.grp_src_clk = clk;
 	device->pwrctrl.grp_pclk = pclk;
 	device->pwrctrl.pwr_rail = PWR_RAIL_GRP_2D_CLK;
-	device->pwrctrl.interval_timeout = pdata->idle_timeout_2d;
+	device->pwrctrl.interval_timeout = pdata_pwr->idle_timeout;
 
 	if (internal_pwr_rail_mode(device->pwrctrl.pwr_rail,
 						PWR_RAIL_CTL_MANUAL)) {
@@ -412,7 +415,7 @@ _kgsl_g12_init(struct kgsl_device *device, struct platform_device *pdev)
 	struct kgsl_memregion *regspace = &device->regspace;
 	struct kgsl_g12_device *g12_device = KGSL_G12_DEVICE(device);
 	struct resource *res;
-	struct kgsl_platform_data *pdata = NULL;
+	struct kgsl_platform_data *pdata = pdev->dev.platform_data;
 
 	KGSL_DRV_VDBG("enter (device=%p)\n", device);
 
@@ -488,8 +491,7 @@ _kgsl_g12_init(struct kgsl_device *device, struct platform_device *pdev)
 	if (status != 0)
 		goto error_dest_work_q;
 
-	pdata = kgsl_driver.pdev->dev.platform_data;
-	device->mmu.va_range = pdata->pt_va_size;
+	device->mmu.va_range = pdata->core->pt_va_size;
 
 	status = kgsl_mmu_init(device);
 	if (status != 0)
@@ -574,10 +576,10 @@ int kgsl_g12_init(struct platform_device *pdev)
 	struct kgsl_platform_data *pdata = pdev->dev.platform_data;
 	int ret = 0;
 
-	if (pdata->grp2d0_clk_name != NULL)
+	if (pdata->dev_2d0->clk.name.clk != NULL)
 		ret = _kgsl_g12_init(&device_2d0.dev, pdev);
 
-	if (!ret && pdata->grp2d1_clk_name != NULL)
+	if (!ret && pdata->dev_2d1->clk.name.clk != NULL)
 		ret = _kgsl_g12_init(&device_2d1.dev, pdev);
 
 	return ret;

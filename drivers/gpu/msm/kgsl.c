@@ -1880,15 +1880,16 @@ kgsl_ptdata_init(void)
 	int ret = 0;
 	struct kgsl_platform_data *pdata =
 		kgsl_driver.pdev->dev.platform_data;
+	struct kgsl_core_platform_data *core = pdata->core;
 
 	INIT_LIST_HEAD(&kgsl_driver.pagetable_list);
 
-	kgsl_driver.ptsize = KGSL_PAGETABLE_ENTRIES(pdata->pt_va_size) *
+	kgsl_driver.ptsize = KGSL_PAGETABLE_ENTRIES(core->pt_va_size) *
 		KGSL_PAGETABLE_ENTRY_SIZE;
 	kgsl_driver.ptsize = ALIGN(kgsl_driver.ptsize, KGSL_PAGESIZE);
 
-	kgsl_driver.pt_va_size = pdata->pt_va_size;
-	kgsl_driver.pt_va_base = pdata->pt_va_base;
+	kgsl_driver.pt_va_size = core->pt_va_size;
+	kgsl_driver.pt_va_base = core->pt_va_base;
 
 	kgsl_driver.ptpool = dma_pool_create("kgsl-ptpool", NULL,
 					     kgsl_driver.ptsize,

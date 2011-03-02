@@ -3867,49 +3867,80 @@ static struct platform_device android_pmem_audio_device = {
        .dev = { .platform_data = &android_pmem_audio_pdata },
 };
 
-static struct kgsl_platform_data kgsl_pdata = {
-	.pwrlevel_2d = {
-		{
-			.gpu_freq = 0,
-			.bus_freq = 192000000,
-		},
+static struct kgsl_core_platform_data kgsl_core_pdata = {
+	.imem_clk_name = {
+		.clk = "imem_clk",
+		.pclk = NULL,
 	},
-	.init_level_2d = 0,
-	.num_levels_2d = 1,
-	.pwrlevel_3d = {
-		{
-			.gpu_freq = 245760000,
-			.bus_freq = 192000000,
-		},
-		{
-			.gpu_freq = 192000000,
-			.bus_freq = 0,
-		},
-	},
-	.init_level_3d = 0,
-	.num_levels_3d = 2,
-	.set_grp2d_async = NULL, /* HW workaround, run Z180 SYNC @ 192 MHZ */
-	.set_grp3d_async = set_grp3d_async,
-	.imem_clk_name = "imem_clk",
-	.grp3d_clk_name = "grp_clk",
-	.grp3d_pclk_name = "grp_pclk",
-#ifdef CONFIG_MSM_KGSL_2D
-	.grp2d0_clk_name = "grp_2d_clk",
-	.grp2d0_pclk_name = "grp_2d_pclk",
-#else
-	.grp2d0_clk_name = NULL,
-#endif
-	.idle_timeout_3d = HZ/20,
-	.idle_timeout_2d = HZ/10,
-	.nap_allowed = true,
 
-	/* pt_va_base is currently shared between kgsl devices */
 	.pt_va_base = 0x66000000,
 #ifdef CONFIG_KGSL_PER_PROCESS_PAGE_TABLE
 	.pt_va_size = SZ_32M,
 #else
 	.pt_va_size = SZ_128M,
 #endif
+};
+
+static struct kgsl_device_platform_data kgsl_3d0_pdata = {
+	.pwr_data = {
+		.pwrlevel = {
+			{
+				.gpu_freq = 245760000,
+				.bus_freq = 192000000,
+			},
+			{
+				.gpu_freq = 192000000,
+				.bus_freq = 0,
+			},
+		},
+		.init_level = 0,
+		.num_levels = 2,
+		.set_grp_async = set_grp3d_async,
+		.idle_timeout = HZ/20,
+		.nap_allowed = true,
+	},
+	.clk = {
+		.name = {
+			.clk = "grp_clk",
+			.pclk = "grp_pclk",
+		},
+	},
+};
+
+static struct kgsl_device_platform_data kgsl_2d0_pdata = {
+	.pwr_data = {
+		.pwrlevel = {
+			{
+				.gpu_freq = 0,
+				.bus_freq = 192000000,
+			},
+		},
+		.init_level = 0,
+		.num_levels = 1,
+		/* HW workaround, run Z180 SYNC @ 192 MHZ */
+		.set_grp_async = NULL,
+		.idle_timeout = HZ/10,
+		.nap_allowed = true,
+	},
+	.clk = {
+		.name = {
+#ifdef CONFIG_MSM_KGSL_2D
+			.clk = "grp_2d_clk",
+			.pclk = "grp_2d_pclk",
+#else
+			.clk = NULL,
+#endif
+		},
+	},
+};
+
+static struct kgsl_device_platform_data kgsl_2d1_pdata;
+
+static struct kgsl_platform_data kgsl_pdata = {
+	.core = &kgsl_core_pdata,
+	.dev_3d0 = &kgsl_3d0_pdata,
+	.dev_2d0 = &kgsl_2d0_pdata,
+	.dev_2d1 = &kgsl_2d1_pdata,
 };
 
 static struct resource kgsl_resources[] = {

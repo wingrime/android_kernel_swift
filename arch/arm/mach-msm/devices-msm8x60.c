@@ -606,59 +606,12 @@ struct platform_device msm_device_rng = {
 };
 #endif
 
-struct kgsl_platform_data kgsl_pdata = {
-	.pwrlevel_2d = {
-		{
-			.gpu_freq = 228571000,
-			.bus_freq = 1,
-		},
-		{
-			.gpu_freq = 228571000,
-			.bus_freq = 0,
-		},
+static struct kgsl_core_platform_data kgsl_core_pdata = {
+	.imem_clk_name = {
+		.clk = NULL,
+		.pclk = "imem_pclk",
 	},
-	.init_level_2d = 0,
-	.num_levels_2d = 2,
-	.pwrlevel_3d = {
-		{
-			.gpu_freq = 266667000,
-			.bus_freq = 2,
-		},
-		{
-			.gpu_freq = 228571000,
-			.bus_freq = 1,
-		},
-		{
-			.gpu_freq = 266667000,
-			.bus_freq = 0,
-		},
-	},
-	.init_level_3d = 0,
-	.num_levels_3d = 3,
-	.set_grp2d_async = NULL,
-	.set_grp3d_async = NULL,
-	.imem_clk_name = "imem_axi_clk",
-	.imem_pclk_name = "imem_pclk",
-	.grp3d_clk_name = "gfx3d_clk",
-	.grp3d_pclk_name = "gfx3d_pclk",
-#ifdef CONFIG_MSM_KGSL_2D
-	.grp2d0_clk_name = "gfx2d0_clk", /* note: 2d clocks disabled on v1 */
-	.grp2d0_pclk_name = "gfx2d0_pclk",
-	.grp2d1_clk_name = "gfx2d1_clk",
-	.grp2d1_pclk_name = "gfx2d1_pclk",
-#else
-	.grp2d0_clk_name = NULL,
-	.grp2d1_clk_name = NULL,
-#endif
-	.idle_timeout_3d = HZ/5,
-	.idle_timeout_2d = HZ/10,
-#ifdef CONFIG_MSM_BUS_SCALING
-	.grp3d_bus_scale_table = &grp3d_bus_scale_pdata,
-	.grp2d0_bus_scale_table = &grp2d0_bus_scale_pdata,
-	.grp2d1_bus_scale_table = &grp2d1_bus_scale_pdata,
-	.nap_allowed = true,
-#endif
-	/* pt_va_base is currently shared between kgsl devices */
+
 	.pt_va_base = 0x66000000,
 	/* The maximum possible range for any individual pagetable
 	   is 256MB - 64K (0xfff0000) */
@@ -672,6 +625,125 @@ struct kgsl_platform_data kgsl_pdata = {
 #endif
 };
 
+static struct kgsl_device_platform_data kgsl_3d0_pdata = {
+	.pwr_data = {
+		.pwrlevel = {
+			{
+				.gpu_freq = 266667000,
+				.bus_freq = 2,
+			},
+			{
+				.gpu_freq = 228571000,
+				.bus_freq = 1,
+			},
+			{
+				.gpu_freq = 266667000,
+				.bus_freq = 0,
+			},
+		},
+		.init_level = 0,
+		.num_levels = 3,
+		.set_grp_async = NULL,
+		.idle_timeout = HZ/5,
+#ifdef CONFIG_MSM_BUS_SCALING
+		.nap_allowed = true,
+#endif
+	},
+	.clk = {
+		.name = {
+			.clk = "gfx3d_clk",
+			.pclk = "gfx3d_pclk",
+		},
+#ifdef CONFIG_MSM_BUS_SCALING
+		.bus_scale_table = &grp3d_bus_scale_pdata,
+#else
+		.bus_scale_table = NULL,
+#endif
+	},
+};
+
+static struct kgsl_device_platform_data kgsl_2d0_pdata = {
+	.pwr_data = {
+		.pwrlevel = {
+			{
+				.gpu_freq = 228571000,
+				.bus_freq = 1,
+			},
+			{
+				.gpu_freq = 228571000,
+				.bus_freq = 0,
+			},
+		},
+		.init_level = 0,
+		.num_levels = 2,
+		.set_grp_async = NULL,
+		.idle_timeout = HZ/10,
+#ifdef CONFIG_MSM_BUS_SCALING
+		.nap_allowed = true,
+#endif
+	},
+	.clk = {
+		.name = {
+#ifdef CONFIG_MSM_KGSL_2D
+			/* note: 2d clocks disabled on v1 */
+			.clk = "gfx2d0_clk",
+			.pclk = "gfx2d0_pclk",
+#else
+			.clk = NULL,
+#endif
+		},
+#ifdef CONFIG_MSM_BUS_SCALING
+		.bus_scale_table = &grp2d0_bus_scale_pdata,
+#else
+		.bus_scale_table = NULL,
+#endif
+	},
+};
+
+static struct kgsl_device_platform_data kgsl_2d1_pdata = {
+	.pwr_data = {
+		.pwrlevel = {
+			{
+				.gpu_freq = 228571000,
+				.bus_freq = 1,
+			},
+			{
+				.gpu_freq = 228571000,
+				.bus_freq = 0,
+			},
+		},
+		.init_level = 0,
+		.num_levels = 2,
+		.set_grp_async = NULL,
+		.idle_timeout = HZ/10,
+#ifdef CONFIG_MSM_BUS_SCALING
+		.nap_allowed = true,
+#endif
+	},
+	.clk = {
+		.name = {
+#ifdef CONFIG_MSM_KGSL_2D
+			.clk = "gfx2d1_clk",
+			.pclk = "gfx2d1_pclk",
+#else
+			.clk = NULL,
+#endif
+		},
+#ifdef CONFIG_MSM_BUS_SCALING
+		.bus_scale_table = &grp2d1_bus_scale_pdata,
+#else
+		.bus_scale_table = NULL,
+#endif
+	},
+};
+
+static struct kgsl_platform_data kgsl_pdata = {
+	.core = &kgsl_core_pdata,
+	.dev_3d0 = &kgsl_3d0_pdata,
+	.dev_2d0 = &kgsl_2d0_pdata,
+	.dev_2d1 = &kgsl_2d1_pdata,
+};
+
 /*
  * this a software workaround for not having two distinct board
  * files for 8660v1 and 8660v2. 8660v1 has a faulty 2d clock, and
@@ -683,8 +755,8 @@ void __init msm8x60_check_2d_hardware(void)
 	if ((SOCINFO_VERSION_MAJOR(socinfo_get_version()) == 1) &&
 	    (SOCINFO_VERSION_MINOR(socinfo_get_version()) == 0)) {
 		printk(KERN_WARNING "kgsl: 2D cores disabled on 8660v1\n");
-		kgsl_pdata.grp2d0_clk_name = NULL;
-		kgsl_pdata.grp2d1_clk_name = NULL;
+		kgsl_2d0_pdata.clk.name.clk = NULL;
+		kgsl_2d1_pdata.clk.name.clk = NULL;
 	}
 }
 

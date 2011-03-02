@@ -1013,7 +1013,17 @@ static struct resource kgsl_resources[] = {
 	},
 };
 
-static struct kgsl_platform_data kgsl_pdata;
+static struct kgsl_core_platform_data kgsl_core_pdata;
+static struct kgsl_device_platform_data kgsl_3d0_pdata;
+static struct kgsl_device_platform_data kgsl_2d0_pdata;
+static struct kgsl_device_platform_data kgsl_2d1_pdata;
+
+static struct kgsl_platform_data kgsl_pdata = {
+	.core = &kgsl_core_pdata,
+	.dev_3d0 = &kgsl_3d0_pdata,
+	.dev_2d0 = &kgsl_2d0_pdata,
+	.dev_2d1 = &kgsl_2d1_pdata,
+};
 
 static struct platform_device msm_device_kgsl = {
 	.name = "kgsl",
@@ -1940,27 +1950,28 @@ static void __init msm7x2x_init(void)
 	/* OEMs may modify the value at their discretion for performance */
 	/* The appropriate maximum replacement for 160000 is: */
 	/* msm7x2x_clock_data.max_axi_khz */
-	kgsl_pdata.pwrlevel_3d[0].gpu_freq = 0;
-	kgsl_pdata.pwrlevel_3d[0].bus_freq = 160000000;
-	kgsl_pdata.init_level_3d = 0;
-	kgsl_pdata.num_levels_3d = 1;
+	kgsl_pdata.dev_3d0->pwr_data.pwrlevel[0].gpu_freq = 0;
+	kgsl_pdata.dev_3d0->pwr_data.pwrlevel[0].bus_freq = 160000000;
+	kgsl_pdata.dev_3d0->pwr_data.init_level = 0;
+	kgsl_pdata.dev_3d0->pwr_data.num_levels = 1;
 	/* 7x27 doesn't allow graphics clocks to be run asynchronously to */
 	/* the AXI bus */
-	kgsl_pdata.set_grp2d_async = NULL;
-	kgsl_pdata.set_grp3d_async = NULL;
-	kgsl_pdata.imem_clk_name = "imem_clk";
-	kgsl_pdata.grp3d_clk_name = "grp_clk";
-	kgsl_pdata.grp3d_pclk_name = "grp_pclk";
-	kgsl_pdata.grp2d0_clk_name = NULL;
-	kgsl_pdata.idle_timeout_3d = HZ/5;
-	kgsl_pdata.idle_timeout_2d = 0;
+	kgsl_pdata.dev_3d0->pwr_data.set_grp_async = NULL;
+	kgsl_pdata.dev_3d0->pwr_data.idle_timeout = HZ/5;
+	kgsl_pdata.dev_3d0->clk.name.clk = "grp_clk";
+	kgsl_pdata.dev_3d0->clk.name.pclk = "grp_pclk";
 
-	/* pt_va_base is currently shared between kgsl devices */
-	kgsl_pdata.pt_va_base = 0x66000000,
+	kgsl_pdata.dev_2d0->pwr_data.set_grp_async = NULL;
+	kgsl_pdata.dev_2d0->pwr_data.idle_timeout = 0;
+	kgsl_pdata.dev_2d0->clk.name.clk = NULL;
+
+	kgsl_pdata.core->imem_clk_name.clk = "imem_clk";
+
+	kgsl_pdata.core->pt_va_base = 0x66000000,
 #ifdef CONFIG_KGSL_PER_PROCESS_PAGE_TABLE
-	kgsl_pdata.pt_va_size = SZ_32M;
+	kgsl_pdata.core->pt_va_size = SZ_32M;
 #else
-	kgsl_pdata.pt_va_size = SZ_128M;
+	kgsl_pdata.core->pt_va_size = SZ_128M;
 #endif
 #endif
 	usb_mpp_init();

@@ -1001,7 +1001,7 @@ struct msm_camera_device_platform_data msm_camera_device_data = {
 	.ioext.csisz  = 0x00000400,
 	.ioext.csiirq = INT_CSI,
 	.ioclk.mclk_clk_rate = 24000000,
-	.ioclk.vfe_clk_rate  = 122880000,
+	.ioclk.vfe_clk_rate  = 147456000,
 };
 
 static struct msm_camera_sensor_flash_src msm_flash_src_pwm = {

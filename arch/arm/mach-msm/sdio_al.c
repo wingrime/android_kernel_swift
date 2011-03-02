@@ -2077,7 +2077,7 @@ static void sdio_al_timer_handler(unsigned long data)
 
 	ask_reading_mailbox(sdio_al_dev);
 
-	start_timer(sdio_al_dev);
+	restart_timer(sdio_al_dev);
 }
 
 /**

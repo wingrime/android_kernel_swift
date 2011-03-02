@@ -11,6 +11,7 @@
  */
 #include <linux/kernel.h>
 #include <linux/init.h>
+#include <linux/gpio_event.h>
 #include <asm/mach-types.h>
 #include <asm/mach/arch.h>
 #include <mach/board.h>
@@ -23,6 +24,7 @@
 #include <linux/usb/android_composite.h>
 #include <linux/platform_device.h>
 #include <linux/io.h>
+#include <linux/gpio.h>
 #include <asm/hardware/cache-l2x0.h>
 #include <mach/socinfo.h>
 #include <linux/mtd/nand.h>
@@ -349,6 +351,76 @@ static struct msm_otg_platform_data msm_otg_pdata = {
 };
 #endif
 
+#define KP_INDEX(row, col) ((row)*ARRAY_SIZE(kp_col_gpios) + (col))
+
+static unsigned int kp_row_gpios[] = {31, 32, 33, 34, 35};
+static unsigned int kp_col_gpios[] = {36, 37, 38, 39, 40};
+
+static const unsigned short keymap[ARRAY_SIZE(kp_col_gpios) *
+					  ARRAY_SIZE(kp_row_gpios)] = {
+	[KP_INDEX(0, 0)] = KEY_7,
+	[KP_INDEX(0, 1)] = KEY_DOWN,
+	[KP_INDEX(0, 2)] = KEY_UP,
+	[KP_INDEX(0, 3)] = KEY_RIGHT,
+	[KP_INDEX(0, 4)] = KEY_ENTER,
+
+	[KP_INDEX(1, 0)] = KEY_LEFT,
+	[KP_INDEX(1, 1)] = KEY_SEND,
+	[KP_INDEX(1, 2)] = KEY_1,
+	[KP_INDEX(1, 3)] = KEY_4,
+	[KP_INDEX(1, 4)] = KEY_CLEAR,
+
+	[KP_INDEX(2, 0)] = KEY_6,
+	[KP_INDEX(2, 1)] = KEY_5,
+	[KP_INDEX(2, 2)] = KEY_8,
+	[KP_INDEX(2, 3)] = KEY_3,
+	[KP_INDEX(2, 4)] = KEY_NUMERIC_STAR,
+
+	[KP_INDEX(3, 0)] = KEY_9,
+	[KP_INDEX(3, 1)] = KEY_NUMERIC_POUND,
+	[KP_INDEX(3, 2)] = KEY_0,
+	[KP_INDEX(3, 3)] = KEY_2,
+	[KP_INDEX(3, 4)] = KEY_SLEEP,
+
+	[KP_INDEX(4, 0)] = KEY_BACK,
+	[KP_INDEX(4, 1)] = KEY_HOME,
+	[KP_INDEX(4, 2)] = KEY_MENU,
+	[KP_INDEX(4, 3)] = KEY_VOLUMEUP,
+	[KP_INDEX(4, 4)] = KEY_VOLUMEDOWN,
+};
+
+/* SURF keypad platform device information */
+static struct gpio_event_matrix_info kp_matrix_info = {
+	.info.func	= gpio_event_matrix_func,
+	.keymap		= keymap,
+	.output_gpios	= kp_row_gpios,
+	.input_gpios	= kp_col_gpios,
+	.noutputs	= ARRAY_SIZE(kp_row_gpios),
+	.ninputs	= ARRAY_SIZE(kp_col_gpios),
+	.settle_time.tv.nsec = 40 * NSEC_PER_USEC,
+	.poll_time.tv.nsec = 20 * NSEC_PER_MSEC,
+	.flags		= GPIOKPF_LEVEL_TRIGGERED_IRQ | GPIOKPF_DRIVE_INACTIVE |
+			  GPIOKPF_PRINT_UNMAPPED_KEYS,
+};
+
+static struct gpio_event_info *kp_info[] = {
+	&kp_matrix_info.info
+};
+
+static struct gpio_event_platform_data kp_pdata = {
+	.name		= "7x27a_kp",
+	.info		= kp_info,
+	.info_count	= ARRAY_SIZE(kp_info)
+};
+
+static struct platform_device kp_pdev = {
+	.name	= GPIO_EVENT_DEV_NAME,
+	.id	= -1,
+	.dev	= {
+		.platform_data	= &kp_pdata,
+	},
+};
+
 static struct resource smc91x_resources[] = {
 	[0] = {
 		.start = 0x90000300,
@@ -519,6 +591,11 @@ static void __init msm7x2x_init(void)
 #if defined(CONFIG_I2C) && defined(CONFIG_GPIO_SX150X)
 	register_i2c_devices();
 #endif
+
+	if (machine_is_msm7x27a_surf())
+		kp_matrix_info.flags |= GPIOKPF_ACTIVE_HIGH;
+
+	platform_device_register(&kp_pdev);
 }
 
 #ifdef CONFIG_CACHE_L2X0

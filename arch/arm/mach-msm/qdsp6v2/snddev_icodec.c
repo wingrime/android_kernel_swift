@@ -221,6 +221,9 @@ static int snddev_icodec_open_lb(struct snddev_icodec_state *icodec)
 	int trc;
 	struct snddev_icodec_drv_state *drv = &snddev_icodec_drv;
 
+	/* Voting for low power is ok here as all use cases are
+	 * supported in low power mode.
+	 */
 	if (drv->snddev_vreg)
 		vreg_mode_vote(drv->snddev_vreg, 1,
 					SNDDEV_LOW_POWER_MODE);
@@ -521,9 +524,14 @@ error_pamp:
 
 static int snddev_icodec_close_lb(struct snddev_icodec_state *icodec)
 {
+	struct snddev_icodec_drv_state *drv = &snddev_icodec_drv;
+
 	/* Disable power amplifier */
 	if (icodec->data->pamp_off)
 		icodec->data->pamp_off();
+
+	if (drv->snddev_vreg)
+		vreg_mode_vote(drv->snddev_vreg, 0, SNDDEV_LOW_POWER_MODE);
 
 	if (icodec->adie_path) {
 		adie_codec_proceed_stage(icodec->adie_path,

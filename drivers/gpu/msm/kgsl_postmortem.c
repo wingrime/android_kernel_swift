@@ -20,6 +20,8 @@
 #include <linux/relay.h>
 #include <linux/debugfs.h>
 #include <linux/vmalloc.h>
+#include <linux/debugfs.h>
+
 #include "kgsl.h"
 #include "kgsl_device.h"
 #include "kgsl_cmdstream.h"
@@ -802,4 +804,38 @@ int kgsl_postmortem_dump(struct kgsl_device *device, int manual)
 	KGSL_DRV_ERR("Dump Finished\n");
 
 	return 0;
+}
+
+static struct dentry *pm_d_debugfs;
+
+static int pm_dump_set(void *data, u64 val)
+{
+	struct kgsl_device *device = data;
+
+	if (val) {
+		mutex_lock(&device->mutex);
+		kgsl_postmortem_dump(device, 1);
+		mutex_unlock(&device->mutex);
+	}
+
+	return 0;
+}
+
+DEFINE_SIMPLE_ATTRIBUTE(pm_dump_fops,
+			NULL,
+			pm_dump_set, "%llu\n");
+
+
+void kgsl_postmortem_init(struct kgsl_device *device)
+{
+	if (!device->d_debugfs || IS_ERR(device->d_debugfs))
+		return;
+
+	pm_d_debugfs = debugfs_create_dir("postmortem", device->d_debugfs);
+
+	if (IS_ERR(pm_d_debugfs))
+		return;
+
+	debugfs_create_file("dump",  0600, pm_d_debugfs, device,
+			    &pm_dump_fops);
 }

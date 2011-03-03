@@ -19,6 +19,7 @@
 #include <linux/fb.h>
 #include <linux/file.h>
 #include <linux/fs.h>
+#include <linux/debugfs.h>
 #include <linux/uaccess.h>
 #include <linux/init.h>
 #include <linux/list.h>
@@ -44,6 +45,7 @@
 #include "kgsl_drm.h"
 #include "kgsl_cffdump.h"
 
+static struct dentry *kgsl_debugfs_dir;
 
 static void kgsl_put_phys_file(struct file *file);
 
@@ -1855,16 +1857,17 @@ kgsl_register_device(struct kgsl_device *device)
 	/* Generic device initialization */
 	atomic_set(&device->open_count, -1);
 
-	ret = kgsl_pwrctrl_init_sysfs(device);
+	/* sysfs and debugfs initalization - failure here is non fatal */
 
-	if (ret)
-		goto err_device;
+	/* Create a driver entry in the kgsl debugfs directory */
+	if (kgsl_debugfs_dir && !IS_ERR(kgsl_debugfs_dir))
+		device->d_debugfs = debugfs_create_dir(device->name,
+						       kgsl_debugfs_dir);
+
+	/* Initialize common sysfs entries */
+	kgsl_pwrctrl_init_sysfs(device);
 
 	return 0;
-
-err_device:
-	device_destroy(kgsl_driver.class,
-		       MKDEV(MAJOR(kgsl_driver.major), minor));
 
 err_devlist:
 	mutex_lock(&kgsl_driver.devlock);
@@ -1916,7 +1919,9 @@ kgsl_core_init(void)
 	  kobject_create_and_add("pagetables",
 				 &kgsl_driver.pdev->dev.kobj);
 
-	kgsl_debug_init();
+	kgsl_debugfs_dir = debugfs_create_dir("kgsl", 0);
+	kgsl_debug_init(kgsl_debugfs_dir);
+
 	kgsl_cffdump_init();
 
 	INIT_LIST_HEAD(&kgsl_driver.process_list);

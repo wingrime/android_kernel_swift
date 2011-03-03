@@ -46,6 +46,15 @@
 #define max_control_command_size 150
 #define CROP_LEN 36
 
+enum vfe_mode_of_operation{
+	VFE_MODE_OF_OPERATION_CONTINUOUS,
+	VFE_MODE_OF_OPERATION_SNAPSHOT,
+	VFE_MODE_OF_OPERATION_VIDEO,
+	VFE_MODE_OF_OPERATION_RAW_SNAPSHOT,
+	VFE_MODE_OF_OPERATION_ZSL,
+	VFE_LAST_MODE_OF_OPERATION_ENUM
+};
+
 enum msm_queue {
 	MSM_CAM_Q_CTRL,     /* control command or control command status */
 	MSM_CAM_Q_VFE_EVT,  /* adsp event */
@@ -102,6 +111,8 @@ struct msm_vpe_phy_info {
 #define VFE31_OUTPUT_MODE_PT (0x1 << 0)
 #define VFE31_OUTPUT_MODE_S (0x1 << 1)
 #define VFE31_OUTPUT_MODE_V (0x1 << 2)
+#define VFE31_OUTPUT_MODE_P (0x1 << 3)
+#define VFE31_OUTPUT_MODE_T (0x1 << 4)
 
 struct msm_vfe_phy_info {
 	uint32_t sbuf_phy;

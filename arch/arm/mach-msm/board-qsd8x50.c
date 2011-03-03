@@ -1207,8 +1207,6 @@ static struct resource kgsl_resources[] = {
 };
 
 static struct kgsl_core_platform_data kgsl_core_pdata = {
-	.imem_clk_name.clk = "imem_clk",
-
 	/* pt_va_base is currently shared between kgsl devices */
 	.pt_va_base = 0x66000000,
 #ifdef CONFIG_KGSL_PER_PROCESS_PAGE_TABLE
@@ -1235,6 +1233,9 @@ static struct kgsl_device_platform_data kgsl_3d0_pdata = {
 		.name = {
 			.clk = "grp_clk",
 		},
+	},
+	.imem_clk_name = {
+		.clk = "imem_clk",
 	},
 };
 

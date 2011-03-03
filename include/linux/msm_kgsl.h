@@ -154,7 +154,6 @@ struct kgsl_clk_data {
 };
 
 struct kgsl_core_platform_data {
-	struct kgsl_grp_clk_name imem_clk_name;
 	unsigned int pt_va_base;
 	unsigned int pt_va_size;
 };
@@ -162,6 +161,8 @@ struct kgsl_core_platform_data {
 struct kgsl_device_platform_data {
 	struct kgsl_device_pwr_data pwr_data;
 	struct kgsl_clk_data clk;
+	/* imem_clk_name is for 3d only, not used in 2d devices */
+	struct kgsl_grp_clk_name imem_clk_name;
 };
 
 struct kgsl_platform_data {

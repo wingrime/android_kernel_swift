@@ -1960,12 +1960,11 @@ static void __init msm7x2x_init(void)
 	kgsl_pdata.dev_3d0->pwr_data.idle_timeout = HZ/5;
 	kgsl_pdata.dev_3d0->clk.name.clk = "grp_clk";
 	kgsl_pdata.dev_3d0->clk.name.pclk = "grp_pclk";
+	kgsl_pdata.dev_3d0->imem_clk_name.clk = "imem_clk";
 
 	kgsl_pdata.dev_2d0->pwr_data.set_grp_async = NULL;
 	kgsl_pdata.dev_2d0->pwr_data.idle_timeout = 0;
 	kgsl_pdata.dev_2d0->clk.name.clk = NULL;
-
-	kgsl_pdata.core->imem_clk_name.clk = "imem_clk";
 
 	kgsl_pdata.core->pt_va_base = 0x66000000,
 #ifdef CONFIG_KGSL_PER_PROCESS_PAGE_TABLE

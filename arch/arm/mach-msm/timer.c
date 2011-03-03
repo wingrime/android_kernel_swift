@@ -926,7 +926,7 @@ int64_t msm_timer_get_sclk_time(int64_t *period)
 
 int __init msm_timer_init_time_sync(void (*timeout)(void))
 {
-#if defined(CONFIG_MSM_N_WAY_SMSM)
+#if defined(CONFIG_MSM_N_WAY_SMSM) && !defined(CONFIG_MSM_DIRECT_SCLK_ACCESS)
 	int ret = smsm_change_intr_mask(SMSM_TIME_MASTER_DEM, 0xFFFFFFFF, 0);
 
 	if (ret) {

@@ -33,6 +33,8 @@
 
 #define INVALID_RB_CMD 0xaaaaaaaa
 
+static int kgsl_pm_regs_enabled;
+
 struct pm_id_name {
 	uint32_t id;
 	char name[9];
@@ -73,8 +75,6 @@ static const struct pm_id_name pm3_types[] = {
 	{PM4_SET_SHADER_BASES,		"ST_SHD_B"},
 	{PM4_WAIT_FOR_IDLE,		"WAIT4IDL"},
 };
-
-#ifndef CONFIG_MSM_KGSL_PSTMRTMDMP_NO_REG_DUMP
 
 /* Offset address pairs: start, end of range to dump (inclusive) */
 
@@ -165,7 +165,21 @@ static const int leia_registers[] = {
 	0x12400, 0x12400, 0x12420, 0x12420
 };
 
-#endif
+static struct {
+	int id;
+	const int *registers;
+	int len;
+} kgsl_registers[] = {
+	{ KGSL_CHIPID_LEIA_REV470, leia_registers,
+	  ARRAY_SIZE(leia_registers) / 2 },
+	{ KGSL_CHIPID_LEIA_REV470_TEMP, leia_registers,
+	  ARRAY_SIZE(leia_registers) / 2 },
+	{ KGSL_CHIPID_YAMATODX_REV21, yamato_registers,
+	  ARRAY_SIZE(yamato_registers) / 2 },
+	{ KGSL_CHIPID_YAMATODX_REV211, yamato_registers,
+	  ARRAY_SIZE(yamato_registers) / 2 },
+	{ 0x0, NULL, 0},
+};
 
 static uint32_t kgsl_is_pm4_len(uint32_t word)
 {
@@ -226,7 +240,6 @@ static const char *kgsl_pm4_name(uint32_t word)
 	return "????????";
 }
 
-#ifndef CONFIG_MSM_KGSL_PSTMRTMDMP_NO_REG_DUMP
 static void kgsl_dump_regs(struct kgsl_device *device,
 			   const int *registers, int size)
 {
@@ -253,7 +266,6 @@ static void kgsl_dump_regs(struct kgsl_device *device,
 		}
 	}
 }
-#endif
 
 static void dump_ib(struct kgsl_device *device, char* buffId, uint32_t pt_base,
 	uint32_t base_offset, uint32_t ib_base, uint32_t ib_size, bool dump)
@@ -704,19 +716,15 @@ static int kgsl_dump_yamato(struct kgsl_device *device)
 		}
 	}
 
+	/* Dump the registers if the user asked for it */
 
-#ifndef CONFIG_MSM_KGSL_PSTMRTMDMP_NO_REG_DUMP
-	switch (device->chip_id) {
-	case KGSL_CHIPID_LEIA_REV470:
-	  kgsl_dump_regs(device, leia_registers,
-			 ARRAY_SIZE(leia_registers) / 2);
-	  break;
-	default:
-	  kgsl_dump_regs(device, yamato_registers,
-			 ARRAY_SIZE(yamato_registers) / 2);
-	  break;
+	for (i = 0; kgsl_pm_regs_enabled && kgsl_registers[i].id; i++) {
+		if (kgsl_registers[i].id == device->chip_id) {
+			kgsl_dump_regs(device, kgsl_registers[i].registers,
+				       kgsl_registers[i].len);
+			break;
+		}
 	}
-#endif
 
 error_vfree:
 	vfree(rb_copy);
@@ -825,6 +833,21 @@ DEFINE_SIMPLE_ATTRIBUTE(pm_dump_fops,
 			NULL,
 			pm_dump_set, "%llu\n");
 
+static int pm_regs_enabled_set(void *data, u64 val)
+{
+	kgsl_pm_regs_enabled = val ? 1 : 0;
+	return 0;
+}
+
+static int pm_regs_enabled_get(void *data, u64 *val)
+{
+	*val = kgsl_pm_regs_enabled;
+	return 0;
+}
+
+DEFINE_SIMPLE_ATTRIBUTE(pm_regs_enabled_fops,
+			pm_regs_enabled_get,
+			pm_regs_enabled_set, "%llu\n");
 
 void kgsl_postmortem_init(struct kgsl_device *device)
 {
@@ -838,4 +861,6 @@ void kgsl_postmortem_init(struct kgsl_device *device)
 
 	debugfs_create_file("dump",  0600, pm_d_debugfs, device,
 			    &pm_dump_fops);
+	debugfs_create_file("regs_enabled", 0644, pm_d_debugfs, device,
+			    &pm_regs_enabled_fops);
 }

@@ -58,6 +58,7 @@
 /* Registers shifts and masks */
 #define L2X0_CACHE_ID_PART_MASK		(0xf << 6)
 #define L2X0_CACHE_ID_PART_L210		(1 << 6)
+#define L2X0_CACHE_ID_PART_L220		(2 << 6)
 #define L2X0_CACHE_ID_PART_L310		(3 << 6)
 
 #ifndef __ASSEMBLY__

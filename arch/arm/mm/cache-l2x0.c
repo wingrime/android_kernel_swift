@@ -2,7 +2,7 @@
  * arch/arm/mm/cache-l2x0.c - L210/L220 cache controller support
  *
  * Copyright (C) 2007 ARM Limited
- * Copyright (c) 2009, Code Aurora Forum. All rights reserved.
+ * Copyright (c) 2009, 2011, Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -323,20 +323,20 @@ void __init l2x0_init(void __iomem *base, __u32 aux_val, __u32 aux_mask)
 	bits |= 0x01;	/* set bit 0 */
 	writel_relaxed(bits, l2x0_base + L2X0_CTRL);
 
-	bits = readl_relaxed(l2x0_base + L2X0_CACHE_ID);
-	bits >>= 6;	/* part no, bit 6 to 9 */
-	bits &= 0x0f;	/* 4 bits */
-
-	if (bits == 2) {	/* L220 */
+	switch (cache_id & L2X0_CACHE_ID_PART_MASK) {
+	case L2X0_CACHE_ID_PART_L220:
 		outer_cache.inv_range = l2x0_inv_range;
 		outer_cache.clean_range = l2x0_clean_range;
 		outer_cache.flush_range = l2x0_flush_range;
 		printk(KERN_INFO "L220 cache controller enabled\n");
-	} else {		/* L210 */
+		break;
+	case L2X0_CACHE_ID_PART_L210:
+	default:
 		outer_cache.inv_range = l2x0_inv_range_atomic;
 		outer_cache.clean_range = l2x0_clean_range_atomic;
 		outer_cache.flush_range = l2x0_flush_range_atomic;
 		printk(KERN_INFO "L210 cache controller enabled\n");
+		break;
 	}
 
 	outer_cache.sync = l2x0_cache_sync;

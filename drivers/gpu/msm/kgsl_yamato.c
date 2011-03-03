@@ -726,11 +726,6 @@ kgsl_yamato_init(struct platform_device *pdev)
 	if (status != 0)
 		goto error_free_memstore;
 
-	status = kgsl_drawctxt_init(device);
-	if (status != 0) {
-		goto error_close_rb;
-	}
-
 	/* Register the device with the KGSL core */
 	device->pdev = pdev;
 	status = kgsl_register_device(device);
@@ -934,7 +929,7 @@ static int kgsl_yamato_stop(struct kgsl_device *device)
 
 	kgsl_yamato_regwrite(device, REG_SQ_INT_CNTL, 0);
 
-	kgsl_drawctxt_close(device);
+	yamato_device->drawctxt_active = NULL;
 
 	kgsl_ringbuffer_stop(&yamato_device->ringbuffer);
 

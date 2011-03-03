@@ -455,8 +455,6 @@ static int mipi_dsi_off(struct platform_device *pdev)
 		clk_disable(mfd->ebi1_clk);
 #endif
 
-	disable_irq(DSI_IRQ);
-
 	/* DSIPHY_PLL_CTRL_5 */
 	MIPI_OUTP(MIPI_DSI_BASE + 0x0214, 0x05f);
 
@@ -562,8 +560,6 @@ static int mipi_dsi_on(struct platform_device *pdev)
 	MIPI_OUTP(MIPI_DSI_BASE + 0x025c, 0x000);
 
 	mipi_dsi_phy_init(0, &(mfd->panel_info));
-
-	enable_irq(DSI_IRQ);
 
 	mipi  = &mfd->panel_info.mipi;
 	if (mfd->panel_info.type == MIPI_VIDEO_PANEL) {

@@ -2737,9 +2737,10 @@ static int adie_codec_refcnt_write(u8 reg, u8 mask, u8 val, enum refcnt cnt,
 		u8 path_type)
 {
 	u8 i;
+	int j;
 	u8 fld_mask;
 	u8 path_mask;
-	int j;
+	u8 reg_mask = 0;
 	int rc = 0;
 
 	for (i = 0; i < 0xEF; i++) {
@@ -2751,8 +2752,7 @@ static int adie_codec_refcnt_write(u8 reg, u8 mask, u8 val, enum refcnt cnt,
 							.path_mask;
 				if (fld_mask) {
 					if (!reg_in_use(path_mask, path_type))
-						rc = adie_codec_write
-							(reg, fld_mask, val);
+						reg_mask |= fld_mask;
 					if (cnt == INC)
 						timpani_regset[i].fld_ref_cnt[j]
 							.path_mask |= path_type;
@@ -2762,6 +2762,10 @@ static int adie_codec_refcnt_write(u8 reg, u8 mask, u8 val, enum refcnt cnt,
 								~path_type;
 				}
 			}
+
+			if (reg_mask)
+				rc = adie_codec_write(reg, reg_mask, val);
+			reg_mask = 0;
 			break;
 		}
 	}

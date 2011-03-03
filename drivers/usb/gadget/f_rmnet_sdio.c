@@ -771,41 +771,51 @@ static void rmnet_open_sdio_work(struct work_struct *w)
 	struct usb_composite_dev *cdev = dev->cdev;
 	int ret;
 	static int retry_cnt;
+	static bool ctl_ch_opened, data_ch_opened;
 
-	/* Control channel for QMI messages */
-	ret = sdio_cmux_open(rmnet_sdio_ctl_ch, rmnet_ctl_receive_cb,
+	if (!ctl_ch_opened) {
+		/* Control channel for QMI messages */
+		ret = sdio_cmux_open(rmnet_sdio_ctl_ch, rmnet_ctl_receive_cb,
 				rmnet_ctl_write_done, rmnet_sts_callback, dev);
-	if (ret) {
-		retry_cnt++;
-		pr_debug("%s: usb rmnet sdio open retry_cnt:%d\n",
-				__func__, retry_cnt);
-
-		if (retry_cnt > SDIO_OPEN_MAX_RETRY) {
-			ERROR(cdev, "Unable to open control SDIO channel\n");
-			return;
-		}
-		queue_delayed_work(dev->wq, &dev->sdio_open_work,
-					SDIO_OPEN_RETRY_DELAY);
-		return;
+		if (!ret)
+			ctl_ch_opened = true;
 	}
-	/* Data channel for network packets */
-	ret = msm_sdio_dmux_open(rmnet_sdio_data_ch, dev,
+	if (!data_ch_opened) {
+		/* Data channel for network packets */
+		ret = msm_sdio_dmux_open(rmnet_sdio_data_ch, dev,
 				rmnet_data_receive_cb,
 				rmnet_data_write_done);
-	if (ret) {
-		ERROR(cdev, "Unable to open SDIO DATA channel\n");
-		goto ctl_close;
+		if (!ret)
+			data_ch_opened = true;
 	}
 
-	dev->dmux_write_done = 1;
-	atomic_set(&dev->sdio_open, 1);
-	pr_info("%s: usb rmnet sdio channels are open retry_cnt:%d\n",
+	if (ctl_ch_opened && data_ch_opened) {
+		dev->dmux_write_done = 1;
+		atomic_set(&dev->sdio_open, 1);
+		pr_info("%s: usb rmnet sdio channels are open retry_cnt:%d\n",
 				__func__, retry_cnt);
-	retry_cnt = 0;
-	return;
+		return;
+	}
 
-ctl_close:
-	sdio_cmux_close(rmnet_sdio_ctl_ch);
+	retry_cnt++;
+	pr_debug("%s: usb rmnet sdio open retry_cnt:%d\n",
+			__func__, retry_cnt);
+
+	if (retry_cnt > SDIO_OPEN_MAX_RETRY) {
+		if (!ctl_ch_opened)
+			ERROR(cdev, "Unable to open control SDIO channel\n");
+		else
+			sdio_cmux_close(rmnet_sdio_ctl_ch);
+
+		if (!data_ch_opened)
+			ERROR(cdev, "Unable to open DATA SDIO channel\n");
+		else
+			msm_sdio_dmux_close(rmnet_sdio_data_ch);
+
+	} else {
+		queue_delayed_work(dev->wq, &dev->sdio_open_work,
+				SDIO_OPEN_RETRY_DELAY);
+	}
 }
 
 static int rmnet_set_alt(struct usb_function *f,

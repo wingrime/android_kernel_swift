@@ -1,4 +1,4 @@
-/* Copyright (c) 2010, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2010-2011, Code Aurora Forum. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -31,14 +31,15 @@
 
 /**
  * struct isl_platform_data
- * @chgcurrent	max current the islchip can draw
- * @valid_irq			interrupt for insertion/removal notification
- * @valid_n_gpio		gpio to debounce insertion/removal
- * @valid_config		machine specific func to configure gpio line
- * @max_system_voltage		the max voltage isl should charge battery to
- * @min_system_voltage		the min voltage isl should trkl charge the
+ * @chgcurrent:	max current the islchip can draw
+ * @valid_irq:			interrupt for insertion/removal notification
+ * @valid_n_gpio:		gpio to debounce insertion/removal
+ * @valid_config:		machine specific func to configure gpio line
+ * @max_system_voltage:		the max voltage isl should charge battery to
+ * @min_system_voltage:		the min voltage isl should trkl charge the
  *				battery
- * @term_current		the battery current when isl charging should stop
+ * @term_current:		the batt current when isl charging should stop
+ * @input_current:		the max current isl should pull from the adapter
  */
 struct isl_platform_data {
 	int chgcurrent;
@@ -47,6 +48,7 @@ struct isl_platform_data {
 	int max_system_voltage;
 	int min_system_voltage;
 	int term_current;
+	int input_current;
 };
 
 #endif

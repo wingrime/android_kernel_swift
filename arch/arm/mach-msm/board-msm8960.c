@@ -64,6 +64,7 @@ static void __init msm8960_init_irq(void)
 	}
 }
 
+#ifdef CONFIG_MMC_MSM_SDC1_SUPPORT
 static struct mmc_platform_data msm8960_sdc1_data = {
 	.ocr_mask       = MMC_VDD_27_28 | MMC_VDD_28_29,
 	.mmc_bus_width  = MMC_CAP_4_BIT_DATA,
@@ -72,11 +73,14 @@ static struct mmc_platform_data msm8960_sdc1_data = {
 	.msmsdcc_fmax	= 48000000,
 	.nonremovable	= 1,
 };
+#endif
 
 static void __init msm8960_init_mmc(void)
 {
+#ifdef CONFIG_MMC_MSM_SDC1_SUPPORT
 	/* SDCC1 : eMMC card connected */
 	msm_add_sdcc(1, &msm8960_sdc1_data);
+#endif
 }
 
 static struct msm_otg_platform_data msm_otg_pdata;

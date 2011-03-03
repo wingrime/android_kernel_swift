@@ -559,6 +559,8 @@ msmsdcc_start_data(struct msmsdcc_host *host, struct mmc_data *data,
 		host->dma.hdr.exec_func = msmsdcc_dma_exec_func;
 		host->dma.hdr.user = (void *)host;
 		host->dma.busy = 1;
+		if (data->flags & MMC_DATA_WRITE)
+			host->prog_scan = 1;
 
 		if (cmd) {
 			msmsdcc_start_command_deferred(host, cmd, &c);
@@ -566,9 +568,9 @@ msmsdcc_start_data(struct msmsdcc_host *host, struct mmc_data *data,
 		}
 		dsb();
 		msm_dmov_enqueue_cmd_ext(host->dma.channel, &host->dma.hdr);
+	} else {
 		if (data->flags & MMC_DATA_WRITE)
 			host->prog_scan = 1;
-	} else {
 		writel(timeout, base + MMCIDATATIMER);
 
 		writel(host->curr.xfer_size, base + MMCIDATALENGTH);

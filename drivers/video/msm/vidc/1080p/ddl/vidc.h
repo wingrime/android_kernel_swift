@@ -375,6 +375,7 @@ struct vidc_1080p_seq_hdr_info{
 	u32 crop_left_offset;
 	u32 crop_bottom_offset;
 	u32 crop_top_offset;
+	u32 data_partition;
 };
 struct vidc_1080p_enc_seq_start_param{
 	u32 cmd_seq_num;

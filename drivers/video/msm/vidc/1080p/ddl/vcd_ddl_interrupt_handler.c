@@ -265,7 +265,8 @@ static u32 ddl_decoder_seq_done_callback(struct ddl_context *ddl_context,
 			&seq_hdr_info.profile, &seq_hdr_info.level, &idc_value);
 		ddl_get_dec_profile_level(decoder, seq_hdr_info.profile,
 			seq_hdr_info.level);
-		if (decoder->codec.codec == VCD_CODEC_H264)
+		switch (decoder->codec.codec) {
+		case VCD_CODEC_H264:
 			if (decoder->profile.profile == VCD_PROFILE_H264_HIGH ||
 				decoder->profile.profile == VCD_PROFILE_UNKNOWN)
 				if (idc_value > VIDC_1080P_IDCFORMAT_420) {
@@ -273,6 +274,23 @@ static u32 ddl_decoder_seq_done_callback(struct ddl_context *ddl_context,
 					ddl_client_fatal_cb(ddl);
 					return process_further;
 				}
+			break;
+		case VCD_CODEC_MPEG4:
+		case VCD_CODEC_DIVX_4:
+		case VCD_CODEC_DIVX_5:
+		case VCD_CODEC_DIVX_6:
+		case VCD_CODEC_XVID:
+			if (seq_hdr_info.data_partition)
+				if ((seq_hdr_info.img_size_x *
+				seq_hdr_info.img_size_y) > (720 * 576)) {
+					DDL_MSG_ERROR("Unsupported DP clip");
+					ddl_client_fatal_cb(ddl);
+					return process_further;
+				}
+			break;
+		default:
+			break;
+		}
 		ddl_calculate_stride(&decoder->frame_size,
 			!decoder->progressive_only);
 		parse_hdr_crop_data(ddl, &seq_hdr_info);

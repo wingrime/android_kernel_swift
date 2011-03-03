@@ -987,7 +987,8 @@ static int msm_hsusb_pmic_id_notif_init(void (*callback)(int online), int init)
 		return -ENOTSUPP;
 	}
 
-	if (machine_is_msm8x60_ffa() && !pmic_id_notif_supported) {
+	if ((machine_is_msm8x60_ffa() || machine_is_msm8x60_charm_ffa()) &&
+			!pmic_id_notif_supported) {
 		pr_debug("%s: USB_ID is not routed to PMIC"
 			"on V2 ffa\n", __func__);
 		return -ENOTSUPP;

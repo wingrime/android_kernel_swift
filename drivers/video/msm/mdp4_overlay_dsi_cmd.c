@@ -46,11 +46,7 @@ static int vsync_start_y_adjust = 4;
 
 #ifdef DSI_CLK_CTRL
 struct timer_list dsi_clock_timer;
-#endif
 
-static int vsync_start_y_adjust = 4;
-
-#ifdef DSI_CLK_CTRL
 static void dsi_clock_tout(unsigned long data)
 {
 	if (mipi_dsi_clk_on)
@@ -135,8 +131,6 @@ void mdp4_overlay_update_dsi_cmd(struct msm_fb_data_type *mfd)
 		ret = mdp4_overlay_format2pipe(pipe);
 		if (ret < 0)
 			printk(KERN_INFO "%s: format2type failed\n", __func__);
-
-		init_completion(&dma_busy_comp);
 #ifdef DSI_CLK_CTRL
 		init_timer(&dsi_clock_timer);
 		dsi_clock_timer.function = dsi_clock_tout;

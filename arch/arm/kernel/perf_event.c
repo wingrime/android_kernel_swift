@@ -2721,7 +2721,7 @@ static inline int armv7_scorpion_pmu_event_map(int config)
 	return mapping;
 }
 
-#ifdef CONFIG_ARCH_MSM_SCORPIONMP
+#ifdef CONFIG_SMP
 static void scorpion_secondary_enable_callback(void *info)
 {
 	int irq = *(unsigned int *)info;
@@ -2759,7 +2759,7 @@ static void scorpion_secondary_disable(unsigned int irq)
 
 static struct arm_pmu scorpion_pmu = {
 	.handle_irq		= armv7pmu_handle_irq,
-#ifdef CONFIG_ARCH_MSM_SCORPIONMP
+#ifdef CONFIG_SMP
 	.secondary_enable	= scorpion_secondary_enable,
 	.secondary_disable	= scorpion_secondary_disable,
 #endif

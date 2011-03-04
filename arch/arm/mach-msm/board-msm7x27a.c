@@ -25,6 +25,8 @@
 #include <linux/platform_device.h>
 #include <linux/io.h>
 #include "timer.h"
+#include <linux/mtd/nand.h>
+#include <linux/mtd/partitions.h>
 
 #define MSM_EBI2_PHYS 0xa0d00000
 
@@ -52,6 +54,7 @@ static struct platform_device *rumi_sim_devices[] __initdata = {
 	&msm_device_dmov,
 	&smc91x_device,
 	&msm_device_uart1,
+	&msm_device_nand,
 };
 
 static void __init msm7x27a_init_ebi2(void)

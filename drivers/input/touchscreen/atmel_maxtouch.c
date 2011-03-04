@@ -130,8 +130,8 @@ struct mxt_data {
 	u16                  max_x_val;
 	u16                  max_y_val;
 
-	void                 (*init_hw)(void);
-	void                 (*exit_hw)(void);
+	int                  (*init_hw)(struct i2c_client *client);
+	int		     (*exit_hw)(struct i2c_client *client);
 	u8                   (*valid_interrupt)(void);
 	u8                   (*read_chg)(void);
 
@@ -159,6 +159,16 @@ struct mxt_data {
 	char                 nontouch_msg_only; 
 	struct mutex         msg_mutex;
 };
+
+static int mxt_read_block(struct i2c_client *client, u16 addr, u16 length,
+			  u8 *value);
+static int mxt_write_byte(struct i2c_client *client, u16 addr, u8 value);
+static int mxt_write_block(struct i2c_client *client, u16 addr, u16 length,
+			   u8 *value);
+static u8 mxt_valid_interrupt_dummy(void)
+{
+	return 1;
+}
 
 #define I2C_RETRY_COUNT 5
 #define I2C_PAYLOAD_SIZE 254
@@ -1806,7 +1816,7 @@ static int __devinit mxt_probe(struct i2c_client *client,
 		mxt->valid_interrupt = mxt_valid_interrupt_dummy;
 
 	if (mxt->init_hw != NULL)
-		mxt->init_hw();
+		mxt->init_hw(client);
 
 	if (debug >= DEBUG_TRACE)
 		printk(KERN_INFO "maXTouch driver identifying chip\n");
@@ -1999,7 +2009,7 @@ err_input_dev_alloc:
 	kfree(id_data);
 err_id_alloc:
 	if (mxt->exit_hw != NULL)
-		mxt->exit_hw();
+		mxt->exit_hw(client);
 	kfree(mxt);
 err_mxt_alloc:
 	return error;
@@ -2017,7 +2027,7 @@ static int __devexit mxt_remove(struct i2c_client *client)
 	if (mxt != NULL) {
 		
 		if (mxt->exit_hw != NULL)
-			mxt->exit_hw();
+			mxt->exit_hw(client);
 
 		if (mxt->irq) {
 			free_irq(mxt->irq, mxt);

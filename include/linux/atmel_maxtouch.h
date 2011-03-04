@@ -272,12 +272,6 @@
 
 /* Routines for memory access within a 16 bit address space */
 
-static int mxt_read_block(struct i2c_client *client, u16 addr, u16 length,
-			  u8 *value);
-static int mxt_write_byte(struct i2c_client *client, u16 addr, u8 value);
-static int mxt_write_block(struct i2c_client *client, u16 addr, u16 length,
-			   u8 *value);
-
 /* TODO: - won't compile if functions aren't defined*/
 /* Bootloader specific function prototypes. */
 
@@ -306,18 +300,12 @@ static int mxt_write_block_bl(struct i2c_client *client, u16 length, u8 *value);
  
 struct mxt_platform_data {
 	u8    numtouch;	/* Number of touches to report	*/
-	void  (*init_platform_hw)(void);
-	void  (*exit_platform_hw)(void);
+	int   (*init_platform_hw)(struct i2c_client *client);
+	int   (*exit_platform_hw)(struct i2c_client *client);
 	int   max_x;    /* The default reported X range   */  
 	int   max_y;    /* The default reported Y range   */
 	u8    (*valid_interrupt) (void);
 	u8    (*read_chg) (void);
 };
-
-
-static u8 mxt_valid_interrupt_dummy(void)
-{
-	return 1;
-}
 
 void	mxt_hw_reset(void);

@@ -42,6 +42,7 @@
 #include <linux/input/matrix_keypad.h>
 #include <linux/msm-charger.h>
 #include <linux/i2c/isl9519.h>
+#include <linux/atmel_maxtouch.h>
 
 #ifdef CONFIG_ANDROID_PMEM
 #include <linux/android_pmem.h>
@@ -1152,7 +1153,7 @@ static void gsbi_qup_i2c_gpio_config(int adap_id, int config_type)
 }
 
 static struct msm_i2c_platform_data msm_gsbi3_qup_i2c_pdata = {
-	.clk_freq = 100000,
+	.clk_freq = 384000,
 	.src_clk_rate = 24000000,
 	.clk = "gsbi_qup_clk",
 	.pclk = "gsbi_pclk",
@@ -2069,6 +2070,96 @@ static struct xoadc_platform_data xoadc_pdata = {
 	.xoadc_num = XOADC_PMIC_0,
 };
 #endif
+
+#define QT_ATMEL_TS_GPIO_IRQ	61
+#define ATMEL_I2C_NAME "maXTouch"
+
+static struct regulator *pm8901_l2;
+
+static int atmel_qt_platform_init(struct i2c_client *client)
+{
+	int rc = -EINVAL;
+
+	pm8901_l2 = regulator_get(NULL, "8901_l2");
+	if (IS_ERR(pm8901_l2)) {
+		pr_err("%s: regulator get of 8901_l2 failed (%ld)\n",
+			__func__, PTR_ERR(pm8901_l2));
+		rc = PTR_ERR(pm8901_l2);
+		return rc;
+	}
+
+	rc = regulator_set_voltage(pm8901_l2, 3300000, 3300000);
+	if (rc) {
+		pr_err("%s: regulator_set_voltage of 8901_l2 failed(%d)\n",
+			__func__, rc);
+		goto reg_put;
+	}
+
+	rc = regulator_enable(pm8901_l2);
+	if (rc) {
+		pr_err("%s: regulator_enable of 8901_l2 failed(%d)\n",
+			__func__, rc);
+		goto reg_put;
+	}
+
+	/* configure touchscreen interrupt gpio */
+	rc = gpio_request(QT_ATMEL_TS_GPIO_IRQ, "atmel_irq_gpio");
+	if (rc) {
+		pr_err("%s: unable to request gpio %d\n",
+			__func__, QT_ATMEL_TS_GPIO_IRQ);
+		goto reg_disable;
+	}
+
+	rc = gpio_direction_input(QT_ATMEL_TS_GPIO_IRQ);
+	if (rc < 0) {
+		pr_err("%s: unable to set the direction of gpio %d\n",
+			__func__, QT_ATMEL_TS_GPIO_IRQ);
+		goto free_gpio;
+	}
+
+	return 0;
+
+free_gpio:
+	gpio_free(QT_ATMEL_TS_GPIO_IRQ);
+reg_disable:
+	regulator_disable(pm8901_l2);
+reg_put:
+	regulator_put(pm8901_l2);
+	return rc;
+}
+
+static int atmel_qt_platform_exit(struct i2c_client *client)
+{
+	return 0;
+}
+
+static u8 atmel_qt_read_chg(void)
+{
+	return gpio_get_value(QT_ATMEL_TS_GPIO_IRQ);
+}
+
+static u8 atmel_qt_valid_interrupt(void)
+{
+	return !atmel_qt_read_chg();
+}
+
+static struct mxt_platform_data atmel_qt_pdata = {
+	.numtouch = 10,
+	.init_platform_hw = atmel_qt_platform_init,
+	.exit_platform_hw = atmel_qt_platform_exit,
+	.max_x = 1366,
+	.max_y = 768,
+	.valid_interrupt = atmel_qt_valid_interrupt,
+	.read_chg = atmel_qt_read_chg,
+};
+
+static struct i2c_board_info atmel_i2c_info[] __initdata = {
+	{
+		I2C_BOARD_INFO(ATMEL_I2C_NAME, 0x4c),
+		.platform_data = &atmel_qt_pdata,
+		.irq = MSM_GPIO_TO_INT(QT_ATMEL_TS_GPIO_IRQ),
+	},
+};
 
 #define LOCK_KEY_GPIO		67
 
@@ -3449,6 +3540,11 @@ static struct i2c_registry msm8x60_i2c_devices[] __initdata = {
 		MSM_GSBI7_QUP_I2C_BUS_ID,
 		msm_i2c_gsbi7_timpani_info,
 		ARRAY_SIZE(msm_i2c_gsbi7_timpani_info),
+	},
+	{
+		MSM_GSBI3_QUP_I2C_BUS_ID,
+		atmel_i2c_info,
+		ARRAY_SIZE(atmel_i2c_info),
 	},
 #if defined(CONFIG_MARIMBA_CORE)
 	{

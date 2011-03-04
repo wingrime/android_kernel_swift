@@ -831,7 +831,10 @@ static int handle_rmt_storage_call(struct msm_rpc_client *client,
 		rc = cb_func(event_args, xdr);
 		if (IS_ERR_VALUE(rc)) {
 			pr_err("%s: Invalid parameters received\n", __func__);
-			result = RMT_STORAGE_ERROR_PARAM;
+			if (req->procedure == RMT_STORAGE_OPEN_CB_TYPE_PROC)
+				result = 0; /* bad handle to signify err */
+			else
+				result = RMT_STORAGE_ERROR_PARAM;
 			kfree(kevent);
 			goto out;
 		}

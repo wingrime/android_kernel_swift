@@ -38,6 +38,7 @@
 #define MVS_AMR_SET_AMR_MODE_PROC 7
 #define MVS_AMR_SET_AWB_MODE_PROC 8
 #define MVS_VOC_SET_FRAME_RATE_PROC 10
+#define MVS_GSM_SET_DTX_MODE_PROC 11
 #define MVS_G729A_SET_MODE_PROC 12
 #define MVS_G711_GET_MODE_PROC 14
 #define MVS_G711_SET_MODE_PROC 15
@@ -59,6 +60,10 @@
 #define MVS_FRAME_MODE_VOC_RX 2
 #define MVS_FRAME_MODE_AMR_UL 3
 #define MVS_FRAME_MODE_AMR_DL 4
+#define MVS_FRAME_MODE_GSM_UL 5
+#define MVS_FRAME_MODE_GSM_DL 6
+#define MVS_FRAME_MODE_HR_UL 7
+#define MVS_FRAME_MODE_HR_DL 8
 #define MVS_FRAME_MODE_G711_UL 9
 #define MVS_FRAME_MODE_G711_DL 10
 #define MVS_FRAME_MODE_PCM_UL 13
@@ -191,6 +196,11 @@ struct audio_mvs_set_g711A_mode_msg {
 	uint32_t g711A_mode;
 };
 
+/* Parameters for EFR FR and HR mode */
+struct audio_mvs_set_efr_mode_msg {
+	struct rpc_request_hdr rpc_hdr;
+	uint32_t efr_mode;
+};
 
 union audio_mvs_event_data {
 	struct mvs_ev_command_type {
@@ -383,7 +393,10 @@ static int audio_mvs_setup_mode(struct audio_mvs_info_type *audio)
 		audio->frame_mode = MVS_FRAME_MODE_PCM_DL;
 		break;
 	}
-	case MVS_MODE_IS127: {
+	case MVS_MODE_IS127:
+	case MVS_MODE_IS733:
+	case MVS_MODE_4GV_NB:
+	case MVS_MODE_4GV_WB: {
 		struct audio_mvs_set_voc_mode_msg set_voc_mode_msg;
 
 		/* Set EVRC mode. */
@@ -565,6 +578,46 @@ static int audio_mvs_setup_mode(struct audio_mvs_info_type *audio)
 		} else {
 		pr_err("%s: RPC write for set g711A mode failed %d\n",
 		      __func__, rc);
+		}
+		break;
+	}
+	case MVS_MODE_EFR:
+	case MVS_MODE_FR:
+	case MVS_MODE_HR: {
+		struct audio_mvs_set_efr_mode_msg set_efr_mode_msg;
+
+		/* Set G729 mode. */
+		memset(&set_efr_mode_msg, 0, sizeof(set_efr_mode_msg));
+		set_efr_mode_msg.efr_mode = cpu_to_be32(audio->dtx_mode);
+
+		pr_debug("%s: mode of EFR, FR and HR:%d\n",
+			       __func__, set_efr_mode_msg.efr_mode);
+
+		msm_rpc_setup_req(&set_efr_mode_msg.rpc_hdr,
+				 audio->rpc_prog,
+				 audio->rpc_ver,
+				 MVS_GSM_SET_DTX_MODE_PROC);
+
+		audio->rpc_status = RPC_STATUS_FAILURE;
+		rc = msm_rpc_write(audio->rpc_endpt,
+				  &set_efr_mode_msg,
+				  sizeof(set_efr_mode_msg));
+
+		if (rc >= 0) {
+			pr_debug("%s: RPC write for set EFR, FR and HR mode done\n",
+			       __func__);
+
+			/* Save the MVS configuration information. */
+			if ((audio->mvs_mode == MVS_MODE_EFR) ||
+				(audio->mvs_mode == MVS_MODE_FR))
+				audio->frame_mode = MVS_FRAME_MODE_GSM_DL;
+			if (audio->mvs_mode == MVS_MODE_HR)
+				audio->frame_mode = MVS_FRAME_MODE_HR_DL;
+
+			rc = 0;
+		} else {
+		       pr_err("%s: RPC write for set EFR, FR and HR mode failed %d\n",
+			      __func__, rc);
 		}
 		break;
 	}
@@ -896,6 +949,13 @@ static void audio_mvs_process_rpc_request(uint32_t procedure,
 
 				pr_debug("%s: UL G711A frame_type %d\n",
 				       __func__, be32_to_cpu(*args));
+			} else if ((frame_mode == MVS_FRAME_MODE_GSM_UL) ||
+				   (frame_mode == MVS_FRAME_MODE_HR_UL)) {
+				/* Extract EFR, FR and HR frame type. */
+				buf_node->frame.frame_type = be32_to_cpu(*args);
+
+				pr_debug("%s: UL EFR,FR,HR frame_type %d\n",
+					__func__, be32_to_cpu(*args));
 			} else {
 				pr_debug("%s: UL Unknown frame mode %d\n",
 				       __func__, frame_mode);
@@ -996,6 +1056,11 @@ static void audio_mvs_process_rpc_request(uint32_t procedure,
 				      buf_node->frame.frame_type);
 				dl_reply.param2 = cpu_to_be32(audio->rate_type);
 			} else if (frame_mode == MVS_FRAME_MODE_G711A_DL) {
+				dl_reply.param1 = cpu_to_be32(
+				       buf_node->frame.frame_type);
+				dl_reply.param2 = cpu_to_be32(audio->rate_type);
+			} else if ((frame_mode == MVS_FRAME_MODE_GSM_DL) ||
+				   (frame_mode == MVS_FRAME_MODE_HR_DL)) {
 				dl_reply.param1 = cpu_to_be32(
 				       buf_node->frame.frame_type);
 				dl_reply.param2 = cpu_to_be32(audio->rate_type);

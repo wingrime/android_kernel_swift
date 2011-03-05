@@ -1078,8 +1078,6 @@ static inline void map_memory_bank0(void)
 	struct membank *bank = &mi->bank[0];
 
 #ifdef CONFIG_STRICT_MEMORY_RWX
-	printk(KERN_INFO "restricting memory access in bank 0\n");
-
 	map.pfn = bank_pfn_start(bank);
 	map.virtual = __phys_to_virt(bank_phys_start(bank));
 	map.length = (int)_text - map.virtual;
@@ -1118,6 +1116,9 @@ static void __init map_lowmem(void)
 	struct meminfo *mi = &meminfo;
 	int i;
 
+#ifdef CONFIG_STRICT_MEMORY_RWX
+	printk(KERN_INFO "mapping memory with restricted access\n");
+#endif
 	/* Map all the lowmem memory banks. */
 	map_memory_bank0();
 

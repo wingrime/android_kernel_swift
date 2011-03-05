@@ -393,7 +393,11 @@ static void map_reserved_memory(void)
 	map.pfn = (movable_reserved_start >> PAGE_SHIFT);
 	map.virtual = __phys_to_virt(movable_reserved_start);
 	map.length = movable_reserved_size;
+#ifdef CONFIG_STRICT_MEMORY_RWX
+	map.type = MT_MEMORY_RW;
+#else
 	map.type = MT_MEMORY;
+#endif
 
 	create_mapping(&map);
 }

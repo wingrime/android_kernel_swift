@@ -452,6 +452,7 @@ void vidc_1080p_get_decode_seq_start_result(
 	struct vidc_1080p_seq_hdr_info *seq_hdr_info)
 {
 	u32 dec_disp_result;
+	u32 frame = 0;
 	VIDC_HWIO_IN(REG_845544, &seq_hdr_info->img_size_y);
 	VIDC_HWIO_IN(REG_859906, &seq_hdr_info->img_size_x);
 	VIDC_HWIO_IN(REG_490078, &seq_hdr_info->min_num_dpb);
@@ -470,6 +471,8 @@ void vidc_1080p_get_decode_seq_start_result(
 	seq_hdr_info->dec_crop_exists  = VIDC_GETFIELD(dec_disp_result,
 		VIDC_1080P_SI_RG11_DECODE_CROPP_MASK,
 		VIDC_1080P_SI_RG11_DECODE_CROPP_SHIFT);
+	VIDC_HWIO_IN(REG_760102, &frame);
+	seq_hdr_info->data_partition = ((frame & 0x8) >> 3);
 }
 
 void vidc_1080p_get_decoded_frame_size(u32 *pn_decoded_size)

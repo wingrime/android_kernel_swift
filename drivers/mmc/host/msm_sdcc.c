@@ -505,7 +505,8 @@ msmsdcc_start_data(struct msmsdcc_host *host, struct mmc_data *data,
 			if (host->curr.xfer_remain < MCI_FIFOSIZE)
 				pio_irqmask |= MCI_RXDATAAVLBLMASK;
 		} else
-			pio_irqmask = MCI_TXFIFOHALFEMPTYMASK;
+			pio_irqmask = MCI_TXFIFOHALFEMPTYMASK |
+					MCI_TXFIFOEMPTYMASK;
 	}
 
 	if (data->flags & MMC_DATA_READ)
@@ -675,7 +676,8 @@ msmsdcc_pio_irq(int irq, void *dev_id)
 		unsigned int remain, len;
 		char *buffer;
 
-		if (!(status & (MCI_TXFIFOHALFEMPTY | MCI_RXDATAAVLBL)))
+		if (!(status & (MCI_TXFIFOHALFEMPTY | MCI_TXFIFOEMPTY
+				| MCI_RXDATAAVLBL)))
 			break;
 
 		/* Map the current scatter buffer */

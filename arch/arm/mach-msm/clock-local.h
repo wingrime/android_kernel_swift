@@ -225,7 +225,7 @@ int local_clk_set_min_rate(unsigned id, unsigned rate);
 int local_clk_set_max_rate(unsigned id, unsigned rate);
 unsigned local_clk_get_rate(unsigned id);
 int local_clk_list_rate(unsigned id, unsigned n);
-unsigned local_clk_is_enabled(unsigned id);
+int local_clk_is_enabled(unsigned id);
 long local_clk_round_rate(unsigned id, unsigned rate);
 
 /*

@@ -71,7 +71,7 @@ signed dummy_clk_measure_rate(unsigned id)
 	return -EPERM;
 }
 
-unsigned dummy_clk_is_enabled(unsigned id)
+int dummy_clk_is_enabled(unsigned id)
 {
 	return 0;
 }

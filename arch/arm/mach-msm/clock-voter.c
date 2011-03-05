@@ -160,7 +160,7 @@ static unsigned voter_clk_get_rate(unsigned id)
 	return rate;
 }
 
-static unsigned voter_clk_is_enabled(unsigned id)
+static int voter_clk_is_enabled(unsigned id)
 {
 	struct clk_voter *clk = &voter_clocks[id];
 	return clk->count;

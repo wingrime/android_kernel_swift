@@ -2279,6 +2279,7 @@ static ssize_t otg_mode_write(struct file *file, const char __user *buf,
 	unsigned long flags;
 
 	spin_lock_irqsave(&dev->lock, flags);
+	dev->pdata->otg_mode = OTG_USER_CONTROL;
 	if (!memcmp(buf, "none", count - 1)) {
 		clear_bit(B_SESS_VLD, &dev->inputs);
 		set_bit(ID, &dev->inputs);

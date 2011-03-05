@@ -48,6 +48,8 @@ static uint32_t rmnet_sdio_data_ch = CONFIG_RMNET_SDIO_DATA_CHANNEL;
 module_param(rmnet_sdio_data_ch, uint, S_IRUGO);
 MODULE_PARM_DESC(rmnet_sdio_data_ch, "RmNet data SDIO channel ID");
 
+#define ACM_CTRL_DTR	(1 << 0)
+
 #define SDIO_MUX_HDR           8
 #define RMNET_SDIO_NOTIFY_INTERVAL  5
 #define RMNET_SDIO_MAX_NFY_SZE  sizeof(struct usb_cdc_notification)
@@ -94,6 +96,9 @@ struct rmnet_dev {
 
 	struct delayed_work sdio_open_work;
 	atomic_t sdio_open;
+
+	int cbits_to_modem;
+	struct work_struct set_modem_ctl_bits_work;
 };
 
 static struct usb_interface_descriptor rmnet_interface_desc = {
@@ -454,6 +459,24 @@ rmnet_setup(struct usb_function *f, const struct usb_ctrlrequest *ctrl)
 			rmnet_free_qmi(resp);
 		}
 		break;
+	case ((USB_DIR_OUT | USB_TYPE_CLASS | USB_RECIP_INTERFACE) << 8)
+			| USB_CDC_REQ_SET_CONTROL_LINE_STATE:
+		/* This is a workaround for RmNet and is borrowed from the
+		 * CDC/ACM standard. The host driver will issue the above ACM
+		 * standard request to the RmNet interface in the following
+		 * scenario: Once the network adapter is disabled from device
+		 * manager, the above request will be sent from the qcusbnet
+		 * host driver, with DTR being '0'. Once network adapter is
+		 * enabled from device manager (or during enumeration), the
+		 * request will be sent with DTR being '1'.
+		 */
+		if (w_value & ACM_CTRL_DTR)
+			dev->cbits_to_modem |= TIOCM_DTR;
+		else
+			dev->cbits_to_modem &= ~TIOCM_DTR;
+		queue_work(dev->wq, &dev->set_modem_ctl_bits_work);
+
+		break;
 	default:
 
 invalid:
@@ -727,19 +750,22 @@ static void rmnet_free_buf(struct rmnet_dev *dev)
 	rmnet_free_req(dev->epnotify, dev->notify_req);
 }
 
-static void rmnet_disconnect_work(struct work_struct *w)
+static void rmnet_set_modem_ctl_bits_work(struct work_struct *w)
 {
 	struct rmnet_dev *dev;
 
-	dev = container_of(w, struct rmnet_dev, disconnect_work);
+	dev = container_of(w, struct rmnet_dev, set_modem_ctl_bits_work);
 
 	if (!atomic_read(&dev->sdio_open))
 		return;
 
-	pr_debug("%s: de-assert: DTR\n", __func__);
+	sdio_cmux_tiocmset(rmnet_sdio_ctl_ch,
+			dev->cbits_to_modem,
+			~dev->cbits_to_modem);
+}
 
-	sdio_cmux_tiocmset(rmnet_sdio_ctl_ch, 0, TIOCM_DTR);
-
+static void rmnet_disconnect_work(struct work_struct *w)
+{
 	/* REVISIT: Push all the data to sdio if anythign is pending */
 }
 
@@ -760,6 +786,8 @@ static void rmnet_disable(struct usb_function *f)
 
 	/* cleanup work */
 	queue_work(dev->wq, &dev->disconnect_work);
+	dev->cbits_to_modem = 0;
+	queue_work(dev->wq, &dev->set_modem_ctl_bits_work);
 }
 
 #define SDIO_OPEN_RETRY_DELAY	msecs_to_jiffies(2000)
@@ -982,6 +1010,7 @@ int rmnet_sdio_function_add(struct usb_configuration *c)
 	atomic_set(&dev->online, 0);
 
 	INIT_WORK(&dev->disconnect_work, rmnet_disconnect_work);
+	INIT_WORK(&dev->set_modem_ctl_bits_work, rmnet_set_modem_ctl_bits_work);
 
 	INIT_WORK(&dev->ctl_rx_work, rmnet_control_rx_work);
 	INIT_WORK(&dev->data_rx_work, rmnet_data_rx_work);

@@ -462,14 +462,14 @@ qup_update_state(struct qup_i2c_dev *dev, uint32_t state)
 	return 0;
 }
 
-static int
+static void
 qup_set_read_mode(struct qup_i2c_dev *dev, int rd_len)
 {
 	uint32_t wr_mode = (dev->wr_sz < dev->out_fifo_sz) ?
 				QUP_WR_BLK_MODE : 0;
 	if (rd_len > 256) {
-		dev_err(dev->dev, "HW doesn't support READs > 256 bytes\n");
-		return -EPROTONOSUPPORT;
+		dev_dbg(dev->dev, "HW limit: Breaking reads in chunk of 256\n");
+		rd_len = 256;
 	}
 	if (rd_len <= dev->in_fifo_sz) {
 		writel(wr_mode | QUP_PACK_EN | QUP_UNPACK_EN,
@@ -480,7 +480,6 @@ qup_set_read_mode(struct qup_i2c_dev *dev, int rd_len)
 			QUP_PACK_EN | QUP_UNPACK_EN, dev->base + QUP_IO_MODE);
 		writel(rd_len, dev->base + QUP_MX_INPUT_CNT);
 	}
-	return 0;
 }
 
 static int
@@ -502,7 +501,7 @@ qup_set_wr_mode(struct qup_i2c_dev *dev, int rem)
 		struct i2c_msg *next = dev->msg + 1;
 		if (next->addr == dev->msg->addr &&
 			next->flags == I2C_M_RD) {
-			ret = qup_set_read_mode(dev, next->len);
+			qup_set_read_mode(dev, next->len);
 			/* make sure read start & read command are in 1 blk */
 			if ((total_len % dev->out_blk_sz) ==
 				(dev->out_blk_sz - 1))
@@ -608,8 +607,7 @@ qup_i2c_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[], int num)
 	while (rem) {
 		bool filled = false;
 
-		dev->cnt = msgs->len;
-		dev->pos = 0;
+		dev->cnt = msgs->len - dev->pos;
 		dev->msg = msgs;
 
 		dev->wr_sz = dev->out_fifo_sz;
@@ -624,9 +622,9 @@ qup_i2c_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[], int num)
 		qup_print_status(dev);
 		/* HW limits Read upto 256 bytes in 1 read without stop */
 		if (dev->msg->flags & I2C_M_RD) {
-			ret = qup_set_read_mode(dev, dev->cnt);
-			if (ret != 0)
-				goto out_err;
+			qup_set_read_mode(dev, dev->cnt);
+			if (dev->cnt > 256)
+				dev->cnt = 256;
 		} else {
 			ret = qup_set_wr_mode(dev, rem);
 			if (ret != 0)
@@ -661,8 +659,7 @@ qup_i2c_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[], int num)
 			 * and decide mode
 			 */
 			while (filled == false) {
-				if ((msgs->flags & I2C_M_RD) &&
-					(dev->cnt == msgs->len))
+				if ((msgs->flags & I2C_M_RD))
 					qup_issue_read(dev, msgs, &idx,
 							carry_over);
 				else if (!(msgs->flags & I2C_M_RD))
@@ -688,6 +685,8 @@ qup_i2c_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[], int num)
 							dev->msg = msgs;
 							dev->pos = 0;
 							dev->cnt = msgs->len;
+							if (msgs->len > 256)
+								dev->cnt = 256;
 						}
 					} else
 						filled = true;
@@ -757,10 +756,15 @@ qup_i2c_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[], int num)
 				dev->cnt -= i;
 			} else
 				filled = false; /* refill output FIFO */
+			dev_dbg(dev->dev, "pos:%d, len:%d, cnt:%d\n",
+					dev->pos, msgs->len, dev->cnt);
 		} while (dev->cnt > 0);
 		if (dev->cnt == 0) {
-			rem--;
-			msgs++;
+			if (msgs->len == dev->pos) {
+				rem--;
+				msgs++;
+				dev->pos = 0;
+			}
 			if (rem) {
 				err = qup_update_state(dev, QUP_RESET_STATE);
 				if (err < 0) {
@@ -945,6 +949,7 @@ qup_i2c_probe(struct platform_device *pdev)
 	dev->one_bit_t = USEC_PER_SEC/pdata->clk_freq;
 	dev->pdata = pdata;
 	dev->clk_ctl = 0;
+	dev->pos = 0;
 
 	/*
 	 * We use num_irqs to also indicate if we got 3 interrupts or just 1.

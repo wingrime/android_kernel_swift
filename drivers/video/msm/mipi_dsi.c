@@ -100,7 +100,7 @@ static int mipi_dsi_mxo_selected(void)
 	uint32 data;
 
 	cc = (uint32 *)(mmss_cc_base + 0x004c);
-	data = MIPI_INP(cc);
+	data = MIPI_INP_SECURE(cc);
 
 	if (data & BIT(14))
 		return 1;
@@ -122,18 +122,18 @@ static void mipi_dsi_clk(int on, struct dsi_clk_desc *clk)
 	val = clk->d * 2;
 	data = (~val) & 0x0ff;
 	data |= clk->m << 8;
-	MIPI_OUTP(md, data);
+	MIPI_OUTP_SECURE(md, data);
 
 	val = clk->n - clk->m;
 	data = (~val) & 0x0ff;
 	data <<= 24;
 	data |= clk->src;
-	MIPI_OUTP(ns, data);
+	MIPI_OUTP_SECURE(ns, data);
 
 	/*
 	 * mxo, bypass, mnd_en, root_en, clk_en
 	 * */
-	MIPI_OUTP(cc, 0x0145);
+	MIPI_OUTP_SECURE(cc, 0x0145);
 }
 #else
 
@@ -147,15 +147,15 @@ static void mipi_dsi_clk(int on)
 
 	if (on) {
 		if (mipi_dsi_mxo_selected())
-			MIPI_OUTP(cc, 0x125);	/* mxo */
+			MIPI_OUTP_SECURE(cc, 0x125);	/* mxo */
 		else
-			MIPI_OUTP(cc, 0x25);	/* pxo */
+			MIPI_OUTP_SECURE(cc, 0x25);	/* pxo */
 
-		MIPI_OUTP(md, 0x1fd);
-		MIPI_OUTP(ns, 0xff000003);
+		MIPI_OUTP_SECURE(md, 0x1fd);
+		MIPI_OUTP_SECURE(ns, 0xff000003);
 
 	} else
-		MIPI_OUTP(cc, 0);
+		MIPI_OUTP_SECURE(cc, 0);
 
 	wmb();
 }
@@ -184,11 +184,11 @@ static void mipi_dsi_pclk(int on)
 	ns = mmss_cc_base + 0x0138;
 
 	if (on) {
-		MIPI_OUTP(cc, 0x2a5);
-		MIPI_OUTP(md, 0x1fb);
-		MIPI_OUTP(ns, 0xfd0003);
+		MIPI_OUTP_SECURE(cc, 0x2a5);
+		MIPI_OUTP_SECURE(md, 0x1fb);
+		MIPI_OUTP_SECURE(ns, 0xfd0003);
 	} else
-		MIPI_OUTP(cc, 0);
+		MIPI_OUTP_SECURE(cc, 0);
 
 	wmb();
 }
@@ -199,7 +199,8 @@ static void mipi_dsi_ahb_en(void)
 
 	ahb = mmss_cc_base + 0x08;
 
-	printk(KERN_INFO "%s: ahb=%x %x\n", __func__, (int) ahb, MIPI_INP(ahb));
+	printk(KERN_INFO "%s: ahb=%x %x\n",
+		__func__, (int) ahb, MIPI_INP_SECURE(ahb));
 }
 
 static void mipi_dsi_calibration(void)
@@ -605,7 +606,7 @@ static int mipi_dsi_probe(struct platform_device *pdev)
 		MSM_FB_INFO("mmss_sfpb  base phy_addr = 0x%x virt = 0x%x\n",
 				MMSS_SFPB_BASE_PHY, (int) mmss_sfpb_base);
 
-		if (!mmss_cc_base)
+		if (!mmss_sfpb_base)
 			return -ENOMEM;
 
 		rc = request_irq(DSI_IRQ, mipi_dsi_isr, IRQF_DISABLED,

@@ -749,6 +749,9 @@ static int is_user_irq_enabled(struct sdio_al_device *sdio_al_dev,
  * This function should run from a workqueue context since it
  * notifies the clients.
  *
+ * This function assumes that sdio_claim_host was called before
+ * calling it.
+ *
  */
 static int read_mailbox(struct sdio_al_device *sdio_al_dev, int from_isr)
 {
@@ -777,8 +780,6 @@ static int read_mailbox(struct sdio_al_device *sdio_al_dev, int from_isr)
 	pr_debug(MODULE_NAME ":start %s from_isr = %d for card %d.\n"
 		 , __func__, from_isr, sdio_al_dev->card->host->index);
 
-	if (!from_isr)
-		sdio_claim_host(sdio_al_dev->card->sdio_func[0]);
 	pr_debug(MODULE_NAME ":before sdio_memcpy_fromio.\n");
 	ret = sdio_memcpy_fromio(func1, mailbox,
 			HW_MAILBOX_ADDR, sizeof(*mailbox));
@@ -964,10 +965,6 @@ static int read_mailbox(struct sdio_al_device *sdio_al_dev, int from_isr)
 	pr_debug(MODULE_NAME ":end %s.\n", __func__);
 
 exit_err:
-	if (!from_isr)
-		sdio_release_host(sdio_al_dev->card->sdio_func[0]);
-
-
 	return ret;
 }
 
@@ -1168,8 +1165,8 @@ static void worker(struct work_struct *work)
 				return;
 			}
 		}
-		sdio_release_host(func1);
 		ret = read_mailbox(sdio_al_dev, false);
+		sdio_release_host(func1);
 		sdio_al_dev->ask_mbox = false;
 	}
 	pr_debug(MODULE_NAME ":Worker Exit!\n");

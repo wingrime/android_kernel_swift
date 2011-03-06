@@ -49,6 +49,7 @@
 
 #include <linux/debugfs.h>
 #include <linux/uaccess.h>
+#include <linux/syscalls.h>
 
 /**
  *  Func#0 has SDIO standard registers
@@ -146,6 +147,7 @@
 
 #define TIME_TO_WAIT_US 500
 #define SDIO_PREFIX "SDIO_"
+#define FILE_ARRAY_SIZE 350
 
 #define DATA_DEBUG(x...) if (sdio_al->debug.debug_data_on) pr_info(x)
 #define LPM_DEBUG(x...) if (sdio_al->debug.debug_lpm_on) pr_info(x)
@@ -157,6 +159,7 @@ struct sdio_al_debug {
 	struct dentry *sdio_al_debug_root;
 	struct dentry *sdio_al_debug_lpm_on;
 	struct dentry *sdio_al_debug_data_on;
+	struct dentry *sdio_al_debug_info;
 };
 
 /* Polling time for the inactivity timer for devices that doesn't have
@@ -304,7 +307,7 @@ struct peer_sdioc_boot_sw_header {
  */
 struct peer_sdioc_sw_mailbox {
 	struct peer_sdioc_sw_header sw_header;
-	struct peer_sdioc_channel_config ch_config[6];
+	struct peer_sdioc_channel_config ch_config[SDIO_AL_MAX_CHANNELS];
 };
 
 /**
@@ -386,6 +389,8 @@ struct sdio_channel {
 	int min_write_avail;
 	int poll_delay_msec;
 	int is_packet_mode;
+
+	struct peer_sdioc_channel_config ch_config;
 
 	/* Channel Info */
 	int num;
@@ -553,16 +558,36 @@ static int sdio_al_client_setup(struct sdio_al_device *sdio_al_dev);
 static int enable_mask_irq(struct sdio_al_device *sdio_al_dev,
 			   int func_num, int enable, u8 bit_offset);
 static int sdio_al_enable_func_retry(struct sdio_func *func, const char *name);
+static void sdio_al_print_info(void);
 
 #define SDIO_AL_ERR(func)					\
 	do {							\
 		printk_once(KERN_ERR MODULE_NAME		\
 			":In Error state, ignore %s\n",		\
 			func);					\
+		sdio_al_print_info();				\
 	} while (0)
 
 
 #ifdef CONFIG_DEBUG_FS
+static int debug_info_open(struct inode *inode, struct file *file)
+{
+	file->private_data = inode->i_private;
+	return 0;
+}
+
+static ssize_t debug_info_write(struct file *file,
+		const char __user *buf, size_t count, loff_t *ppos)
+{
+	sdio_al_print_info();
+	return 1;
+}
+
+const struct file_operations debug_info_ops = {
+	.open = debug_info_open,
+	.write = debug_info_write,
+};
+
 /*
 *
 * Trigger on/off for debug messages
@@ -592,8 +617,17 @@ static int sdio_al_debugfs_init(void)
 					sdio_al->debug.sdio_al_debug_root,
 					&sdio_al->debug.debug_data_on);
 
+	sdio_al->debug.sdio_al_debug_info = debugfs_create_file(
+					"sdio_debug_info",
+					S_IRUGO | S_IWUGO,
+					sdio_al->debug.sdio_al_debug_root,
+					NULL,
+					&debug_info_ops);
+
 	if ((!sdio_al->debug.sdio_al_debug_data_on) &&
-	    (!sdio_al->debug.sdio_al_debug_lpm_on)) {
+	    (!sdio_al->debug.sdio_al_debug_lpm_on) &&
+	    (!sdio_al->debug.sdio_al_debug_info)
+	    ) {
 		debugfs_remove(sdio_al->debug.sdio_al_debug_root);
 		sdio_al->debug.sdio_al_debug_root = NULL;
 		return -ENOENT;
@@ -605,6 +639,7 @@ static void sdio_al_debugfs_cleanup(void)
 {
        debugfs_remove(sdio_al->debug.sdio_al_debug_lpm_on);
        debugfs_remove(sdio_al->debug.sdio_al_debug_data_on);
+	debugfs_remove(sdio_al->debug.sdio_al_debug_info);
        debugfs_remove(sdio_al->debug.sdio_al_debug_root);
 }
 #endif
@@ -763,6 +798,7 @@ static int read_mailbox(struct sdio_al_device *sdio_al_dev, int from_isr)
 				    " goto error state\n",
 		       sdio_al_dev->card->host->index);
 		sdio_al_dev->is_err = true;
+		sdio_al_print_info();
 		/* Stop the timer to stop reading the mailbox */
 		sdio_al_dev->poll_delay_msec = 0;
 		goto exit_err;
@@ -1071,6 +1107,7 @@ static void boot_worker(struct work_struct *work)
 				sdio_al_dev->card->host->index,
 				ret);
 				sdio_al_dev->is_err = true;
+				sdio_al_print_info();
 			}
 			goto done;
 		}
@@ -1080,6 +1117,7 @@ static void boot_worker(struct work_struct *work)
 	pr_err(MODULE_NAME ":Timeout waiting for user_irq for card %d\n",
 	       sdio_al_dev->card->host->index);
 	sdio_al_dev->is_err = true;
+	sdio_al_print_info();
 
 done:
 	pr_debug(MODULE_NAME ":Boot Worker for card %d Exit!\n",
@@ -1380,7 +1418,7 @@ static int sdio_al_bootloader_setup(void)
 	/* Upper byte has to be equal - no backward compatibility for unequal */
 	if ((bootloader_dev->sdioc_boot_sw_header->version >> 16) !=
 	    (PEER_SDIOC_BOOT_VERSION_MAJOR)) {
-		pr_err(MODULE_NAME ":HOST(0x%x) and CLIENT(0x%x) BOOT "
+		pr_err(MODULE_NAME ": HOST(0x%x) and CLIENT(0x%x) SDIO_AL BOOT "
 		       "VERSION don't match\n",
 		       ((PEER_SDIOC_BOOT_VERSION_MAJOR<<16)+
 			PEER_SDIOC_BOOT_VERSION_MINOR),
@@ -1462,7 +1500,7 @@ static int read_sdioc_software_header(struct sdio_al_device *sdio_al_dev,
 	}
 	/* Upper byte has to be equal - no backward compatibility for unequal */
 	if ((header->version >> 16) != (PEER_SDIOC_VERSION_MAJOR)) {
-		pr_err(MODULE_NAME ":HOST(0x%x) and CLIENT(0x%x) "
+		pr_err(MODULE_NAME ": HOST(0x%x) and CLIENT(0x%x) SDIO_AL "
 		       "VERSION don't match\n",
 		       ((PEER_SDIOC_VERSION_MAJOR<<16)+
 			PEER_SDIOC_VERSION_MINOR),
@@ -1508,6 +1546,7 @@ static int read_sdioc_software_header(struct sdio_al_device *sdio_al_dev,
 
 exit_err:
 	sdio_al_dev->is_err = true;
+	sdio_al_print_info();
 	memset(header, 0, sizeof(*header));
 
 	return -EIO;
@@ -1548,6 +1587,8 @@ static int read_sdioc_channel_config(struct sdio_channel *ch)
 	}
 
 	ch_config = &sw_mailbox->ch_config[ch->num];
+	memcpy(&ch->ch_config, ch_config,
+		sizeof(struct peer_sdioc_channel_config));
 
 	if (!ch_config->is_ready) {
 		pr_err(MODULE_NAME ":sw mailbox channel not ready.\n");
@@ -1978,6 +2019,7 @@ static int sdio_al_wake_up(struct sdio_al_device *sdio_al_dev,
 			ret = -EIO;
 			WARN_ON(ret);
 			sdio_al_dev->is_err = true;
+			sdio_al_print_info();
 			return ret;
 		}
 	}
@@ -3044,6 +3086,303 @@ static int sdio_al_sdio_resume(struct device *dev)
 	sdio_release_host(sdio_al_dev->card->sdio_func[0]);
 
 	return 0;
+}
+
+static void write_to_debug_file(int fd, char *buf, int size)
+{
+	if (fd >= 0) {
+		sys_write(fd, buf, size);
+		memset(buf, 0, size);
+	}
+}
+
+static void sdio_print_mailbox(struct sdio_mailbox *mailbox,
+				int fd,
+				char *buf,
+				int size)
+{
+	int k = 0;
+
+	snprintf(buf,
+		 FILE_ARRAY_SIZE,
+		 "\n" MODULE_NAME ": eot_pipe(0_7)=%d, eot_pipe(8_15)=%d"
+		 "\n" MODULE_NAME ": thresh_above_limit_pipe(0_7)=%d, "
+		 "thresh_above_limit_pipe(8_15)=%d"
+		 "\n" MODULE_NAME ": overflow_pipe(0_7)=%d, "
+		 "overflow_pipe(8_15)=%d"
+		 "\n" MODULE_NAME ": underflow_pipe(0_7)=%d, "
+		 "underflow_pipe(8_15)=%d"
+		 "\n" MODULE_NAME ": mask_thresh_above_limit_pipe(0_7)=%d, "
+		 "mask_thresh_above_limit_pipe(8_15)=%d",
+		 mailbox->eot_pipe_0_7,
+		 mailbox->eot_pipe_8_15,
+		 mailbox->thresh_above_limit_pipe_0_7,
+		 mailbox->thresh_above_limit_pipe_8_15,
+		 mailbox->overflow_pipe_0_7,
+		 mailbox->overflow_pipe_8_15,
+		 mailbox->underflow_pipe_0_7,
+		 mailbox->underflow_pipe_8_15,
+		 mailbox->mask_thresh_above_limit_pipe_0_7,
+		 mailbox->mask_thresh_above_limit_pipe_8_15);
+	pr_info("%s", buf);
+	write_to_debug_file(fd, buf, FILE_ARRAY_SIZE);
+
+	 snprintf(buf, FILE_ARRAY_SIZE,
+		 "\n\n" MODULE_NAME ": pipe_bytes_avail per channel:");
+	 pr_info("%s", buf);
+	 write_to_debug_file(fd, buf, FILE_ARRAY_SIZE);
+
+	 for (k = 0 ; k < SDIO_AL_MAX_PIPES ; ++k) {
+		snprintf(buf, FILE_ARRAY_SIZE,
+			 "\n" MODULE_NAME ": pipe_bytes_avail in pipe#%d = %d",
+			 k, mailbox->pipe_bytes_avail[k]);
+		pr_info("%s", buf);
+		write_to_debug_file(fd, buf, FILE_ARRAY_SIZE);
+	 }
+}
+
+static void sdio_al_print_info(void)
+{
+	int i = 0;
+	int j = 0;
+	int ret = 0;
+	struct list_head *pos;
+	struct rx_packet_size *p = NULL;
+	struct sdio_mailbox *mailbox = NULL;
+	struct sdio_mailbox *hw_mailbox = NULL;
+	struct peer_sdioc_channel_config *ch_config = NULL;
+	struct sdio_func *func1 = NULL;
+	struct sdio_func *lpm_func = NULL;
+	static int fd;
+	char *buf = NULL;
+	int offset = 0;
+	int is_ok_to_sleep = 0;
+	static atomic_t first_time;
+
+	if (atomic_read(&first_time) == 1)
+		return;
+
+	atomic_set(&first_time, 1);
+
+	pr_info(MODULE_NAME ": %s - SDIO DEBUG INFO\n", __func__);
+
+	buf = kzalloc(FILE_ARRAY_SIZE, GFP_KERNEL);
+	if (!buf) {
+		pr_err(MODULE_NAME ": couldn't allocate buffer");
+		return;
+	}
+
+	set_fs(KERNEL_DS);
+	fd = sys_open("/data/local/tmp/sdio_debug_info_text.txt",
+		      O_WRONLY | O_CREAT, 0644);
+	if (fd < 0) {
+		pr_err(MODULE_NAME ": %s - Fail to Open or Create "
+			"the file /data/local/tmp/sdio_debug_info_text.txt. "
+			"fd=%d", __func__, fd);
+	}
+
+	if (!sdio_al) {
+		snprintf(buf, FILE_ARRAY_SIZE,
+			"\n" MODULE_NAME ": %s - ERROR - sdio_al is NULL\n",
+			 __func__);
+		pr_info("%s", buf);
+		write_to_debug_file(fd, buf, FILE_ARRAY_SIZE);
+		kfree(buf);
+		return;
+	}
+
+	snprintf(buf, FILE_ARRAY_SIZE,
+		 "\n" MODULE_NAME ": GPIO mdm2ap_status=%d\n",
+		sdio_al->pdata->get_mdm2ap_status());
+	pr_info("%s", buf);
+	write_to_debug_file(fd, buf, FILE_ARRAY_SIZE);
+
+	for (j = 0 ; j < MAX_NUM_OF_SDIO_DEVICES ; ++j) {
+		struct sdio_al_device *sdio_al_dev = sdio_al->devices[j];
+
+		if (sdio_al_dev == NULL) {
+			snprintf(buf, FILE_ARRAY_SIZE,
+				 "\n" MODULE_NAME ": Device#%d, is NULL", j);
+			pr_info("%s", buf);
+			write_to_debug_file(fd, buf, FILE_ARRAY_SIZE);
+
+			continue;
+		}
+
+		snprintf(buf, FILE_ARRAY_SIZE,
+			 "\n" MODULE_NAME ": Device#%d - "
+			 "Shadowing HW Mailbox\n", j);
+		pr_info("%s", buf);
+		write_to_debug_file(fd, buf, FILE_ARRAY_SIZE);
+
+		/* printing Shadowing HW Mailbox*/
+		mailbox = sdio_al_dev->mailbox;
+		sdio_print_mailbox(mailbox, fd, buf, FILE_ARRAY_SIZE);
+
+		/* printing Shadowing SW Mailbox per channel*/
+		for (i = 0 ; i < SDIO_AL_MAX_CHANNELS ; ++i) {
+			struct sdio_channel *ch = &sdio_al_dev->channel[i];
+
+			if (ch == NULL) {
+				snprintf(buf, FILE_ARRAY_SIZE,
+					 "\n\n" MODULE_NAME
+					 ": Device#%d, Channel#%d %s is NULL",
+					 j, i, ch->name);
+				pr_info("%s", buf);
+				write_to_debug_file(fd, buf, FILE_ARRAY_SIZE);
+
+				continue;
+			}
+
+			if (!ch->is_valid) {
+				snprintf(buf, FILE_ARRAY_SIZE,
+					 "\n" MODULE_NAME
+					 ": Channel#%d %s is NOT VALID",
+					 i, ch->name);
+				pr_info("%s", buf);
+				write_to_debug_file(fd, buf, FILE_ARRAY_SIZE);
+				continue;
+			}
+
+			snprintf(buf, FILE_ARRAY_SIZE,
+				 "\n\n" MODULE_NAME ": Channel #%d %s: "
+				 "Shadowing SW Mailbox -",
+				 i, ch->name);
+			pr_info("%s", buf);
+			write_to_debug_file(fd, buf, FILE_ARRAY_SIZE);
+			ch_config = &sdio_al_dev->channel[i].ch_config;
+
+			/* Printing SW Mailbox Per Channel */
+			snprintf(buf, FILE_ARRAY_SIZE,
+				 "\n" MODULE_NAME ": max_rx_threshold=%d, "
+				 "max_tx_threshold=%d, tx_buf_size=%d"
+				 "\n" MODULE_NAME ": is_packet_mode=%d, "
+				 "max_packet_size=%d",
+				 ch_config->max_rx_threshold,
+				 ch_config->max_tx_threshold,
+				 ch_config->tx_buf_size,
+				 ch_config->is_packet_mode,
+				 ch_config->max_packet_size);
+			pr_info("%s", buf);
+			write_to_debug_file(fd, buf, FILE_ARRAY_SIZE);
+
+			if (!ch->is_open) {
+				snprintf(buf, FILE_ARRAY_SIZE,
+					 "\n" MODULE_NAME
+					 ": %s is VALID but NOT OPEN",
+					 ch->name);
+				pr_info("%s", buf);
+				write_to_debug_file(fd, buf, FILE_ARRAY_SIZE);
+
+				continue;
+			}
+
+			/* Printing Channel Counters */
+			snprintf(buf, FILE_ARRAY_SIZE,
+				 "\n" MODULE_NAME ": total_rx_bytes = %d, "
+				 "total_tx_bytes = %d"
+				 "\n" MODULE_NAME ": read_avail = %d, "
+				 "write_avail = %d, rx_pending_bytes=%d",
+				 ch->total_rx_bytes, ch->total_tx_bytes,
+				 ch->read_avail, ch->write_avail,
+				 ch->rx_pending_bytes);
+			pr_info("%s", buf);
+			write_to_debug_file(fd, buf, FILE_ARRAY_SIZE);
+
+			list_for_each(pos, &(ch->rx_size_list_head)) {
+				p = list_entry(pos,
+						struct rx_packet_size, list);
+				pr_info(MODULE_NAME ": size=%d\n", p->size);
+			}
+		} /* end loop over all channels */
+
+		if (fd >= 0)
+			sys_write(fd, "\n\n\n", sizeof("\n\n\n"));
+
+	} /* end loop over all devices */
+
+	/* reading from client and printing is_host_ok_to_sleep per device */
+	for (j = 0 ; j < MAX_NUM_OF_SDIO_DEVICES ; ++j) {
+		struct sdio_al_device *sdio_al_dev = sdio_al->devices[j];
+
+		if (sdio_al_dev == NULL)
+			continue;
+
+		offset = offsetof(struct peer_sdioc_sw_mailbox, ch_config)+
+		sizeof(struct peer_sdioc_channel_config) *
+		sdio_al_dev->lpm_chan+
+		offsetof(struct peer_sdioc_channel_config, is_host_ok_to_sleep);
+
+		func1 = sdio_al_dev->card->sdio_func[0];
+		lpm_func = sdio_al_dev->card->sdio_func[sdio_al_dev->
+								lpm_chan+1];
+		sdio_claim_host(func1);
+		ret  =  sdio_memcpy_fromio(lpm_func,
+					    &is_ok_to_sleep,
+					    SDIOC_SW_MAILBOX_ADDR+offset,
+					    sizeof(int));
+		sdio_release_host(func1);
+
+		if (ret) {
+			snprintf(buf, FILE_ARRAY_SIZE,
+				 "\n" MODULE_NAME ": %s - fail to read "
+				 "is_ok_to_sleep from mailbox.", __func__);
+			pr_info("%s", buf);
+			write_to_debug_file(fd, buf, FILE_ARRAY_SIZE);
+		}
+
+		snprintf(buf, FILE_ARRAY_SIZE,
+			 "\n" MODULE_NAME ": Device#%d - is_ok_to_sleep=%d\n",
+			 j, is_ok_to_sleep);
+		pr_info("%s", buf);
+		write_to_debug_file(fd, buf, FILE_ARRAY_SIZE);
+	}
+
+	for (j = 0 ; j < MAX_NUM_OF_SDIO_DEVICES ; ++j) {
+		struct sdio_al_device *sdio_al_dev = sdio_al->devices[j];
+
+		if (sdio_al_dev == NULL)
+			continue;
+
+		snprintf(buf, FILE_ARRAY_SIZE,
+			 "\n" MODULE_NAME ": Device#%d\n", j);
+		pr_info("%s", buf);
+		write_to_debug_file(fd, buf, FILE_ARRAY_SIZE);
+
+		/* Reading HW Mailbox */
+		func1 = sdio_al_dev->card->sdio_func[0];
+		hw_mailbox = sdio_al_dev->mailbox;
+
+		sdio_claim_host(func1);
+		ret = sdio_memcpy_fromio(func1, hw_mailbox,
+			HW_MAILBOX_ADDR, sizeof(*hw_mailbox));
+		sdio_release_host(func1);
+
+		if (ret) {
+			snprintf(buf, FILE_ARRAY_SIZE,
+				 "\n" MODULE_NAME ": %s - fail to read "
+				 "mailbox.\n", __func__);
+			pr_err("%s", buf);
+			write_to_debug_file(fd, buf, FILE_ARRAY_SIZE);
+
+			continue;
+		}
+
+		snprintf(buf,
+			FILE_ARRAY_SIZE,
+			"\n" MODULE_NAME ": Device#%d - Current HW Mailbox:",
+			 j);
+		pr_info("%s", buf);
+		write_to_debug_file(fd, buf, FILE_ARRAY_SIZE);
+
+		/* Printing HW Mailbox */
+		sdio_print_mailbox(hw_mailbox, fd, buf, FILE_ARRAY_SIZE);
+
+	}
+
+	if (fd >= 0)
+		sys_close(fd);
+	kfree(buf);
 }
 
 static struct sdio_device_id sdio_al_sdioid[] = {

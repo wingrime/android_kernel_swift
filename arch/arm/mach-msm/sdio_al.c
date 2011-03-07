@@ -2072,26 +2072,15 @@ static int sdio_al_wake_up(struct sdio_al_device *sdio_al_dev,
  */
 static void sdio_func_irq(struct sdio_func *func)
 {
-	struct sdio_al_device *sdio_al_dev = NULL;
-	int i;
+	struct sdio_al_device *sdio_al_dev = sdio_get_drvdata(func);
 
 	pr_debug(MODULE_NAME ":start %s.\n", __func__);
 
-	/* Find the sdio_al_device of this function */
-	for (i = 0; i < MAX_NUM_OF_SDIO_DEVICES; ++i) {
-		if (sdio_al->devices[i] == NULL)
-			continue;
-		if (sdio_al->devices[i]->card == func->card) {
-			sdio_al_dev = sdio_al->devices[i];
-			break;
-		}
-	}
 	if (sdio_al_dev == NULL) {
 		pr_err(MODULE_NAME ": NULL sdio_al_dev for card %d\n",
 				 func->card->host->index);
 		return;
 	}
-
 
 	if (sdio_al_dev->is_ok_to_sleep)
 		sdio_al_wake_up(sdio_al_dev, 0);

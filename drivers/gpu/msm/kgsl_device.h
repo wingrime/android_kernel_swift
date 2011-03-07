@@ -135,6 +135,8 @@ struct kgsl_memregion {
 struct kgsl_device {
 	struct device *dev;
 	const char *name;
+	unsigned int ver_major;
+	unsigned int ver_minor;
 	uint32_t       flags;
 	enum kgsl_deviceid    id;
 	unsigned int      chip_id;

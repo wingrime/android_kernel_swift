@@ -729,6 +729,7 @@ uint8_t *kgsl_sharedmem_convertaddr(struct kgsl_device *device,
 static long kgsl_ioctl_device_getproperty(struct kgsl_device_private *dev_priv,
 					 void __user *arg)
 {
+
 	int result = 0;
 	struct kgsl_device_getproperty param;
 
@@ -736,9 +737,32 @@ static long kgsl_ioctl_device_getproperty(struct kgsl_device_private *dev_priv,
 		result = -EFAULT;
 		goto done;
 	}
-	result = dev_priv->device->ftbl.device_getproperty(dev_priv->device,
-					 param.type,
-					 param.value, param.sizebytes);
+
+	switch (param.type) {
+	case KGSL_PROP_VERSION:
+	{
+		struct kgsl_version version;
+		if (param.sizebytes != sizeof(version)) {
+			result = -EINVAL;
+			break;
+		}
+
+		version.drv_major = KGSL_VERSION_MAJOR;
+		version.drv_minor = KGSL_VERSION_MINOR;
+		version.dev_major = dev_priv->device->ver_major;
+		version.dev_minor = dev_priv->device->ver_minor;
+
+		if (copy_to_user(param.value, &version, sizeof(version)))
+			result = -EFAULT;
+
+		break;
+	}
+	default:
+		result = dev_priv->device->ftbl.device_getproperty(
+					dev_priv->device, param.type,
+					param.value, param.sizebytes);
+	}
+
 done:
 	return result;
 }

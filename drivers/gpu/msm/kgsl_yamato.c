@@ -40,6 +40,9 @@
 
 #include "yamato_reg.h"
 
+#define DRIVER_VERSION_MAJOR   3
+#define DRIVER_VERSION_MINOR   1
+
 #define GSL_RBBM_INT_MASK \
 	 (RBBM_INT_CNTL__RDERR_INT_MASK |  \
 	  RBBM_INT_CNTL__DISPLAY_UPDATE_INT_MASK)
@@ -84,6 +87,8 @@ static struct kgsl_yamato_device yamato_device = {
 	.dev = {
 		.name = "kgsl-3d0",
 		.id = KGSL_DEVICE_YAMATO,
+		.ver_major = DRIVER_VERSION_MAJOR,
+		.ver_minor = DRIVER_VERSION_MINOR,
 		.mmu = {
 			.config = YAMATO_MMU_CONFIG,
 			/* turn off memory protection unit by setting

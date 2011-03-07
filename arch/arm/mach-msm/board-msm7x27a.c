@@ -27,6 +27,7 @@
 #include "timer.h"
 #include <linux/mtd/nand.h>
 #include <linux/mtd/partitions.h>
+#include <asm/mach/mmc.h>
 
 #define MSM_EBI2_PHYS 0xa0d00000
 
@@ -49,6 +50,72 @@ static struct platform_device smc91x_device = {
 	.num_resources  = ARRAY_SIZE(smc91x_resources),
 	.resource       = smc91x_resources,
 };
+
+#ifdef CONFIG_MMC_MSM_SDC1_SUPPORT
+static struct mmc_platform_data sdc1_plat_data = {
+	.ocr_mask	= MMC_VDD_28_29,
+	.mmc_bus_width  = MMC_CAP_4_BIT_DATA,
+	.msmsdcc_fmin	= 144000,
+	.msmsdcc_fmid	= 24576000,
+	.msmsdcc_fmax	= 49152000,
+};
+#endif
+
+#ifdef CONFIG_MMC_MSM_SDC2_SUPPORT
+static struct mmc_platform_data sdc2_plat_data = {
+	.ocr_mask	= MMC_VDD_28_29,
+	.mmc_bus_width  = MMC_CAP_4_BIT_DATA,
+#ifdef CONFIG_MMC_MSM_SDIO_SUPPORT
+	.sdiowakeup_irq = MSM_GPIO_TO_INT(66),
+#endif
+	.msmsdcc_fmin	= 144000,
+	.msmsdcc_fmid	= 24576000,
+	.msmsdcc_fmax	= 49152000,
+	.nonremovable	= 1,
+};
+#endif
+
+#ifdef CONFIG_MMC_MSM_SDC3_SUPPORT
+static struct mmc_platform_data sdc3_plat_data = {
+	.ocr_mask	= MMC_VDD_28_29,
+#ifdef CONFIG_MMC_MSM_SDC3_8_BIT_SUPPORT
+	.mmc_bus_width  = MMC_CAP_8_BIT_DATA,
+#else
+	.mmc_bus_width  = MMC_CAP_4_BIT_DATA,
+#endif
+	.msmsdcc_fmin	= 144000,
+	.msmsdcc_fmid	= 24576000,
+	.msmsdcc_fmax	= 49152000,
+};
+#endif
+
+#if (defined(CONFIG_MMC_MSM_SDC4_SUPPORT)\
+		&& !defined(CONFIG_MMC_MSM_SDC3_8_BIT_SUPPORT))
+static struct mmc_platform_data sdc4_plat_data = {
+	.ocr_mask	= MMC_VDD_28_29,
+	.mmc_bus_width  = MMC_CAP_4_BIT_DATA,
+	.msmsdcc_fmin	= 144000,
+	.msmsdcc_fmid	= 24576000,
+	.msmsdcc_fmax	= 49152000,
+};
+#endif
+
+static void __init msm7x27a_init_mmc(void)
+{
+#ifdef CONFIG_MMC_MSM_SDC1_SUPPORT
+	msm_add_sdcc(1, &sdc1_plat_data);
+#endif
+#ifdef CONFIG_MMC_MSM_SDC2_SUPPORT
+	msm_add_sdcc(2, &sdc2_plat_data);
+#endif
+#ifdef CONFIG_MMC_MSM_SDC3_SUPPORT
+	msm_add_sdcc(3, &sdc3_plat_data);
+#endif
+#if (defined(CONFIG_MMC_MSM_SDC4_SUPPORT)\
+		&& !defined(CONFIG_MMC_MSM_SDC3_8_BIT_SUPPORT))
+	msm_add_sdcc(4, &sdc4_plat_data);
+#endif
+}
 
 static struct platform_device *rumi_sim_devices[] __initdata = {
 	&msm_device_dmov,
@@ -87,6 +154,7 @@ static void __init msm7x2x_init(void)
 		msm7x27a_init_ebi2();
 		platform_add_devices(rumi_sim_devices,
 				ARRAY_SIZE(rumi_sim_devices));
+		msm7x27a_init_mmc();
 	}
 	msm_clock_init(msm_clocks_7x27a, msm_num_clocks_7x27a);
 }

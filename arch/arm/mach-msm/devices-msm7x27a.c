@@ -22,6 +22,7 @@
 #include <mach/board.h>
 #include <mach/dma.h>
 #include <asm/mach/flash.h>
+#include <asm/mach/mmc.h>
 
 #include "clock.h"
 #include "clock-dummy.h"
@@ -90,6 +91,141 @@ struct platform_device msm_device_nand = {
 		.platform_data	= &msm_nand_data,
 	},
 };
+
+#define MSM_SDC1_BASE         0xA0400000
+#define MSM_SDC2_BASE         0xA0500000
+#define MSM_SDC3_BASE         0xA0600000
+#define MSM_SDC4_BASE         0xA0700000
+static struct resource resources_sdc1[] = {
+	{
+		.start	= MSM_SDC1_BASE,
+		.end	= MSM_SDC1_BASE + SZ_4K - 1,
+		.flags	= IORESOURCE_MEM,
+	},
+	{
+		.start	= INT_SDC1_0,
+		.end	= INT_SDC1_1,
+		.flags	= IORESOURCE_IRQ,
+	},
+	{
+		.start	= 8,
+		.end	= 8,
+		.flags	= IORESOURCE_DMA,
+	},
+};
+
+static struct resource resources_sdc2[] = {
+	{
+		.start	= MSM_SDC2_BASE,
+		.end	= MSM_SDC2_BASE + SZ_4K - 1,
+		.flags	= IORESOURCE_MEM,
+	},
+	{
+		.start	= INT_SDC2_0,
+		.end	= INT_SDC2_1,
+		.flags	= IORESOURCE_IRQ,
+	},
+	{
+		.start	= 8,
+		.end	= 8,
+		.flags	= IORESOURCE_DMA,
+	},
+};
+
+static struct resource resources_sdc3[] = {
+	{
+		.start	= MSM_SDC3_BASE,
+		.end	= MSM_SDC3_BASE + SZ_4K - 1,
+		.flags	= IORESOURCE_MEM,
+	},
+	{
+		.start	= INT_SDC3_0,
+		.end	= INT_SDC3_1,
+		.flags	= IORESOURCE_IRQ,
+	},
+	{
+		.start	= 8,
+		.end	= 8,
+		.flags	= IORESOURCE_DMA,
+	},
+};
+
+static struct resource resources_sdc4[] = {
+	{
+		.start	= MSM_SDC4_BASE,
+		.end	= MSM_SDC4_BASE + SZ_4K - 1,
+		.flags	= IORESOURCE_MEM,
+	},
+	{
+		.start	= INT_SDC4_0,
+		.end	= INT_SDC4_1,
+		.flags	= IORESOURCE_IRQ,
+	},
+	{
+		.start	= 8,
+		.end	= 8,
+		.flags	= IORESOURCE_DMA,
+	},
+};
+
+struct platform_device msm_device_sdc1 = {
+	.name		= "msm_sdcc",
+	.id		= 1,
+	.num_resources	= ARRAY_SIZE(resources_sdc1),
+	.resource	= resources_sdc1,
+	.dev		= {
+		.coherent_dma_mask	= 0xffffffff,
+	},
+};
+
+struct platform_device msm_device_sdc2 = {
+	.name		= "msm_sdcc",
+	.id		= 2,
+	.num_resources	= ARRAY_SIZE(resources_sdc2),
+	.resource	= resources_sdc2,
+	.dev		= {
+		.coherent_dma_mask	= 0xffffffff,
+	},
+};
+
+struct platform_device msm_device_sdc3 = {
+	.name		= "msm_sdcc",
+	.id		= 3,
+	.num_resources	= ARRAY_SIZE(resources_sdc3),
+	.resource	= resources_sdc3,
+	.dev		= {
+		.coherent_dma_mask	= 0xffffffff,
+	},
+};
+
+struct platform_device msm_device_sdc4 = {
+	.name		= "msm_sdcc",
+	.id		= 4,
+	.num_resources	= ARRAY_SIZE(resources_sdc4),
+	.resource	= resources_sdc4,
+	.dev		= {
+		.coherent_dma_mask	= 0xffffffff,
+	},
+};
+
+static struct platform_device *msm_sdcc_devices[] __initdata = {
+	&msm_device_sdc1,
+	&msm_device_sdc2,
+	&msm_device_sdc3,
+	&msm_device_sdc4,
+};
+
+int __init msm_add_sdcc(unsigned int controller, struct mmc_platform_data *plat)
+{
+	struct platform_device	*pdev;
+
+	if (controller < 1 || controller > 4)
+		return -EINVAL;
+
+	pdev = msm_sdcc_devices[controller-1];
+	pdev->dev.platform_data = plat;
+	return platform_device_register(pdev);
+}
 
 struct clk_lookup msm_clocks_7x27a[] = {
 	CLK_DUMMY("adm_clk",	ADM_CLK,	NULL, 0),

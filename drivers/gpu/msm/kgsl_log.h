@@ -37,7 +37,7 @@ extern unsigned int kgsl_pwr_log;
 extern unsigned int kgsl_cff_dump_enable;
 
 struct device *kgsl_driver_getdevnode(void);
-int kgsl_debug_init(void);
+int kgsl_debug_init(struct dentry *);
 
 #define KGSL_LOG_VDBG(lvl, fmt, args...) \
 	do { \

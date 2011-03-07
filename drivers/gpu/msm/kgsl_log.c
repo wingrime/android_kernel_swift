@@ -497,36 +497,13 @@ static const struct file_operations kgsl_mh_debug_fops = {
 	.read = kgsl_mh_debug_read,
 };
 
-static ssize_t kgsl_dump_write(struct file *file, const char __user *buff,
-			       size_t count, loff_t *ppos)
-{
-	struct kgsl_device *device = file->private_data;
-
-	if (count > 0) {
-		mutex_lock(&device->mutex);
-		/* Trigger a manual dump */
-		kgsl_postmortem_dump(device, 1);
-		mutex_unlock(&device->mutex);
-	}
-
-	return count;
-}
-
-static const struct file_operations kgsl_dump_fops = {
-	.open = kgsl_dbgfs_open,
-	.release = kgsl_dbgfs_release,
-	.read = NULL,
-	.write = kgsl_dump_write,
-};
-
 #endif /* CONFIG_DEBUG_FS */
 
 #ifdef CONFIG_DEBUG_FS
 int kgsl_yamato_debugfs_init(struct kgsl_device *device)
 {
-	device->d_debugfs = debugfs_create_dir(device->name, kgsl_debugfs_dir);
-	if (IS_ERR(device->d_debugfs))
-		return PTR_ERR(device->d_debugfs);
+	if (!device->d_debugfs || IS_ERR(device->d_debugfs))
+		return 0;
 
 	debugfs_create_file("ib_dump",  0600, device->d_debugfs, device,
 			    &kgsl_ib_dump_fops);
@@ -540,8 +517,7 @@ int kgsl_yamato_debugfs_init(struct kgsl_device *device)
 			    &kgsl_mh_debug_fops);
 	debugfs_create_file("cff_dump", 0644, device->d_debugfs, device,
 			    &kgsl_cff_dump_enable_fops);
-	debugfs_create_file("dump",  0600, device->d_debugfs, device,
-			    &kgsl_dump_fops);
+
 	return 0;
 }
 #else
@@ -552,32 +528,31 @@ int kgsl_yamato_debugfs_init(struct kgsl_device *device)
 #endif
 
 #ifdef CONFIG_DEBUG_FS
-int kgsl_debug_init(void)
+int kgsl_debug_init(struct dentry *dir)
 {
-	kgsl_debugfs_dir = debugfs_create_dir("kgsl", 0);
-	if (IS_ERR(kgsl_debugfs_dir))
+	if (!dir || IS_ERR(dir))
 		return 0;
 
-	debugfs_create_file("log_level_cmd", 0644, kgsl_debugfs_dir, 0,
+	debugfs_create_file("log_level_cmd", 0644, dir, 0,
 				&kgsl_cmd_log_fops);
-	debugfs_create_file("log_level_ctxt", 0644, kgsl_debugfs_dir, 0,
+	debugfs_create_file("log_level_ctxt", 0644, dir, 0,
 				&kgsl_ctxt_log_fops);
-	debugfs_create_file("log_level_drv", 0644, kgsl_debugfs_dir, 0,
+	debugfs_create_file("log_level_drv", 0644, dir, 0,
 				&kgsl_drv_log_fops);
-	debugfs_create_file("log_level_mem", 0644, kgsl_debugfs_dir, 0,
+	debugfs_create_file("log_level_mem", 0644, dir, 0,
 				&kgsl_mem_log_fops);
-	debugfs_create_file("log_level_pwr", 0644, kgsl_debugfs_dir, 0,
+	debugfs_create_file("log_level_pwr", 0644, dir, 0,
 				&kgsl_pwr_log_fops);
 
 #ifdef CONFIG_MSM_KGSL_MMU
-	debugfs_create_file("cache_enable", 0644, kgsl_debugfs_dir, 0,
+	debugfs_create_file("cache_enable", 0644, dir, 0,
 				&kgsl_cache_enable_fops);
 #endif
 
 	return 0;
 }
 #else
-int kgsl_debug_init(void)
+int kgsl_debug_init(struct dentry *dir)
 {
 	return 0;
 }

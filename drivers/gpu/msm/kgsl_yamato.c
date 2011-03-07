@@ -733,6 +733,7 @@ kgsl_yamato_init(struct platform_device *pdev)
 	if (status != 0)
 		goto error_close_rb;
 
+	kgsl_postmortem_init(device);
 	kgsl_yamato_debugfs_init(device);
 
 	device->flags &= ~KGSL_FLAGS_SOFT_RESET;

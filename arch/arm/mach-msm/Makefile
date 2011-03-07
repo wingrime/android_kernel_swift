@@ -66,8 +66,9 @@ ifndef CONFIG_ARCH_MSM7X27A
 endif
 ifndef CONFIG_ARCH_MSM8X60
 ifndef CONFIG_ARCH_MSM7X27A
-	obj-$(CONFIG_MSM_SMD) += pmic.o nand_partitions.o
+	obj-$(CONFIG_MSM_SMD) += pmic.o
 endif
+	obj-$(CONFIG_MSM_SMD) += nand_partitions.o
 	obj-$(CONFIG_MSM_ONCRPCROUTER) += rpc_hsusb.o rpc_pmapp.o rpc_fsusb.o
 endif
 obj-$(CONFIG_MSM_SMD_TTY) += smd_tty.o

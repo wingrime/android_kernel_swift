@@ -712,16 +712,16 @@ msmsdcc_pio_read(struct msmsdcc_host *host, char *buffer, unsigned int remain)
 
 static int
 msmsdcc_pio_write(struct msmsdcc_host *host, char *buffer,
-		  unsigned int remain, u32 status)
+		  unsigned int remain)
 {
 	void __iomem *base = host->base;
 	char *ptr = buffer;
+	unsigned int maxcnt = MCI_FIFOHALFSIZE;
 
-	do {
-		unsigned int count, maxcnt, sz;
+	while (readl(base + MMCISTATUS) &
+		(MCI_TXFIFOEMPTY | MCI_TXFIFOHALFEMPTY)) {
+		unsigned int count, sz;
 
-		maxcnt = status & MCI_TXFIFOEMPTY ? MCI_FIFOSIZE :
-						    MCI_FIFOHALFSIZE;
 		count = min(remain, maxcnt);
 
 		sz = count % 4 ? (count >> 2) + 1 : (count >> 2);
@@ -731,9 +731,7 @@ msmsdcc_pio_write(struct msmsdcc_host *host, char *buffer,
 
 		if (remain == 0)
 			break;
-
-		status = readl(base + MMCISTATUS);
-	} while (status & MCI_TXFIFOHALFEMPTY);
+	}
 
 	return ptr - buffer;
 }
@@ -788,7 +786,7 @@ msmsdcc_pio_irq(int irq, void *dev_id)
 		if (status & MCI_RXACTIVE)
 			len = msmsdcc_pio_read(host, buffer, remain);
 		if (status & MCI_TXACTIVE)
-			len = msmsdcc_pio_write(host, buffer, remain, status);
+			len = msmsdcc_pio_write(host, buffer, remain);
 
 /*LGE_CHANGE_S, [jisung.yang@lge.com], 2010-04-24, when PIO_irq, delay is given */ 
 #if defined(CONFIG_LGE_BCM432X_PATCH)

@@ -264,140 +264,113 @@ static unsigned int *kgsl_ringbuffer_allocspace(struct kgsl_ringbuffer *rb,
 	return ptr;
 }
 
+static int _load_firmware(struct kgsl_device *device, const char *fwfile,
+			  void **data, int *len)
+{
+	const struct firmware *fw = NULL;
+	int ret;
+
+	ret = request_firmware(&fw, fwfile, device->dev);
+
+	if (ret) {
+		KGSL_DRV_ERR("request_firmware(%s) failed: %d\n",
+			     fwfile, ret);
+		return ret;
+	}
+
+	*data = kmalloc(fw->size, GFP_KERNEL);
+
+	if (*data) {
+		memcpy(*data, fw->data, fw->size);
+		*len = fw->size;
+	} else
+		KGSL_MEM_ERR("kmalloc(%d) failed\n", fw->size);
+
+	release_firmware(fw);
+	return (*data != NULL) ? 0 : -ENOMEM;
+}
+
 static int kgsl_ringbuffer_load_pm4_ucode(struct kgsl_device *device)
 {
-	int status = 0;
-	int i;
-	const struct firmware *fw = NULL;
-	unsigned int *fw_ptr = NULL;
-	size_t fw_word_size = 0;
 	struct kgsl_yamato_device *yamato_device = KGSL_YAMATO_DEVICE(device);
+	const char *fwfile;
+	int i, ret = 0;
+
+	if (device->chip_id == KGSL_CHIPID_LEIA_REV470)
+		fwfile =  LEIA_PM4_470_FW;
+	else
+		fwfile =  YAMATO_PM4_FW;
+
 	if (yamato_device->pm4_fw == NULL) {
-		if (device->chip_id == KGSL_CHIPID_LEIA_REV470) {
-			status = request_firmware(&fw, LEIA_PM4_470_FW,
-				device->dev);
-			if (status != 0) {
-				KGSL_DRV_ERR(
-					"request_firmware failed for %s  \
-					 with error %d\n",
-					LEIA_PM4_470_FW, status);
-				goto error;
-			}
-		} else {
-			status = request_firmware(&fw, YAMATO_PM4_FW,
-				device->dev);
-			if (status != 0) {
-				KGSL_DRV_ERR(
-					"request_firmware failed for %s  \
-					 with error %d\n",
-					YAMATO_PM4_FW, status);
-				goto error;
-			}
+		int len;
+		unsigned int *ptr;
+
+		ret = _load_firmware(device, fwfile, (void *) &ptr, &len);
+		if (ret)
+			goto err;
+
+		/* PM4 size is 3 dword aligned plus 1 dword of version */
+		if (len % ((sizeof(uint32_t) * 3)) != sizeof(uint32_t)) {
+			KGSL_DRV_ERR("Bad firmware size: %d\n", len);
+			ret = -EINVAL;
+			goto err;
 		}
 
-		/*this fw must come in 3 word chunks. plus 1 word of version*/
-		if ((fw->size % (sizeof(uint32_t)*3)) != 4) {
-			KGSL_DRV_ERR("bad firmware size %d.\n", fw->size);
-			status = -EINVAL;
-			goto error_release_fw;
-		}
-		fw_ptr = (unsigned int *)fw->data;
-		fw_word_size = fw->size/sizeof(uint32_t);
-		yamato_device->pm4_fw_size = fw_word_size;
-
-		/* keep a copy of fw to be reloaded later */
-		yamato_device->pm4_fw = (unsigned int *)
-						kmalloc(fw->size, GFP_KERNEL);
-		if (yamato_device->pm4_fw == NULL) {
-			KGSL_DRV_ERR("ERROR: couldn't kmalloc fw size %d.\n",
-								fw->size);
-			status = -EINVAL;
-			goto error_release_fw;
-		}
-		memcpy(yamato_device->pm4_fw, fw->data, fw->size);
-	} else {
-		fw_ptr = yamato_device->pm4_fw;
-		fw_word_size = yamato_device->pm4_fw_size;
+		yamato_device->pm4_fw_size = len / sizeof(uint32_t);
+		yamato_device->pm4_fw = ptr;
 	}
-	KGSL_DRV_INFO("loading pm4 ucode version: %d\n", fw_ptr[0]);
+
+	KGSL_DRV_INFO("loading pm4 ucode version: %d\n",
+		yamato_device->pm4_fw[0]);
 
 	kgsl_yamato_regwrite(device, REG_CP_DEBUG, 0x02000000);
 	kgsl_yamato_regwrite(device, REG_CP_ME_RAM_WADDR, 0);
-	for (i = 1; i < fw_word_size; i++)
-		kgsl_yamato_regwrite(device, REG_CP_ME_RAM_DATA, fw_ptr[i]);
-
-error_release_fw:
-	if (fw)
-		release_firmware(fw);
-error:
-	return status;
+	for (i = 1; i < yamato_device->pm4_fw_size; i++)
+		kgsl_yamato_regwrite(device, REG_CP_ME_RAM_DATA,
+				     yamato_device->pm4_fw[i]);
+err:
+	return ret;
 }
 
 static int kgsl_ringbuffer_load_pfp_ucode(struct kgsl_device *device)
 {
-	int status = 0;
-	int i;
-	const struct firmware *fw = NULL;
-	unsigned int *fw_ptr = NULL;
-	size_t fw_word_size = 0;
 	struct kgsl_yamato_device *yamato_device = KGSL_YAMATO_DEVICE(device);
+	const char *fwfile;
+	int i, ret = 0;
+
+	if (device->chip_id == KGSL_CHIPID_LEIA_REV470)
+		fwfile =  LEIA_PFP_470_FW;
+	else
+		fwfile = YAMATO_PFP_FW;
 
 	if (yamato_device->pfp_fw == NULL) {
-		if (device->chip_id == KGSL_CHIPID_LEIA_REV470) {
-			status = request_firmware(&fw, LEIA_PFP_470_FW,
-				device->dev);
-			if (status != 0) {
-				KGSL_DRV_ERR("request_firmware for %s \
-					 failed with error %d\n",
-					LEIA_PFP_470_FW, status);
-				return status;
-			}
-		} else {
-			status = request_firmware(&fw, YAMATO_PFP_FW,
-				device->dev);
-			if (status != 0) {
-				KGSL_DRV_ERR("request_firmware for %s \
-					 failed with error %d\n",
-					YAMATO_PFP_FW, status);
-				return status;
-			}
-		}
-		/*this firmware must come in 1 word chunks. */
-		if ((fw->size % sizeof(uint32_t)) != 0) {
-			KGSL_DRV_ERR("bad firmware size %d.\n", fw->size);
-			status = -EINVAL;
-			goto error_release_fw;
-		}
-		fw_ptr = (unsigned int *)fw->data;
-		fw_word_size = fw->size/sizeof(uint32_t);
-		yamato_device->pfp_fw_size = fw_word_size;
+		int len;
+		unsigned int *ptr;
 
-		/* keep a copy of fw to be reloaded  later */
-		yamato_device->pfp_fw = (unsigned int *)
-						kmalloc(fw->size, GFP_KERNEL);
-		if (yamato_device->pfp_fw == NULL) {
-			KGSL_DRV_ERR("ERROR: couldn't kmalloc fw size= %d.\n",
-								fw->size);
-			status = -EINVAL;
-			goto error_release_fw;
-		}
-		memcpy(yamato_device->pfp_fw, fw->data, fw->size);
+		ret = _load_firmware(device, fwfile, (void *) &ptr, &len);
+		if (ret)
+			goto err;
 
-	} else {
-		fw_ptr = yamato_device->pfp_fw;
-		fw_word_size = yamato_device->pfp_fw_size;
+		/* PFP size shold be dword aligned */
+		if (len % sizeof(uint32_t) != 0) {
+			KGSL_DRV_ERR("Bad firmware size: %d\n", len);
+			ret = -EINVAL;
+			goto err;
+		}
+
+		yamato_device->pfp_fw_size = len / sizeof(uint32_t);
+		yamato_device->pfp_fw = ptr;
 	}
 
-	KGSL_DRV_INFO("loading pfp ucode version: %d\n", fw_ptr[0]);
+	KGSL_DRV_INFO("loading pfp ucode version: %d\n",
+		yamato_device->pfp_fw[0]);
 
 	kgsl_yamato_regwrite(device, REG_CP_PFP_UCODE_ADDR, 0);
-	for (i = 1; i < fw_word_size; i++)
-		kgsl_yamato_regwrite(device, REG_CP_PFP_UCODE_DATA, fw_ptr[i]);
-
-error_release_fw:
-	if (fw)
-		release_firmware(fw);
-	return status;
+	for (i = 1; i < yamato_device->pfp_fw_size; i++)
+		kgsl_yamato_regwrite(device, REG_CP_PFP_UCODE_DATA,
+				     yamato_device->pfp_fw[i]);
+err:
+	return ret;
 }
 
 int kgsl_ringbuffer_start(struct kgsl_ringbuffer *rb, unsigned int init_ram)

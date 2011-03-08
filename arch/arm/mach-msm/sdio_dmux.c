@@ -94,8 +94,10 @@ struct sdio_ch_info {
 	void (*write_done)(void *, struct sk_buff *);
 	void *priv;
 	spinlock_t lock;
-	struct sk_buff *skb;
 };
+
+static struct sk_buff_head sdio_mux_write_pool;
+static spinlock_t sdio_mux_write_lock;
 
 static struct sdio_channel *sdio_mux_ch;
 static struct sdio_ch_info sdio_ch[SDIO_DMUX_NUM_CHANNELS];
@@ -405,30 +407,40 @@ static int sdio_mux_write_cmd(void *data, uint32_t len)
 
 static void sdio_mux_write_data(struct work_struct *work)
 {
-	int i, rc, reschedule = 0;
+	int rc, reschedule = 0;
 	struct sk_buff *skb;
 	unsigned long flags;
+	int avail;
+	struct sdio_mux_hdr *hdr;
 
-	for (i = 0; i < SDIO_DMUX_NUM_CHANNELS; ++i) {
-		spin_lock_irqsave(&sdio_ch[i].lock, flags);
-		if (sdio_ch_is_local_open(i) && sdio_ch[i].skb) {
-			skb = sdio_ch[i].skb;
-			spin_unlock_irqrestore(&sdio_ch[i].lock, flags);
-			DBG("%s: writing for ch %d\n", __func__, i);
-			rc = sdio_mux_write(skb);
-			if (rc == -EAGAIN) {
-				reschedule = 1;
-			} else if (!rc) {
-				spin_lock_irqsave(&sdio_ch[i].lock, flags);
-				sdio_ch[i].skb = NULL;
-				sdio_ch[i].write_done(sdio_ch[i].priv, skb);
-				spin_unlock_irqrestore(&sdio_ch[i].lock, flags);
-			}
-		} else
-			spin_unlock_irqrestore(&sdio_ch[i].lock, flags);
+	spin_lock_irqsave(&sdio_mux_write_lock, flags);
+	while ((skb = __skb_dequeue(&sdio_mux_write_pool))) {
+		avail = sdio_write_avail(sdio_mux_ch);
+		if (avail < skb->len) {
+			/* we may have to wait for write avail
+			 * notification from sdio al
+			 */
+			reschedule = 1;
+			__skb_queue_head(&sdio_mux_write_pool, skb);
+			break;
+		}
+		spin_unlock_irqrestore(&sdio_mux_write_lock, flags);
+		rc = sdio_mux_write(skb);
+		spin_lock_irqsave(&sdio_mux_write_lock, flags);
+		if (rc == -EAGAIN) {
+			__skb_queue_head(&sdio_mux_write_pool, skb);
+			reschedule = 1;
+			break;
+		}
+		if (!rc) {
+			hdr = (struct sdio_mux_hdr *)skb->data;
+			if (sdio_ch[hdr->ch_id].write_done)
+				sdio_ch[hdr->ch_id].write_done(
+					sdio_ch[hdr->ch_id].priv, skb);
+		}
 	}
+	spin_unlock_irqrestore(&sdio_mux_write_lock, flags);
 
-	/* probably should use delayed work */
 	if (reschedule)
 		queue_work(sdio_mux_write_workqueue, &work_sdio_mux_write);
 }
@@ -450,23 +462,19 @@ int msm_sdio_dmux_write(uint32_t id, struct sk_buff *skb)
 	DBG("%s: writing to ch %d len %d\n", __func__, id, skb->len);
 	spin_lock_irqsave(&sdio_ch[id].lock, flags);
 	if (!sdio_ch_is_local_open(id)) {
+		spin_unlock_irqrestore(&sdio_ch[id].lock, flags);
 		pr_err("%s: port not open: %d\n", __func__, sdio_ch[id].status);
-		rc = -ENODEV;
-		goto write_done;
+		return -ENODEV;
 	}
+	spin_unlock_irqrestore(&sdio_ch[id].lock, flags);
 
-	if (sdio_ch[id].skb) {
-		pr_err("%s: packet pending ch: %d\n", __func__, id);
-		rc = -EPERM;
-		goto write_done;
-	}
-
+	spin_lock_irqsave(&sdio_mux_write_lock, flags);
 	/* if skb do not have any tailroom for padding,
 	   copy the skb into a new expanded skb */
 	if ((skb->len & 0x3) && (skb_tailroom(skb) < (4 - (skb->len & 0x3)))) {
 		/* revisit, probably dev_alloc_skb and memcpy is effecient */
 		new_skb = skb_copy_expand(skb, skb_headroom(skb),
-					  4 - (skb->len & 0x3), GFP_KERNEL);
+					  4 - (skb->len & 0x3), GFP_ATOMIC);
 		if (new_skb == NULL) {
 			pr_err("%s: cannot allocate skb\n", __func__);
 			rc = -ENOMEM;
@@ -494,11 +502,11 @@ int msm_sdio_dmux_write(uint32_t id, struct sk_buff *skb)
 	DBG("%s: data %p, tail %p skb len %d pkt len %d pad len %d\n",
 	    __func__, skb->data, skb->tail, skb->len,
 	    hdr->pkt_len, hdr->pad_len);
-	sdio_ch[id].skb = skb;
+	__skb_queue_tail(&sdio_mux_write_pool, skb);
 	queue_work(sdio_mux_write_workqueue, &work_sdio_mux_write);
 
 write_done:
-	spin_unlock_irqrestore(&sdio_ch[id].lock, flags);
+	spin_unlock_irqrestore(&sdio_mux_write_lock, flags);
 	return rc;
 }
 
@@ -553,11 +561,6 @@ int msm_sdio_dmux_close(uint32_t id)
 	if (!sdio_mux_initialized)
 		return -ENODEV;
 	spin_lock_irqsave(&sdio_ch[id].lock, flags);
-
-	if (sdio_ch[id].skb) {
-		spin_unlock_irqrestore(&sdio_ch[id].lock, flags);
-		return -EINVAL;
-	}
 
 	sdio_ch[id].receive_cb = NULL;
 	sdio_ch[id].priv = NULL;
@@ -660,8 +663,12 @@ static int sdio_dmux_probe(struct platform_device *pdev)
 		return -ENOMEM;
 	}
 
+	skb_queue_head_init(&sdio_mux_write_pool);
+	spin_lock_init(&sdio_mux_write_lock);
+
 	for (rc = 0; rc < SDIO_DMUX_NUM_CHANNELS; ++rc)
 		spin_lock_init(&sdio_ch[rc].lock);
+
 
 	wake_lock_init(&sdio_mux_ch_wakelock, WAKE_LOCK_SUSPEND,
 		       "sdio_dmux");

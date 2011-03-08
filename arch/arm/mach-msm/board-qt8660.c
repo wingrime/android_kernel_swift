@@ -3407,6 +3407,15 @@ static struct i2c_board_info isl_charger_i2c_info[] __initdata = {
 };
 #endif
 
+#if defined(CONFIG_BATTERY_BQ27541) || \
+		defined(CONFIG_BATTERY_BQ27541_MODULE)
+static struct i2c_board_info msm_bq27541_board_info[] = {
+	{
+		I2C_BOARD_INFO("bq27541", 0xaa>>1),
+	},
+};
+#endif
+
 #ifdef CONFIG_I2C
 struct i2c_registry {
 	int                    bus;
@@ -3453,6 +3462,14 @@ static struct i2c_registry msm8x60_i2c_devices[] __initdata = {
 		MSM_GSBI8_QUP_I2C_BUS_ID,
 		isl_charger_i2c_info,
 		ARRAY_SIZE(isl_charger_i2c_info),
+	},
+#endif
+#if defined(CONFIG_BATTERY_BQ27541) || \
+		defined(CONFIG_BATTERY_BQ27541_MODULE)
+	{
+		MSM_GSBI8_QUP_I2C_BUS_ID,
+		msm_bq27541_board_info,
+		ARRAY_SIZE(msm_bq27541_board_info),
 	},
 #endif
 };

@@ -56,7 +56,7 @@ MODULE_PARM_DESC(rmnet_sdio_data_ch, "RmNet data SDIO channel ID");
 
 #define RMNET_SDIO_RX_REQ_MAX             16
 #define RMNET_SDIO_RX_REQ_SIZE            4096
-#define RMNET_SDIO_TX_REQ_MAX             100
+#define RMNET_SDIO_TX_REQ_MAX             200
 
 /* QMI requests & responses buffer*/
 struct rmnet_sdio_qmi_buf {
@@ -80,6 +80,7 @@ struct rmnet_dev {
 	struct list_head        qmi_resp_q;
 	/* Tx/Rx lists */
 	struct list_head        tx_idle;
+	struct sk_buff_head	tx_skb_queue;
 	struct list_head        rx_idle;
 	struct list_head        rx_queue;
 
@@ -548,39 +549,64 @@ static void rmnet_start_rx(struct rmnet_dev *dev)
 	spin_unlock_irqrestore(&dev->lock, flags);
 }
 
+static void usb_rmnet_sdio_start_tx(struct rmnet_dev *dev)
+{
+	unsigned long			flags;
+	int				status;
+	struct sk_buff			*skb;
+	struct usb_request		*req;
+	struct usb_composite_dev	*cdev = dev->cdev;
+
+	if (!atomic_read(&dev->online))
+		return;
+
+	spin_lock_irqsave(&dev->lock, flags);
+	while (!list_empty(&dev->tx_idle)) {
+		skb = __skb_dequeue(&dev->tx_skb_queue);
+		if (!skb) {
+			spin_unlock_irqrestore(&dev->lock, flags);
+			return;
+		}
+
+		req = list_first_entry(&dev->tx_idle, struct usb_request, list);
+		req->context = skb;
+		req->buf = skb->data;
+		req->length = skb->len;
+
+		list_del(&req->list);
+		spin_unlock(&dev->lock);
+		status = usb_ep_queue(dev->epin, req, GFP_ATOMIC);
+		spin_lock(&dev->lock);
+		if (status) {
+			ERROR(cdev, "rmnet tx data enqueue err %d\n", status);
+			/* USB still online, queue requests back */
+			if (atomic_read(&dev->online)) {
+				list_add_tail(&req->list, &dev->tx_idle);
+				__skb_queue_head(&dev->tx_skb_queue, skb);
+			} else {
+				req->buf = 0;
+				rmnet_free_req(dev->epin, req);
+				dev_kfree_skb_any(skb);
+			}
+			break;
+		}
+	}
+	spin_unlock_irqrestore(&dev->lock, flags);
+}
+
 static void rmnet_data_receive_cb(void *priv, struct sk_buff *skb)
 {
 	struct rmnet_dev *dev = priv;
-	struct usb_composite_dev *cdev = dev->cdev;
-	struct usb_request *req;
 	unsigned long flags;
-	int status;
+
+	if (!atomic_read(&dev->online))
+		return;
 
 	spin_lock_irqsave(&dev->lock, flags);
-	if (list_empty(&dev->tx_idle)) {
-		spin_unlock_irqrestore(&dev->lock, flags);
-		/*
-		 * TODO
-		 * We should handle this case.
-		 */
-		ERROR(cdev, "rmnet data Tx req full\n");
-		return;
-	}
-	req = list_first_entry(&dev->tx_idle, struct usb_request, list);
-	list_del(&req->list);
+	__skb_queue_tail(&dev->tx_skb_queue, skb);
 	spin_unlock_irqrestore(&dev->lock, flags);
 
-	req->context = skb;
-	req->buf = skb->data;
-	req->length = skb->len;
-
-	status = usb_ep_queue(dev->epin, req, GFP_KERNEL);
-	if (status) {
-		ERROR(cdev, "rmnet tx data enqueue err %d\n", status);
-		spin_lock_irqsave(&dev->lock, flags);
-		list_add_tail(&req->list, &dev->tx_idle);
-		spin_unlock_irqrestore(&dev->lock, flags);
-	}
+	usb_rmnet_sdio_start_tx(dev);
 }
 
 static void rmnet_data_write_done(void *priv, struct sk_buff *skb)
@@ -705,6 +731,8 @@ static void rmnet_complete_epin(struct usb_ep *ep, struct usb_request *req)
 	list_add_tail(&req->list, &dev->tx_idle);
 	spin_unlock(&dev->lock);
 	dev_kfree_skb_any(skb);
+
+	usb_rmnet_sdio_start_tx(dev);
 }
 
 static void rmnet_free_buf(struct rmnet_dev *dev)
@@ -712,7 +740,11 @@ static void rmnet_free_buf(struct rmnet_dev *dev)
 	struct rmnet_sdio_qmi_buf *qmi;
 	struct usb_request *req;
 	struct list_head *act, *tmp;
+	struct sk_buff *skb;
+	unsigned long flags;
 
+
+	spin_lock_irqsave(&dev->lock, flags);
 	/* TODO
 	 * Free rx_queue requests as well
 	 */
@@ -747,7 +779,12 @@ static void rmnet_free_buf(struct rmnet_dev *dev)
 		rmnet_free_qmi(qmi);
 	}
 
+	while ((skb = __skb_dequeue(&dev->tx_skb_queue)))
+		dev_kfree_skb_any(skb);
+
 	rmnet_free_req(dev->epnotify, dev->notify_req);
+
+	spin_unlock_irqrestore(&dev->lock, flags);
 }
 
 static void rmnet_set_modem_ctl_bits_work(struct work_struct *w)
@@ -1023,6 +1060,7 @@ int rmnet_sdio_function_add(struct usb_configuration *c)
 	INIT_LIST_HEAD(&dev->rx_idle);
 	INIT_LIST_HEAD(&dev->rx_queue);
 	INIT_LIST_HEAD(&dev->tx_idle);
+	skb_queue_head_init(&dev->tx_skb_queue);
 
 	dev->function.name = "rmnet_sdio";
 	dev->function.strings = rmnet_strings;

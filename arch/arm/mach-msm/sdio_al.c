@@ -152,6 +152,10 @@
 #define DATA_DEBUG(x...) if (sdio_al->debug.debug_data_on) pr_info(x)
 #define LPM_DEBUG(x...) if (sdio_al->debug.debug_lpm_on) pr_info(x)
 
+
+/* The index of the SDIO card used for the sdio_al_dloader */
+#define SDIO_BOOTLOADER_CARD_INDEX 1
+
 struct sdio_al_debug {
 
 	u8 debug_lpm_on;
@@ -2807,7 +2811,6 @@ static int mmc_probe(struct mmc_card *card)
 	int ret = 0;
 	struct sdio_al_device *sdio_al_dev = NULL;
 	struct sdio_func *func1 = NULL;
-	static int first_card = true;
 	int i;
 
 	dev_info(&card->dev, "Probing..\n");
@@ -2840,10 +2843,8 @@ static int mmc_probe(struct mmc_card *card)
 	if (sdio_al_dev == NULL)
 		return -ENOMEM;
 
-	if (first_card) {
+	if (card->host->index == SDIO_BOOTLOADER_CARD_INDEX)
 		sdio_al->bootloader_dev = sdio_al_dev;
-		first_card = false;
-	}
 
 	for (i = 0; i < MAX_NUM_OF_SDIO_DEVICES ; ++i)
 		if (sdio_al->devices[i] == NULL) {

@@ -1421,33 +1421,28 @@ done:
 }
 
 static long kgsl_yamato_ioctl(struct kgsl_device_private *dev_priv,
-			unsigned int cmd,
-			unsigned long arg)
+			      unsigned int cmd, void *data)
 {
 	int result = 0;
-	struct kgsl_drawctxt_set_bin_base_offset binbase;
+	struct kgsl_drawctxt_set_bin_base_offset *binbase;
 	struct kgsl_context *context;
 
 	switch (cmd) {
 	case IOCTL_KGSL_DRAWCTXT_SET_BIN_BASE_OFFSET:
-		if (copy_from_user(&binbase, (void __user *)arg,
-				   sizeof(binbase))) {
-			result = -EFAULT;
-			break;
-		}
+		binbase = data;
 
-		context = kgsl_find_context(dev_priv, binbase.drawctxt_id);
+		context = kgsl_find_context(dev_priv, binbase->drawctxt_id);
 		if (context) {
 			result = kgsl_drawctxt_set_bin_base_offset(
 					dev_priv->device,
 					context,
-					binbase.offset);
+					binbase->offset);
 		} else {
 			result = -EINVAL;
 			KGSL_DRV_ERR(dev_priv->device,
 				"invalid drawctxt drawctxt_id %d "
 				"device_id=%d\n",
-				binbase.drawctxt_id, dev_priv->device->id);
+				binbase->drawctxt_id, dev_priv->device->id);
 		}
 		break;
 

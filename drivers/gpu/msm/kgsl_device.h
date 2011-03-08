@@ -115,8 +115,7 @@ struct kgsl_functable {
 	int (*device_drawctxt_destroy) (struct kgsl_device *device,
 					struct kgsl_context *context);
 	long (*device_ioctl) (struct kgsl_device_private *dev_priv,
-					unsigned int cmd,
-					unsigned long arg);
+					unsigned int cmd, void *data);
 	int (*device_setup_pt)(struct kgsl_device *device,
 			       struct kgsl_pagetable *pagetable);
 

@@ -30,7 +30,7 @@
 #define _MSM_KGSL_H
 
 #define KGSL_VERSION_MAJOR        3
-#define KGSL_VERSION_MINOR        1
+#define KGSL_VERSION_MINOR        2
 
 /*context flags */
 #define KGSL_CONTEXT_SAVE_GMEM	1
@@ -284,6 +284,15 @@ struct kgsl_cmdstream_freememontimestamp {
 };
 
 #define IOCTL_KGSL_CMDSTREAM_FREEMEMONTIMESTAMP \
+	_IOW(KGSL_IOC_TYPE, 0x12, struct kgsl_cmdstream_freememontimestamp)
+
+/* Previous versions of this header had incorrectly defined
+   IOCTL_KGSL_CMDSTREAM_FREEMEMONTIMESTAMP as a read-only ioctl instead
+   of a write only ioctl.  To ensure binary compatability, the following
+   #define will be used to intercept the incorrect ioctl
+*/
+
+#define IOCTL_KGSL_CMDSTREAM_FREEMEMONTIMESTAMP_OLD \
 	_IOR(KGSL_IOC_TYPE, 0x12, struct kgsl_cmdstream_freememontimestamp)
 
 /* create a draw context, which is used to preserve GPU state.

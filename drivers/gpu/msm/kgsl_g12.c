@@ -845,42 +845,24 @@ static int kgsl_g12_waittimestamp(struct kgsl_device *device,
 }
 
 static long kgsl_g12_ioctl_cmdwindow_write(struct kgsl_device_private *dev_priv,
-				     void __user *arg)
+					   void *data)
 {
-	int result = 0;
-	struct kgsl_cmdwindow_write param;
+	struct kgsl_cmdwindow_write *param = data;
 
-	if (copy_from_user(&param, arg, sizeof(param))) {
-		result = -EFAULT;
-		goto done;
-	}
-
-	result = kgsl_g12_cmdwindow_write(dev_priv->device,
-					     param.target,
-					     param.addr,
-					     param.data);
-
-	if (result != 0)
-		goto done;
-
-	if (copy_to_user(arg, &param, sizeof(param))) {
-		result = -EFAULT;
-		goto done;
-	}
-done:
-	return result;
+	return kgsl_g12_cmdwindow_write(dev_priv->device,
+					param->target,
+					param->addr,
+					param->data);
 }
 
 static long kgsl_g12_ioctl(struct kgsl_device_private *dev_priv,
-			unsigned int cmd,
-			unsigned long arg)
+			   unsigned int cmd, void *data)
 {
 	int result = 0;
 
 	switch (cmd) {
 	case IOCTL_KGSL_CMDWINDOW_WRITE:
-		result = kgsl_g12_ioctl_cmdwindow_write(dev_priv,
-							(void __user *)arg);
+		result = kgsl_g12_ioctl_cmdwindow_write(dev_priv, data);
 		break;
 	default:
 		KGSL_DRV_INFO(dev_priv->device,

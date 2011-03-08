@@ -17,6 +17,7 @@
 
 #include <linux/kernel.h>
 #include <linux/platform_device.h>
+#include <linux/dma-mapping.h>
 #include <mach/irqs.h>
 #include <mach/msm_iomap.h>
 #include <mach/board.h>
@@ -62,6 +63,49 @@ struct platform_device msm_device_uart1 = {
 	.id	= 0,
 	.num_resources	= ARRAY_SIZE(resources_uart1),
 	.resource	= resources_uart1,
+};
+
+#define MSM_UART1DM_PHYS      0xA0200000
+static struct resource msm_uart1_dm_resources[] = {
+	{
+		.start	= MSM_UART1DM_PHYS,
+		.end	= MSM_UART1DM_PHYS + PAGE_SIZE - 1,
+		.flags	= IORESOURCE_MEM,
+	},
+	{
+		.start	= INT_UART1DM_IRQ,
+		.end	= INT_UART1DM_IRQ,
+		.flags	= IORESOURCE_IRQ,
+	},
+	{
+		.start	= INT_UART1DM_RX,
+		.end	= INT_UART1DM_RX,
+		.flags	= IORESOURCE_IRQ,
+	},
+	{
+		.start	= DMOV_HSUART1_TX_CHAN,
+		.end	= DMOV_HSUART1_RX_CHAN,
+		.name	= "uartdm_channels",
+		.flags	= IORESOURCE_DMA,
+	},
+	{
+		.start	= DMOV_HSUART1_TX_CRCI,
+		.end	= DMOV_HSUART1_RX_CRCI,
+		.name	= "uartdm_crci",
+		.flags	= IORESOURCE_DMA,
+	},
+};
+
+static u64 msm_uart_dm1_dma_mask = DMA_BIT_MASK(32);
+struct platform_device msm_device_uart_dm1 = {
+	.name	= "msm_serial_hs",
+	.id	= 0,
+	.num_resources	= ARRAY_SIZE(msm_uart1_dm_resources),
+	.resource	= msm_uart1_dm_resources,
+	.dev	= {
+		.dma_mask		= &msm_uart_dm1_dma_mask,
+		.coherent_dma_mask	= DMA_BIT_MASK(32),
+	},
 };
 
 #define MSM_NAND_PHYS		0xA0A00000

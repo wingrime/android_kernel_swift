@@ -2144,8 +2144,6 @@ static int sdio_al_setup(struct sdio_al_device *sdio_al_dev)
 		return ret;
 	}
 
-	sdio_claim_host(func1);
-
 	INIT_WORK(&sdio_al_dev->sdio_al_work.work, worker);
 	/* disable all pipes interrupts before claim irq.
 	   since all are enabled by default. */
@@ -2169,7 +2167,6 @@ static int sdio_al_setup(struct sdio_al_device *sdio_al_dev)
 		goto exit_err;
 	}
 
-	sdio_release_host(func1);
 	sdio_al_dev->is_ready = true;
 
 	/* Start worker before interrupt might happen */
@@ -2312,12 +2309,6 @@ int sdio_open(const char *name, struct sdio_channel **ret_ch, void *priv,
 	if (sdio_al_dev->is_err) {
 		SDIO_AL_ERR(__func__);
 		return -ENODEV;
-	}
-
-	if (!sdio_al_dev->is_ready) {
-		ret = sdio_al_setup(sdio_al_dev);
-		if (ret)
-			return -ENODEV;
 	}
 
 	if (ch->is_open) {
@@ -2726,6 +2717,10 @@ static int init_channels(struct sdio_al_device *sdio_al_dev)
 
 	ret = read_sdioc_software_header(sdio_al_dev,
 					 sdio_al_dev->sdioc_sw_header);
+	if (ret)
+		goto exit;
+
+	ret = sdio_al_setup(sdio_al_dev);
 	if (ret)
 		goto exit;
 

@@ -174,27 +174,6 @@ kgsl_sharedmem_readl(const struct kgsl_memdesc *memdesc,
 	return 0;
 }
 
-int
-kgsl_sharedmem_read(const struct kgsl_memdesc *memdesc, void *dst,
-			unsigned int offsetbytes, unsigned int sizebytes)
-{
-	BUG_ON(sizebytes == sizeof(unsigned int));
-	if (memdesc == NULL || memdesc->hostptr == NULL || dst == NULL) {
-		KGSL_MEM_ERR("bad ptr memdesc %p hostptr %p dst %p\n",
-				memdesc,
-				(memdesc ? memdesc->hostptr : NULL),
-				dst);
-		return -EINVAL;
-	}
-	if (offsetbytes + sizebytes > memdesc->size) {
-		KGSL_MEM_ERR("bad range: offset %d size %d memdesc %d\n",
-				offsetbytes, sizebytes, memdesc->size);
-		return -ERANGE;
-	}
-	memcpy(dst, memdesc->hostptr + offsetbytes, sizebytes);
-	return 0;
-}
-
 uint kgsl_get_physaddr(const struct kgsl_memdesc *memdesc)
 {
 	BUG_ON(memdesc == NULL);
@@ -236,30 +215,6 @@ kgsl_sharedmem_writel(const struct kgsl_memdesc *memdesc,
 	kgsl_cffdump_setmem(kgsl_get_physaddr(memdesc) + offsetbytes,
 		src, sizeof(uint));
 	writel(src, memdesc->hostptr + offsetbytes);
-	return 0;
-}
-
-
-int
-kgsl_sharedmem_write(const struct kgsl_memdesc *memdesc,
-			unsigned int offsetbytes,
-			void *src, unsigned int sizebytes)
-{
-	BUG_ON(sizebytes == sizeof(unsigned int));
-	if (memdesc == NULL || memdesc->hostptr == NULL) {
-		KGSL_MEM_ERR("bad ptr memdesc %p hostptr %p\n", memdesc,
-				(memdesc ? memdesc->hostptr : NULL));
-		return -EINVAL;
-	}
-	if (offsetbytes + sizebytes > memdesc->size) {
-		KGSL_MEM_ERR("bad range: offset %d size %d memdesc %d\n",
-				offsetbytes, sizebytes, memdesc->size);
-		return -ERANGE;
-	}
-
-	memcpy(memdesc->hostptr + offsetbytes, src, sizebytes);
-	kgsl_cffdump_syncmem(NULL, memdesc,
-		memdesc->gpuaddr + offsetbytes, sizebytes, false);
 	return 0;
 }
 

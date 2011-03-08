@@ -40,6 +40,8 @@
 #include <linux/dma-mapping.h>
 #include <linux/gpio_keys.h>
 #include <linux/input/matrix_keypad.h>
+#include <linux/msm-charger.h>
+#include <linux/i2c/isl9519.h>
 
 #ifdef CONFIG_ANDROID_PMEM
 #include <linux/android_pmem.h>
@@ -1572,6 +1574,24 @@ static struct msm_serial_hs_platform_data msm_uart_dm1_pdata = {
        .inject_rx_on_wakeup = 1,
        .rx_to_inject = 0xFD,
        .gpio_config = configure_uart_gpios,
+};
+#endif
+
+#ifdef CONFIG_BATTERY_MSM8X60
+static struct msm_charger_platform_data msm_charger_data = {
+	.safety_time	= 180,
+	.update_time	= 1,
+	.max_voltage	= 4200,
+	.min_voltage	= 3200,
+	.resume_voltage = 4100,
+};
+
+static struct platform_device msm_charger_device = {
+	.name	= "msm-charger",
+	.id	= -1,
+	.dev	= {
+		.platform_data = &msm_charger_data,
+	}
 };
 #endif
 
@@ -3350,8 +3370,44 @@ static struct i2c_board_info msm_marimba_board_info[] = {
 };
 #endif /* CONFIG_MAIMBA_CORE */
 
-#ifdef CONFIG_I2C
+#define EXT_CHG_VALID_MPP 10
+#define EXT_CHG_VALID_MPP_2 11
 
+#ifdef CONFIG_ISL9519_CHARGER
+static int isl_detection_setup(void)
+{
+	int ret = 0;
+
+	ret = pm8058_mpp_config_digital_in(EXT_CHG_VALID_MPP,
+					   PM8058_MPP_DIG_LEVEL_S3,
+					   PM_MPP_DIN_TO_INT);
+	ret |=  pm8058_mpp_config_bi_dir(EXT_CHG_VALID_MPP_2,
+					   PM8058_MPP_DIG_LEVEL_S3,
+					   PM_MPP_BI_PULLUP_10KOHM
+					   );
+	return ret;
+}
+
+static struct isl_platform_data isl_data __initdata = {
+	.chgcurrent		= 1900,
+	.valid_n_gpio		= PM8058_MPP_PM_TO_SYS(10),
+	.chg_detection_config	= isl_detection_setup,
+	.max_system_voltage	= 4200,
+	.min_system_voltage	= 3200,
+	.term_current		= 500,
+	.input_current		= 2048,
+};
+
+static struct i2c_board_info isl_charger_i2c_info[] __initdata = {
+	{
+		I2C_BOARD_INFO("isl9519q", 0x9),
+		.irq		= PM8058_CBLPWR_IRQ(PM8058_IRQ_BASE),
+		.platform_data	= &isl_data,
+	},
+};
+#endif
+
+#ifdef CONFIG_I2C
 struct i2c_registry {
 	int                    bus;
 	struct i2c_board_info *info;
@@ -3392,6 +3448,13 @@ static struct i2c_registry msm8x60_i2c_devices[] __initdata = {
 		ARRAY_SIZE(msm_marimba_board_info),
 	},
 #endif /* CONFIG_MARIMBA_CORE */
+#ifdef CONFIG_ISL9519_CHARGER
+	{
+		MSM_GSBI8_QUP_I2C_BUS_ID,
+		isl_charger_i2c_info,
+		ARRAY_SIZE(isl_charger_i2c_info),
+	},
+#endif
 };
 #endif /* CONFIG_I2C */
 
@@ -5077,6 +5140,10 @@ static void __init msm8x60_init(struct msm_board_data *board_data)
 
 #if defined(CONFIG_PMIC8058_OTHC) || defined(CONFIG_PMIC8058_OTHC_MODULE)
 	msm8x60_init_pm8058_othc();
+#endif
+
+#ifdef CONFIG_BATTERY_MSM8X60
+	platform_device_register(&msm_charger_device);
 #endif
 
 	if (SOCINFO_VERSION_MAJOR(socinfo_get_version()) != 1)

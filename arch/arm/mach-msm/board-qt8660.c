@@ -3259,8 +3259,7 @@ static struct i2c_board_info pm8901_boardinfo[] __initdata = {
 
 #endif /* CONFIG_PMIC8901 */
 
-#if defined(CONFIG_MARIMBA_CORE) && (defined(CONFIG_GPIO_SX150X) \
-	|| defined(CONFIG_GPIO_SX150X_MODULE))
+#if defined(CONFIG_MARIMBA_CORE)
 
 static struct regulator *vreg_bahama;
 static unsigned int msm_bahama_setup_power(void)

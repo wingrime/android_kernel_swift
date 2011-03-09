@@ -466,7 +466,21 @@ static int kgsl_dump_yamato(struct kgsl_device *device)
 
 	struct kgsl_yamato_device *yamato_device = KGSL_YAMATO_DEVICE(device);
 
+	struct kgsl_pwrctrl *pwr = &device->pwrctrl;
+
 	mb();
+
+	KGSL_LOG_DUMP(device, "POWER: FLAGS = %08X | ACTIVE POWERLEVEL = %08X",
+			pwr->power_flags, pwr->active_pwrlevel);
+
+	KGSL_LOG_DUMP(device, "POWER: INTERVAL TIMEOUT = %08X ",
+		pwr->interval_timeout);
+
+	KGSL_LOG_DUMP(device, "GRP_CLK = %lu ", kgsl_get_clkrate(pwr->grp_clk));
+
+	KGSL_LOG_DUMP(device, "BUS CLK = %lu ",
+		kgsl_get_clkrate(pwr->ebi1_clk));
+
 
 	kgsl_regread(device, REG_RBBM_STATUS, &rbbm_status);
 	kgsl_regread(device, REG_RBBM_PM_OVERRIDE1, &r2);
@@ -623,6 +637,8 @@ static int kgsl_dump_yamato(struct kgsl_device *device)
 	KGSL_LOG_DUMP(device,
 		"        MPU_END    = %08X | VA_RANGE = %08X | PT_BASE  ="
 		" %08X\n", r1, r2, pt_base);
+
+	KGSL_LOG_DUMP(device, "PAGETABLE SIZE: %08X ", kgsl_driver.ptsize);
 
 	kgsl_regread(device, REG_MH_MMU_TRAN_ERROR, &r1);
 	KGSL_LOG_DUMP(device, "        TRAN_ERROR = %08X\n", r1);

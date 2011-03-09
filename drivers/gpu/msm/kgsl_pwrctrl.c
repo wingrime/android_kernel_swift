@@ -178,6 +178,15 @@ int kgsl_pwrctrl_init_sysfs(struct kgsl_device *device)
 	return ret;
 }
 
+unsigned long kgsl_get_clkrate(struct clk *clk)
+{
+	if (clk != NULL)  {
+		return clk_get_rate(clk);
+	}  else   {
+		return 0;
+	}
+}
+
 void kgsl_pwrctrl_uninit_sysfs(struct kgsl_device *device)
 {
 	device_remove_file(device->dev, &gpuclk_attr);

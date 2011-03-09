@@ -209,8 +209,7 @@ static void cffdump_printline(int id, uint opcode, uint op1, uint op2,
 	spin_lock(&cffdump_lock);
 	if (opcode == CFF_OP_WRITE_MEM) {
 		if (op1 < 0x40000000 || op1 >= 0x60000000)
-			pr_err("kgsl: cffdump: addr out-of-range: op1=%08x",
-				op1);
+			KGSL_CORE_ERR("addr out-of-range: op1=%08x", op1);
 		if ((cff_op_write_membuf.addr != op1 &&
 			cff_op_write_membuf.count)
 			|| (cff_op_write_membuf.count == MEMBUF_SIZE))
@@ -286,7 +285,7 @@ void kgsl_cffdump_init()
 
 	dir = debugfs_create_dir(APP_DIR, NULL);
 	if (!dir) {
-		pr_err("kgsl: cffdump: couldn't create relay app directory.\n");
+		KGSL_CORE_ERR("debugfs_create_dir failed\n");
 		return;
 	}
 
@@ -331,7 +330,7 @@ void kgsl_cffdump_syncmem(struct kgsl_device_private *dev_priv,
 			gpuaddr, sizebytes);
 		spin_unlock(&dev_priv->process_priv->mem_lock);
 		if (entry == NULL) {
-			pr_err("kgsl: cffdump: sync-mem: did not find mapping "
+			KGSL_CORE_ERR("did not find mapping "
 				"for gpuaddr: 0x%08x\n", gpuaddr);
 			return;
 		}
@@ -343,7 +342,7 @@ void kgsl_cffdump_syncmem(struct kgsl_device_private *dev_priv,
 
 	src = kgsl_gpuaddr_to_vaddr(memdesc, gpuaddr, &host_size);
 	if (src == NULL || host_size < sizebytes) {
-		pr_err("kgsl: cffdump: sync-mem: did not find mapping for "
+		KGSL_CORE_ERR(("did not find mapping for "
 			"gpuaddr: 0x%08x, m->host: 0x%p, phys: 0x%08x\n",
 			gpuaddr, memdesc->hostptr, memdesc->physaddr);
 		return;
@@ -462,15 +461,14 @@ static bool kgsl_cffdump_handle_type3(struct kgsl_device_private *dev_priv,
 			size_stack[kgsl_cffdump_addr_count++] = ibsize;
 
 			if (kgsl_cffdump_addr_count >= ADDRESS_STACK_SIZE) {
-				pr_err("kgsl: cffdump: parse-ib, stack "
-					"overflow\n");
+				KGSL_CORE_ERR("stack overflow\n");
 				return false;
 			}
 
 			return kgsl_cffdump_parse_ibs(dev_priv, NULL,
 				ibaddr, ibsize, check_only);
 		} else if (size_stack[i] != ibsize) {
-			pr_err("kgsl: cffdump: parse-ib: gpuaddr: 0x%08x, "
+			KGSL_CORE_ERR("gpuaddr: 0x%08x, "
 				"wc: %u, with size wc: %u already on the "
 				"stack\n", ibaddr, ibsize, size_stack[i]);
 			return false;
@@ -508,7 +506,7 @@ bool kgsl_cffdump_parse_ibs(struct kgsl_device_private *dev_priv,
 			gpuaddr, sizedwords * sizeof(uint));
 		spin_unlock(&dev_priv->process_priv->mem_lock);
 		if (entry == NULL) {
-			pr_err("kgsl: cffdump: parse-ib: did not find mapping "
+			KGSL_CORE_ERR("did not find mapping "
 				"for gpuaddr: 0x%08x\n", gpuaddr);
 			return true;
 		}
@@ -517,7 +515,7 @@ bool kgsl_cffdump_parse_ibs(struct kgsl_device_private *dev_priv,
 
 	hostaddr = (uint *)kgsl_gpuaddr_to_vaddr(memdesc, gpuaddr, &host_size);
 	if (hostaddr == NULL) {
-		pr_err("kgsl: cffdump: parse-ib: did not find mapping for "
+		KGSL_CORE_ERR("did not find mapping for "
 			"gpuaddr: 0x%08x\n", gpuaddr);
 		return true;
 	}
@@ -527,7 +525,7 @@ bool kgsl_cffdump_parse_ibs(struct kgsl_device_private *dev_priv,
 	level++;
 
 	if (!memdesc->physaddr) {
-		pr_err("kgsl: cffdump: syncmem: no physaddr");
+		KGSL_CORE_ERR("no physaddr");
 		return true;
 	} else if ((memdesc->priv & KGSL_MEMFLAGS_VMALLOC_MEM)) {
 		dsb(); wmb(); mb();
@@ -701,7 +699,7 @@ static struct rchan *create_channel(unsigned subbuf_size, unsigned n_subbufs)
 	chan = relay_open("cpu", dir, subbuf_size,
 			  n_subbufs, &relay_callbacks, NULL);
 	if (!chan) {
-		pr_err("kgsl: cffdump: relay: app channel creation failed\n");
+		KGSL_CORE_ERR("relay_open failed\n");
 		return NULL;
 	}
 

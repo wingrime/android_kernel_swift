@@ -262,7 +262,8 @@ static void kgsl_dump_regs(struct kgsl_device *device,
 
 			hex_dump_to_buffer(regvals, linelen*4, 32, 4,
 				linebuf, sizeof(linebuf), 0);
-			KGSL_LOG_DUMP("REG: %5.5X: %s\n", offset<<2, linebuf);
+			KGSL_LOG_DUMP(device,
+				"REG: %5.5X: %s\n", offset<<2, linebuf);
 		}
 	}
 }
@@ -278,7 +279,7 @@ static void dump_ib(struct kgsl_device *device, char* buffId, uint32_t pt_base,
 		print_hex_dump(KERN_ERR, buffId, DUMP_PREFIX_OFFSET,
 				 32, 4, base_addr, ib_size*4, 0);
 	else
-		KGSL_LOG_DUMP("%s base:%8.8X  ib_size:%d  "
+		KGSL_LOG_DUMP(device, "%s base:%8.8X  ib_size:%d  "
 			"offset:%5.5X%s\n",
 			buffId, ib_base, ib_size*4, base_offset,
 			base_addr ? "" : " [Invalid]");
@@ -381,7 +382,8 @@ static bool kgsl_rb_use_hex(void)
 #endif
 }
 
-static void kgsl_dump_rb(const void *buf, size_t len, int start, int size)
+static void kgsl_dump_rb(struct kgsl_device *device, const void *buf,
+			 size_t len, int start, int size)
 {
 	const uint32_t *ptr = buf;
 	int i, remaining, args = 0;
@@ -400,7 +402,8 @@ static void kgsl_dump_rb(const void *buf, size_t len, int start, int size)
 		else
 			kgsl_dump_rb_buffer(ptr+i, linelen, linebuf,
 				sizeof(linebuf), &args);
-		KGSL_LOG_DUMP("RB: %4.4X:%s\n", (start+i)%size, linebuf);
+		KGSL_LOG_DUMP(device,
+			"RB: %4.4X:%s\n", (start+i)%size, linebuf);
 	}
 }
 
@@ -418,8 +421,9 @@ struct log_field {
 	const char *display;
 };
 
-static void kgsl_dump_fields(const char *start, const struct log_field *lines,
-	int num)
+static void kgsl_dump_fields(struct kgsl_device *device,
+			     const char *start, const struct log_field *lines,
+			     int num)
 {
 	int count, i;
 	char lb[90];
@@ -432,14 +436,14 @@ static void kgsl_dump_fields(const char *start, const struct log_field *lines,
 				strncat(lb, " | ", sizeof(lb));
 			strncat(lb, lines->display, sizeof(lb));
 			if (count == 6) {
-				KGSL_LOG_DUMP("%s\n", lb);
+				KGSL_LOG_DUMP(device, "%s\n", lb);
 				strncpy(lb, "        ", sizeof(lb));
 				count = 0;
 			}
 		}
 	}
 	if (count)
-		KGSL_LOG_DUMP("%s\n", lb);
+		KGSL_LOG_DUMP(device, "%s\n", lb);
 }
 
 static int kgsl_dump_yamato(struct kgsl_device *device)
@@ -467,13 +471,13 @@ static int kgsl_dump_yamato(struct kgsl_device *device)
 	kgsl_regread(device, REG_RBBM_STATUS, &rbbm_status);
 	kgsl_regread(device, REG_RBBM_PM_OVERRIDE1, &r2);
 	kgsl_regread(device, REG_RBBM_PM_OVERRIDE2, &r3);
-	KGSL_LOG_DUMP("RBBM:   STATUS   = %08X | PM_OVERRIDE1 = %08X | "
+	KGSL_LOG_DUMP(device, "RBBM:   STATUS   = %08X | PM_OVERRIDE1 = %08X | "
 		"PM_OVERRIDE2 = %08X\n", rbbm_status, r2, r3);
 
 	kgsl_regread(device, REG_RBBM_INT_CNTL, &r1);
 	kgsl_regread(device, REG_RBBM_INT_STATUS, &r2);
 	kgsl_regread(device, REG_RBBM_READ_ERROR, &r3);
-	KGSL_LOG_DUMP("        INT_CNTL = %08X | INT_STATUS   = %08X | "
+	KGSL_LOG_DUMP(device, "        INT_CNTL = %08X | INT_STATUS   = %08X | "
 		"READ_ERROR   = %08X\n", r1, r2, r3);
 
 	{
@@ -502,44 +506,49 @@ static int kgsl_dump_yamato(struct kgsl_device *device)
 		};
 		snprintf(cmdFifo, sizeof(cmdFifo), "CMD FIFO=%01X  ",
 			rbbm_status & 0xf);
-		kgsl_dump_fields(" STATUS=", lines, ARRAY_SIZE(lines));
+		kgsl_dump_fields(device, " STATUS=", lines, ARRAY_SIZE(lines));
 	}
 
 	kgsl_regread(device, REG_CP_RB_BASE, &cp_rb_base);
 	kgsl_regread(device, REG_CP_RB_CNTL, &r2);
 	rb_count = 2 << (r2 & (BIT(6)-1));
 	kgsl_regread(device, REG_CP_RB_RPTR_ADDR, &r3);
-	KGSL_LOG_DUMP("CP_RB:  BASE = %08X | CNTL   = %08X | RPTR_ADDR = %08X"
+	KGSL_LOG_DUMP(device,
+		"CP_RB:  BASE = %08X | CNTL   = %08X | RPTR_ADDR = %08X"
 		"\n", cp_rb_base, r2, r3);
 
 	kgsl_regread(device, REG_CP_RB_RPTR, &cp_rb_rptr);
 	kgsl_regread(device, REG_CP_RB_WPTR, &cp_rb_wptr);
 	kgsl_regread(device, REG_CP_RB_RPTR_WR, &r3);
-	KGSL_LOG_DUMP("        RPTR = %08X | WPTR   = %08X | RPTR_WR   = %08X"
+	KGSL_LOG_DUMP(device,
+		"        RPTR = %08X | WPTR   = %08X | RPTR_WR   = %08X"
 		"\n", cp_rb_rptr, cp_rb_wptr, r3);
 
 	kgsl_regread(device, REG_CP_IB1_BASE, &cp_ib1_base);
 	kgsl_regread(device, REG_CP_IB1_BUFSZ, &cp_ib1_bufsz);
-	KGSL_LOG_DUMP("CP_IB1: BASE = %08X | BUFSZ  = %d\n", cp_ib1_base,
+	KGSL_LOG_DUMP(device,
+		"CP_IB1: BASE = %08X | BUFSZ  = %d\n", cp_ib1_base,
 		cp_ib1_bufsz);
 
 	kgsl_regread(device, REG_CP_IB2_BASE, &cp_ib2_base);
 	kgsl_regread(device, REG_CP_IB2_BUFSZ, &cp_ib2_bufsz);
-	KGSL_LOG_DUMP("CP_IB2: BASE = %08X | BUFSZ  = %d\n", cp_ib2_base,
+	KGSL_LOG_DUMP(device,
+		"CP_IB2: BASE = %08X | BUFSZ  = %d\n", cp_ib2_base,
 		cp_ib2_bufsz);
 
 	kgsl_regread(device, REG_CP_INT_CNTL, &r1);
 	kgsl_regread(device, REG_CP_INT_STATUS, &r2);
-	KGSL_LOG_DUMP("CP_INT: CNTL = %08X | STATUS = %08X\n", r1, r2);
+	KGSL_LOG_DUMP(device, "CP_INT: CNTL = %08X | STATUS = %08X\n", r1, r2);
 
 	kgsl_regread(device, REG_CP_ME_CNTL, &r1);
 	kgsl_regread(device, REG_CP_ME_STATUS, &r2);
 	kgsl_regread(device, REG_MASTER_INT_SIGNAL, &r3);
-	KGSL_LOG_DUMP("CP_ME:  CNTL = %08X | STATUS = %08X | MSTR_INT_SGNL = "
+	KGSL_LOG_DUMP(device,
+		"CP_ME:  CNTL = %08X | STATUS = %08X | MSTR_INT_SGNL = "
 		"%08X\n", r1, r2, r3);
 
 	kgsl_regread(device, REG_CP_STAT, &cp_stat);
-	KGSL_LOG_DUMP("CP_STAT      = %08X\n", cp_stat);
+	KGSL_LOG_DUMP(device, "CP_STAT      = %08X\n", cp_stat);
 #ifndef CONFIG_MSM_KGSL_PSTMRTMDMP_CP_STAT_NO_DETAIL
 	{
 		struct log_field lns[] = {
@@ -547,7 +556,7 @@ static int kgsl_dump_yamato(struct kgsl_device *device)
 			{cp_stat &  BIT(1), "RD_RQ_BSY  1"},
 			{cp_stat &  BIT(2), "RD_RTN_BSY 2"},
 		};
-		kgsl_dump_fields("    MIU=", lns, ARRAY_SIZE(lns));
+		kgsl_dump_fields(device, "    MIU=", lns, ARRAY_SIZE(lns));
 	}
 	{
 		struct log_field lns[] = {
@@ -557,7 +566,7 @@ static int kgsl_dump_yamato(struct kgsl_device *device)
 			{cp_stat &  BIT(9), "ST_BUSY    9"},
 			{cp_stat & BIT(10), "BUSY      10"},
 		};
-		kgsl_dump_fields("    CSF=", lns, ARRAY_SIZE(lns));
+		kgsl_dump_fields(device, "    CSF=", lns, ARRAY_SIZE(lns));
 	}
 	{
 		struct log_field lns[] = {
@@ -567,7 +576,7 @@ static int kgsl_dump_yamato(struct kgsl_device *device)
 			{cp_stat & BIT(16), "ST_QUEUE_B16"},
 			{cp_stat & BIT(17), "PFP_BUSY  17"},
 		};
-		kgsl_dump_fields("   RING=", lns, ARRAY_SIZE(lns));
+		kgsl_dump_fields(device, "   RING=", lns, ARRAY_SIZE(lns));
 	}
 	{
 		struct log_field lns[] = {
@@ -584,65 +593,71 @@ static int kgsl_dump_yamato(struct kgsl_device *device)
 			{cp_stat & BIT(30), "MIU_FF EM 30"},
 			{cp_stat & BIT(31), "CP_BUSY   31"},
 		};
-		kgsl_dump_fields(" CP_STT=", lns, ARRAY_SIZE(lns));
+		kgsl_dump_fields(device, " CP_STT=", lns, ARRAY_SIZE(lns));
 	}
 #endif
 
 	kgsl_regread(device, REG_SCRATCH_REG0, &r1);
-	KGSL_LOG_DUMP("SCRATCH_REG0       = %08X\n", r1);
+	KGSL_LOG_DUMP(device, "SCRATCH_REG0       = %08X\n", r1);
 
 	kgsl_regread(device, REG_COHER_SIZE_PM4, &r1);
 	kgsl_regread(device, REG_COHER_BASE_PM4, &r2);
 	kgsl_regread(device, REG_COHER_STATUS_PM4, &r3);
-	KGSL_LOG_DUMP("COHER:  SIZE_PM4   = %08X | BASE_PM4 = %08X | STATUS_PM4"
+	KGSL_LOG_DUMP(device,
+		"COHER:  SIZE_PM4   = %08X | BASE_PM4 = %08X | STATUS_PM4"
 		" = %08X\n", r1, r2, r3);
 
 	kgsl_regread(device, REG_MH_AXI_ERROR, &r1);
-	KGSL_LOG_DUMP("MH:     AXI_ERROR  = %08X\n", r1);
+	KGSL_LOG_DUMP(device, "MH:     AXI_ERROR  = %08X\n", r1);
 
 	kgsl_regread(device, REG_MH_MMU_PAGE_FAULT, &r1);
 	kgsl_regread(device, REG_MH_MMU_CONFIG, &r2);
 	kgsl_regread(device, REG_MH_MMU_MPU_BASE, &r3);
-	KGSL_LOG_DUMP("MH_MMU: PAGE_FAULT = %08X | CONFIG   = %08X | MPU_BASE ="
+	KGSL_LOG_DUMP(device,
+		"MH_MMU: PAGE_FAULT = %08X | CONFIG   = %08X | MPU_BASE ="
 		" %08X\n", r1, r2, r3);
 
 	kgsl_regread(device, REG_MH_MMU_MPU_END, &r1);
 	kgsl_regread(device, REG_MH_MMU_VA_RANGE, &r2);
 	kgsl_regread(device, REG_MH_MMU_PT_BASE, &pt_base);
-	KGSL_LOG_DUMP("        MPU_END    = %08X | VA_RANGE = %08X | PT_BASE  ="
+	KGSL_LOG_DUMP(device,
+		"        MPU_END    = %08X | VA_RANGE = %08X | PT_BASE  ="
 		" %08X\n", r1, r2, pt_base);
 
 	kgsl_regread(device, REG_MH_MMU_TRAN_ERROR, &r1);
-	KGSL_LOG_DUMP("        TRAN_ERROR = %08X\n", r1);
+	KGSL_LOG_DUMP(device, "        TRAN_ERROR = %08X\n", r1);
 
 	kgsl_regread(device, REG_MH_INTERRUPT_MASK, &r1);
 	kgsl_regread(device, REG_MH_INTERRUPT_STATUS, &r2);
-	KGSL_LOG_DUMP("MH_INTERRUPT: MASK = %08X | STATUS   = %08X\n", r1, r2);
+	KGSL_LOG_DUMP(device,
+		"MH_INTERRUPT: MASK = %08X | STATUS   = %08X\n", r1, r2);
 
 	if (device->ftbl.device_cmdstream_readtimestamp != NULL) {
 		ts_processed = device->ftbl.device_cmdstream_readtimestamp(
 				device, KGSL_TIMESTAMP_RETIRED);
-		KGSL_LOG_DUMP("TIMESTM RTRD: %08X\n", ts_processed);
+		KGSL_LOG_DUMP(device, "TIMESTM RTRD: %08X\n", ts_processed);
 	}
 
 	num_item = kgsl_ringbuffer_count(&yamato_device->ringbuffer,
 						cp_rb_rptr);
 	if (num_item <= 0)
-		KGSL_LOG_POSTMORTEM_WRITE("Ringbuffer is Empty.\n");
+		KGSL_LOG_POSTMORTEM_WRITE(device, "Ringbuffer is Empty.\n");
 
 	rb_copy = vmalloc(rb_count<<2);
 	if (!rb_copy) {
-		KGSL_LOG_POSTMORTEM_WRITE("Failed to allocate buffer.\n");
+		KGSL_LOG_POSTMORTEM_WRITE(device,
+			"vmalloc(%d) failed\n", rb_count << 2);
 		result = -ENOMEM;
 		goto end;
 	}
 
-	KGSL_LOG_DUMP("RB: rd_addr:%8.8x  rb_size:%d  num_item:%d\n",
+	KGSL_LOG_DUMP(device, "RB: rd_addr:%8.8x  rb_size:%d  num_item:%d\n",
 		cp_rb_base, rb_count<<2, num_item);
 	rb_vaddr = (const uint32_t *)kgsl_sharedmem_convertaddr(device, pt_base,
 					cp_rb_base, &rb_memsize);
 	if (!rb_vaddr) {
-		KGSL_LOG_POSTMORTEM_WRITE("Can't fetch vaddr for CP_RB_BASE\n");
+		KGSL_LOG_POSTMORTEM_WRITE(device,
+			"Can't fetch vaddr for CP_RB_BASE\n");
 		goto error_vfree;
 	}
 
@@ -684,9 +699,10 @@ static int kgsl_dump_yamato(struct kgsl_device *device)
 	read_idx = (int)cp_rb_rptr - 64;
 	if (read_idx < 0)
 		read_idx += rb_count;
-	KGSL_LOG_DUMP("RB: addr=%8.8x  window:%4.4x-%4.4x, start:%4.4x\n",
+	KGSL_LOG_DUMP(device,
+		"RB: addr=%8.8x  window:%4.4x-%4.4x, start:%4.4x\n",
 		cp_rb_base, cp_rb_rptr, cp_rb_wptr, read_idx);
-	kgsl_dump_rb(rb_copy, num_item<<2, read_idx, rb_count);
+	kgsl_dump_rb(device, rb_copy, num_item<<2, read_idx, rb_count);
 
 	if (kgsl_ib_dump_enabled()) {
 		for (read_idx = 64; read_idx >= 0; --read_idx) {
@@ -696,7 +712,8 @@ static int kgsl_dump_yamato(struct kgsl_device *device)
 				uint32_t ib_addr = rb_copy[read_idx+1];
 				uint32_t ib_size = rb_copy[read_idx+2];
 				if (cp_ib1_bufsz && cp_ib1_base == ib_addr) {
-					KGSL_LOG_DUMP("IB1: base:%8.8X  "
+					KGSL_LOG_DUMP(device,
+						"IB1: base:%8.8X  "
 						"count:%d\n", ib_addr, ib_size);
 					dump_ib(device, "IB1: ", pt_base,
 						read_idx<<2, ib_addr, ib_size,
@@ -708,7 +725,8 @@ static int kgsl_dump_yamato(struct kgsl_device *device)
 			if (cp_ib2_bufsz && cp_ib2_base == ib_list.bases[i]) {
 				uint32_t ib_size = ib_list.sizes[i];
 				uint32_t ib_offset = ib_list.offsets[i];
-				KGSL_LOG_DUMP("IB2: base:%8.8X  count:%d\n",
+				KGSL_LOG_DUMP(device,
+					"IB2: base:%8.8X  count:%d\n",
 					cp_ib2_base, ib_size);
 				dump_ib(device, "IB2: ", pt_base, ib_offset,
 					ib_list.bases[i], ib_size, 1);
@@ -780,11 +798,13 @@ int kgsl_postmortem_dump(struct kgsl_device *device, int manual)
 
 		if (!manual) {
 			device->state = KGSL_STATE_DUMP_AND_RECOVER;
-			KGSL_PWR_INFO("state -> DUMP_AND_RECOVER, device %d\n",
-				      device->id);
+			KGSL_PWR_WARN(device,
+				"state -> DUMP_AND_RECOVER, device %d\n",
+				device->id);
 		}
 
-		KGSL_DRV_ERR("wait for work in workqueue to complete\n");
+		KGSL_DRV_ERR(device,
+			"wait for work in workqueue to complete\n");
 		mutex_unlock(&device->mutex);
 		flush_workqueue(device->work_queue);
 		mutex_lock(&device->mutex);
@@ -807,9 +827,9 @@ int kgsl_postmortem_dump(struct kgsl_device *device, int manual)
 		}
 	}
 	else
-		KGSL_DRV_FATAL("Unknown device id - 0x%x\n", device->id);
+		KGSL_DRV_CRIT(device, "Unknown device id - 0x%x\n", device->id);
 
-	KGSL_DRV_ERR("Dump Finished\n");
+	KGSL_DRV_ERR(device, "Dump Finished\n");
 
 	return 0;
 }

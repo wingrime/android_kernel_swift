@@ -33,11 +33,6 @@
 
 struct dentry *kgsl_debugfs_dir;
 
-unsigned int kgsl_drv_log = KGSL_LOG_LEVEL_DEFAULT;
-unsigned int kgsl_cmd_log = KGSL_LOG_LEVEL_DEFAULT;
-unsigned int kgsl_ctxt_log = KGSL_LOG_LEVEL_DEFAULT;
-unsigned int kgsl_mem_log = KGSL_LOG_LEVEL_DEFAULT;
-unsigned int kgsl_pwr_log = KGSL_LOG_LEVEL_DEFAULT;
 unsigned int kgsl_cff_dump_enable;
 
 #ifdef CONFIG_MSM_KGSL_MMU
@@ -47,83 +42,56 @@ unsigned int kgsl_cache_enable;
 static uint32_t kgsl_ib_base;
 static uint32_t kgsl_ib_size;
 
-#ifdef CONFIG_DEBUG_FS
-static int kgsl_log_set(unsigned int *log_val, void *data, u64 val)
+static inline int kgsl_log_set(unsigned int *log_val, void *data, u64 val)
 {
 	*log_val = min((unsigned int)val, (unsigned int)KGSL_LOG_LEVEL_MAX);
 	return 0;
 }
 
-static int kgsl_drv_log_set(void *data, u64 val)
+#define KGSL_DEBUGFS_LOG(__log)                         \
+static int __log ## _set(void *data, u64 val)           \
+{                                                       \
+	struct kgsl_device *device = data;              \
+	return kgsl_log_set(&device->__log, data, val); \
+}                                                       \
+static int __log ## _get(void *data, u64 *val)	        \
+{                                                       \
+	struct kgsl_device *device = data;              \
+	return *val = device->__log;                    \
+}                                                       \
+DEFINE_SIMPLE_ATTRIBUTE(__log ## _fops,                 \
+__log ## _get, __log ## _set, "%llu\n");                \
+
+KGSL_DEBUGFS_LOG(drv_log);
+KGSL_DEBUGFS_LOG(cmd_log);
+KGSL_DEBUGFS_LOG(ctxt_log);
+KGSL_DEBUGFS_LOG(mem_log);
+KGSL_DEBUGFS_LOG(pwr_log);
+
+void kgsl_device_log_init(struct kgsl_device *device)
 {
-	return kgsl_log_set(&kgsl_drv_log, data, val);
+	if (!device->d_debugfs || IS_ERR(device->d_debugfs))
+		return;
+
+	device->cmd_log = KGSL_LOG_LEVEL_DEFAULT;
+	device->ctxt_log = KGSL_LOG_LEVEL_DEFAULT;
+	device->drv_log = KGSL_LOG_LEVEL_DEFAULT;
+	device->mem_log = KGSL_LOG_LEVEL_DEFAULT;
+	device->pwr_log = KGSL_LOG_LEVEL_DEFAULT;
+
+	debugfs_create_file("log_level_cmd", 0644, device->d_debugfs, device,
+			    &cmd_log_fops);
+	debugfs_create_file("log_level_ctxt", 0644, device->d_debugfs, device,
+			    &ctxt_log_fops);
+	debugfs_create_file("log_level_drv", 0644, device->d_debugfs, device,
+			    &drv_log_fops);
+	debugfs_create_file("log_level_mem", 0644, device->d_debugfs, device,
+				&mem_log_fops);
+	debugfs_create_file("log_level_pwr", 0644, device->d_debugfs, device,
+				&pwr_log_fops);
 }
 
-static int kgsl_drv_log_get(void *data, u64 *val)
-{
-	*val = kgsl_drv_log;
-	return 0;
-}
-
-DEFINE_SIMPLE_ATTRIBUTE(kgsl_drv_log_fops, kgsl_drv_log_get,
-			kgsl_drv_log_set, "%llu\n");
-
-static int kgsl_cmd_log_set(void *data, u64 val)
-{
-	return kgsl_log_set(&kgsl_cmd_log, data, val);
-}
-
-static int kgsl_cmd_log_get(void *data, u64 *val)
-{
-	*val = kgsl_cmd_log;
-	return 0;
-}
-
-DEFINE_SIMPLE_ATTRIBUTE(kgsl_cmd_log_fops, kgsl_cmd_log_get,
-			kgsl_cmd_log_set, "%llu\n");
-
-static int kgsl_ctxt_log_set(void *data, u64 val)
-{
-	return kgsl_log_set(&kgsl_ctxt_log, data, val);
-}
-
-static int kgsl_ctxt_log_get(void *data, u64 *val)
-{
-	*val = kgsl_ctxt_log;
-	return 0;
-}
-
-DEFINE_SIMPLE_ATTRIBUTE(kgsl_ctxt_log_fops, kgsl_ctxt_log_get,
-			kgsl_ctxt_log_set, "%llu\n");
-
-static int kgsl_mem_log_set(void *data, u64 val)
-{
-	return kgsl_log_set(&kgsl_mem_log, data, val);
-}
-
-static int kgsl_mem_log_get(void *data, u64 *val)
-{
-	*val = kgsl_mem_log;
-	return 0;
-}
-
-DEFINE_SIMPLE_ATTRIBUTE(kgsl_mem_log_fops, kgsl_mem_log_get,
-			kgsl_mem_log_set, "%llu\n");
-
-
-static int kgsl_pwr_log_set(void *data, u64 val)
-{
-	return kgsl_log_set(&kgsl_pwr_log, data, val);
-}
-
-static int kgsl_pwr_log_get(void *data, u64 *val)
-{
-	*val = kgsl_pwr_log;
-	return 0;
-}
-
-DEFINE_SIMPLE_ATTRIBUTE(kgsl_pwr_log_fops, kgsl_pwr_log_get,
-						kgsl_pwr_log_set, "%llu\n");
+#ifdef CONFIG_DEBUG_FS
 
 #ifdef CONFIG_MSM_KGSL_MMU
 static int kgsl_cache_enable_set(void *data, u64 val)
@@ -291,7 +259,7 @@ static int kgsl_regread_nolock(struct kgsl_device *device,
 	unsigned int *reg;
 
 	if (offsetwords*sizeof(uint32_t) >= device->regspace.sizebytes) {
-		KGSL_DRV_ERR("invalid offset %d\n", offsetwords);
+		KGSL_DRV_ERR(device, "invalid offset %d\n", offsetwords);
 		return -ERANGE;
 	}
 
@@ -532,17 +500,6 @@ int kgsl_debug_init(struct dentry *dir)
 {
 	if (!dir || IS_ERR(dir))
 		return 0;
-
-	debugfs_create_file("log_level_cmd", 0644, dir, 0,
-				&kgsl_cmd_log_fops);
-	debugfs_create_file("log_level_ctxt", 0644, dir, 0,
-				&kgsl_ctxt_log_fops);
-	debugfs_create_file("log_level_drv", 0644, dir, 0,
-				&kgsl_drv_log_fops);
-	debugfs_create_file("log_level_mem", 0644, dir, 0,
-				&kgsl_mem_log_fops);
-	debugfs_create_file("log_level_pwr", 0644, dir, 0,
-				&kgsl_pwr_log_fops);
 
 #ifdef CONFIG_MSM_KGSL_MMU
 	debugfs_create_file("cache_enable", 0644, dir, 0,

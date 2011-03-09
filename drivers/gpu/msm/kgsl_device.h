@@ -163,6 +163,13 @@ struct kgsl_device {
 	struct completion recovery_gate;
 	struct dentry *d_debugfs;
 	struct idr context_idr;
+
+	/* Logging levels */
+	int cmd_log;
+	int ctxt_log;
+	int drv_log;
+	int mem_log;
+	int pwr_log;
 };
 
 struct kgsl_context {
@@ -220,11 +227,10 @@ kgsl_get_mmu(struct kgsl_device *device)
 
 static inline int kgsl_create_device_workqueue(struct kgsl_device *device)
 {
-	KGSL_DRV_INFO("creating workqueue: %s\n", device->name);
 	device->work_queue = create_workqueue(device->name);
 	if (!device->work_queue) {
-		KGSL_DRV_ERR("Failed to create workqueue %s\n",
-				device->name);
+		KGSL_DRV_ERR(device, "create_workqueue(%s) failed\n",
+			device->name);
 		return -EINVAL;
 	}
 	return 0;

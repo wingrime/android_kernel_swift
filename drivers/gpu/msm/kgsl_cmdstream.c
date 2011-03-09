@@ -46,8 +46,6 @@ kgsl_cmdstream_readtimestamp(struct kgsl_device *device,
 {
 	uint32_t timestamp = 0;
 
-	KGSL_CMD_VDBG("enter (device_id=%d, type=%d)\n", device->id, type);
-
 	if (type == KGSL_TIMESTAMP_CONSUMED)
 		KGSL_CMDSTREAM_GET_SOP_TIMESTAMP(device,
 						 (unsigned int *)&timestamp);
@@ -55,8 +53,6 @@ kgsl_cmdstream_readtimestamp(struct kgsl_device *device,
 		KGSL_CMDSTREAM_GET_EOP_TIMESTAMP(device,
 						 (unsigned int *)&timestamp);
 	rmb();
-
-	KGSL_CMD_VDBG("return %d\n", timestamp);
 
 	return timestamp;
 }
@@ -74,9 +70,10 @@ void kgsl_cmdstream_memqueue_drain(struct kgsl_device *device)
 					KGSL_TIMESTAMP_RETIRED);
 
 	list_for_each_entry_safe(entry, entry_tmp, &device->memqueue, list) {
-		KGSL_MEM_DBG("ts_processed %d ts_free %d gpuaddr %x)\n",
-			     ts_processed, entry->free_timestamp,
-			     entry->memdesc.gpuaddr);
+		KGSL_MEM_INFO(device,
+			"ts_processed %d ts_free %d gpuaddr %x)\n",
+			ts_processed, entry->free_timestamp,
+			entry->memdesc.gpuaddr);
 		if (!timestamp_cmp(ts_processed, entry->free_timestamp))
 			break;
 
@@ -110,8 +107,6 @@ kgsl_cmdstream_freememontimestamp(struct kgsl_device *device,
 				  enum kgsl_timestamp_type type)
 {
 	BUG_ON(!mutex_is_locked(&device->mutex));
-	KGSL_MEM_DBG("enter (dev %p gpuaddr %x ts %d)\n",
-		     device, entry->memdesc.gpuaddr, timestamp);
 
 	entry->free_timestamp = timestamp;
 

@@ -57,14 +57,7 @@
  */
 #define PMIC_8901_SMPS_BAND_1_COMPENSATE(vprog)		((vprog) & 0xF8)
 
-/*
- * This defines what the application processor believes the boot loader
- * has set the processor core voltages to (in uV).  This is needed because the
- * saw regulator must be initialized before SSBI is available, meaning that
- * the revision of the PMIC 8901 cannot be read when saw_set_voltage is first
- * called.
- */
-#define BOOT_LOADER_CORE_VOLTAGE	1200000
+/* Minimum core operating voltage */
 #define MIN_CORE_VOLTAGE		950000
 
 /* Specifies the PMIC internal slew rate in uV/us. */
@@ -97,25 +90,15 @@ static int saw_set_voltage(struct regulator_dev *dev, int min_uV, int max_uV)
 	if (pmic8901_rev <= 0)
 		pmic8901_rev = pm8901_rev(NULL);
 
-	if (pmic8901_rev < 0) {
-		/*
-		 * If the PMIC 8901 revision value is unavailable, then trust
-		 * the value set by the bootloader if it falls in the range:
-		 * [min_uV, max_uV].
-		 */
-		if (BOOT_LOADER_CORE_VOLTAGE >= min_uV &&
-		    BOOT_LOADER_CORE_VOLTAGE <= max_uV)
-			return 0;
-		else {
-			pr_err("%s: PMIC 8901 revision unavailable and expected"
-			       " bootloader core voltage: %d not in set point "
-			       "range: %d to %d\n", __func__,
-			       BOOT_LOADER_CORE_VOLTAGE, min_uV, max_uV);
-			return -ENODEV;
-		}
-
-	} else if (IS_PMIC_8901_V1(pmic8901_rev))
+	if (IS_PMIC_8901_V1(pmic8901_rev))
 		min_uV = PMIC_8901_V1_SCALE(min_uV);
+
+	/*
+	 * If the PMIC 8901 revision value is unavailable (because
+	 * saw_set_voltage is being called before the pmic8901 driver has
+	 * probed), then assume that it is version 2.0 or greater and thus
+	 * does not need v1 scaling.
+	 */
 
 	if (min_uV < SMPS_BAND_1_VMIN || min_uV > SMPS_BAND_3_VMAX)
 		return -EINVAL;

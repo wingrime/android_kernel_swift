@@ -30,6 +30,7 @@
 #define PMAPP_RPC_VER_2_1		0x00020001
 #define PMAPP_RPC_VER_3_1		0x00030001
 #define PMAPP_RPC_VER_5_1		0x00050001
+#define PMAPP_RPC_VER_7_1		0x00070001
 
 #define VBUS_SESS_VALID_CB_PROC			1
 #define PM_VOTE_USB_PWR_SEL_SWITCH_APP__HSUSB 	(1 << 2)
@@ -57,6 +58,7 @@ static struct msm_rpc_client *client;
 
 /* Add newer versions at the top of array */
 static const unsigned int rpc_vers[] = {
+	PMAPP_RPC_VER_7_1,
 	PMAPP_RPC_VER_5_1,
 	PMAPP_RPC_VER_3_1,
 	PMAPP_RPC_VER_2_1,

@@ -29,7 +29,7 @@
 #include <linux/mfd/pmic8058.h>
 #include <linux/completion.h>
 
-#include <linux/m_adc.h>
+#include <linux/msm_adc.h>
 
 /* PMIC8058 TEMP_ALRM registers */
 #define	SSBI_REG_TEMP_ALRM_CTRL		0x1B

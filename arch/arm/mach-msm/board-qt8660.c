@@ -32,7 +32,7 @@
 #include <linux/pwm.h>
 #include <linux/pmic8058-pwm.h>
 #include <linux/pmic8058-xoadc.h>
-#include <linux/m_adc.h>
+#include <linux/msm_adc.h>
 #include <linux/m_adcproc.h>
 #include <linux/mfd/marimba.h>
 #include <linux/i2c.h>

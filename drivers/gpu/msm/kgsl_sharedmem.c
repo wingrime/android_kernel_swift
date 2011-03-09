@@ -29,6 +29,295 @@
 #include "kgsl_log.h"
 #include "kgsl_cffdump.h"
 
+static struct kgsl_process_private *
+_get_priv_from_kobj(struct kobject *kobj)
+{
+	struct kgsl_process_private *private;
+	unsigned long name;
+
+	if (!kobj)
+		return NULL;
+
+	if (sscanf(kobj->name, "%ld", &name) != 1)
+		return NULL;
+
+	list_for_each_entry(private, &kgsl_driver.process_list, list) {
+		if (private->pid == name)
+			return private;
+	}
+
+	return NULL;
+}
+
+/* sharedmem / memory sysfs files */
+
+static ssize_t
+process_show_vmalloc(struct kobject *kobj,
+		   struct kobj_attribute *attr,
+		   char *buf)
+{
+
+	struct kgsl_process_private *priv;
+	int ret = 0;
+
+	mutex_lock(&kgsl_driver.process_mutex);
+	priv = _get_priv_from_kobj(kobj);
+
+	if (priv)
+		ret += sprintf(buf, "%d\n", priv->stats.vmalloc);
+
+	mutex_unlock(&kgsl_driver.process_mutex);
+	return ret;
+}
+
+static ssize_t
+process_show_vmalloc_max(struct kobject *kobj,
+		       struct kobj_attribute *attr,
+		       char *buf)
+{
+
+	struct kgsl_process_private *priv;
+	int ret = 0;
+
+	mutex_lock(&kgsl_driver.process_mutex);
+	priv = _get_priv_from_kobj(kobj);
+
+	if (priv)
+		ret += sprintf(buf, "%d\n", priv->stats.vmalloc_max);
+
+	mutex_unlock(&kgsl_driver.process_mutex);
+	return ret;
+}
+
+static ssize_t
+process_show_exmem(struct kobject *kobj,
+		 struct kobj_attribute *attr,
+		 char *buf)
+{
+
+	struct kgsl_process_private *priv;
+	int ret = 0;
+
+	mutex_lock(&kgsl_driver.process_mutex);
+	priv = _get_priv_from_kobj(kobj);
+
+	if (priv)
+		ret += sprintf(buf, "%d\n", priv->stats.exmem);
+
+	mutex_unlock(&kgsl_driver.process_mutex);
+	return ret;
+}
+
+static ssize_t
+process_show_exmem_max(struct kobject *kobj,
+		     struct kobj_attribute *attr,
+		     char *buf)
+{
+
+	struct kgsl_process_private *priv;
+	int ret = 0;
+
+	mutex_lock(&kgsl_driver.process_mutex);
+	priv = _get_priv_from_kobj(kobj);
+
+	if (priv)
+		ret += sprintf(buf, "%d\n", priv->stats.exmem_max);
+
+	mutex_unlock(&kgsl_driver.process_mutex);
+	return ret;
+}
+
+static ssize_t
+process_show_flushes(struct kobject *kobj,
+		   struct kobj_attribute *attr,
+		   char *buf)
+{
+	struct kgsl_process_private *priv;
+	int ret = 0;
+
+	mutex_lock(&kgsl_driver.process_mutex);
+	priv = _get_priv_from_kobj(kobj);
+
+	if (priv)
+		ret += sprintf(buf, "%d\n", priv->stats.flushes);
+
+	mutex_unlock(&kgsl_driver.process_mutex);
+	return ret;
+}
+
+static struct kobj_attribute attr_vmalloc = {
+	.attr = { .name = "vmalloc", .mode = 0444 },
+	.show = process_show_vmalloc,
+	.store = NULL,
+};
+
+static struct kobj_attribute attr_vmalloc_max = {
+	.attr = { .name = "vmalloc_max", .mode = 0444 },
+	.show = process_show_vmalloc_max,
+	.store = NULL,
+};
+
+static struct kobj_attribute attr_exmem = {
+	.attr = { .name = "exmem", .mode = 0444 },
+	.show = process_show_exmem,
+	.store = NULL,
+};
+
+static struct kobj_attribute attr_exmem_max = {
+	.attr = { .name = "exmem_max", .mode = 0444 },
+	.show = process_show_exmem_max,
+	.store = NULL,
+};
+
+static struct kobj_attribute attr_flushes = {
+	.attr = { .name = "flushes", .mode = 0444 },
+	.show = process_show_flushes,
+	.store = NULL,
+};
+
+static struct attribute *process_attrs[] = {
+	&attr_vmalloc.attr,
+	&attr_vmalloc_max.attr,
+	&attr_exmem.attr,
+	&attr_exmem_max.attr,
+	&attr_flushes.attr,
+	NULL
+};
+
+static struct attribute_group process_attr_group = {
+	.attrs = process_attrs,
+};
+
+void
+kgsl_process_uninit_sysfs(struct kgsl_process_private *private)
+{
+	/* Remove the sysfs entry */
+	if (private->kobj) {
+		sysfs_remove_group(private->kobj, &process_attr_group);
+		kobject_put(private->kobj);
+	}
+}
+
+void
+kgsl_process_init_sysfs(struct kgsl_process_private *private)
+{
+	unsigned char name[16];
+
+	/* Add a entry to the sysfs device */
+	snprintf(name, sizeof(name), "%d", private->pid);
+	private->kobj = kobject_create_and_add(name, kgsl_driver.prockobj);
+
+	/* sysfs failure isn't fatal, just annoying */
+	if (private->kobj != NULL) {
+		if (sysfs_create_group(private->kobj, &process_attr_group)) {
+			kobject_put(private->kobj);
+			private->kobj = NULL;
+		}
+	}
+}
+
+static int kgsl_drv_vmalloc_show(struct device *dev,
+				 struct device_attribute *attr,
+				 char *buf)
+{
+	return sprintf(buf, "%d\n", kgsl_driver.stats.vmalloc);
+}
+
+static int kgsl_drv_vmalloc_max_show(struct device *dev,
+				     struct device_attribute *attr,
+				     char *buf)
+{
+	return sprintf(buf, "%d\n", kgsl_driver.stats.vmalloc_max);
+}
+
+static int kgsl_drv_coherent_show(struct device *dev,
+				  struct device_attribute *attr,
+				  char *buf)
+{
+	return sprintf(buf, "%d\n", kgsl_driver.stats.coherent);
+}
+
+static int kgsl_drv_coherent_max_show(struct device *dev,
+				      struct device_attribute *attr,
+				      char *buf)
+{
+	return sprintf(buf, "%d\n", kgsl_driver.stats.coherent_max);
+}
+
+static int kgsl_drv_histogram_show(struct device *dev,
+				   struct device_attribute *attr,
+				   char *buf)
+{
+	int len = 0;
+	int i;
+
+	for (i = 0; i < 16; i++)
+		len += sprintf(buf + len, "%d ",
+			kgsl_driver.stats.histogram[i]);
+
+	len += sprintf(buf + len, "\n");
+	return len;
+}
+
+static struct device_attribute drv_vmalloc_attr = {
+	.attr = { .name = "vmalloc", .mode = 0444, },
+	.show = kgsl_drv_vmalloc_show,
+	.store = NULL,
+};
+
+static struct device_attribute drv_vmalloc_max_attr = {
+	.attr = { .name = "vmalloc_max", .mode = 0444, },
+	.show = kgsl_drv_vmalloc_max_show,
+	.store = NULL,
+};
+
+static struct device_attribute drv_coherent_attr = {
+	.attr = { .name = "coherent", .mode = 0444, },
+	.show = kgsl_drv_coherent_show,
+	.store = NULL,
+};
+
+static struct device_attribute drv_coherent_max_attr = {
+	.attr = { .name = "coherent_max", .mode = 0444, },
+	.show = kgsl_drv_coherent_max_show,
+	.store = NULL,
+};
+
+static struct device_attribute drv_histogram_attr = {
+	.attr = { .name = "histogram", .mode = 0444, },
+	.show = kgsl_drv_histogram_show,
+	.store = NULL,
+};
+
+void
+kgsl_sharedmem_uninit_sysfs(void)
+{
+	device_remove_file(&kgsl_driver.pdev->dev, &drv_vmalloc_attr);
+	device_remove_file(&kgsl_driver.pdev->dev, &drv_vmalloc_max_attr);
+	device_remove_file(&kgsl_driver.pdev->dev, &drv_coherent_attr);
+	device_remove_file(&kgsl_driver.pdev->dev, &drv_coherent_max_attr);
+	device_remove_file(&kgsl_driver.pdev->dev, &drv_histogram_attr);
+}
+
+int
+kgsl_sharedmem_init_sysfs(void)
+{
+	int ret;
+
+	ret  = device_create_file(&kgsl_driver.pdev->dev,
+				  &drv_vmalloc_attr);
+	ret |= device_create_file(&kgsl_driver.pdev->dev,
+				  &drv_vmalloc_max_attr);
+	ret |= device_create_file(&kgsl_driver.pdev->dev,
+				  &drv_coherent_attr);
+	ret |= device_create_file(&kgsl_driver.pdev->dev,
+				  &drv_coherent_max_attr);
+	ret |= device_create_file(&kgsl_driver.pdev->dev,
+				  &drv_histogram_attr);
+
+	return ret;
+}
+
 #ifdef CONFIG_OUTER_CACHE
 static void _outer_cache_range_op(unsigned long addr, int size,
 				  unsigned int flags)
@@ -119,9 +408,33 @@ kgsl_sharedmem_vmalloc(struct kgsl_memdesc *memdesc,
 	if (result) {
 		vfree(memdesc->hostptr);
 		memset(memdesc, 0, sizeof(*memdesc));
+	} else {
+		/* Add the allocation to the driver statistics */
+		KGSL_STATS_ADD(size, kgsl_driver.stats.vmalloc,
+			       kgsl_driver.stats.vmalloc_max);
 	}
 
 	return result;
+}
+
+int
+kgsl_sharedmem_alloc_coherent(struct kgsl_memdesc *memdesc, size_t size)
+{
+	size = ALIGN(size, KGSL_PAGESIZE);
+
+	memdesc->hostptr = dma_alloc_coherent(NULL, size, &memdesc->physaddr,
+					      GFP_KERNEL);
+	if (!memdesc->hostptr)
+		return -ENOMEM;
+	memdesc->size = size;
+	memdesc->priv = KGSL_MEMFLAGS_CONPHYS;
+
+	/* Record statistics */
+
+	KGSL_STATS_ADD(size, kgsl_driver.stats.coherent,
+		       kgsl_driver.stats.coherent_max);
+
+	return 0;
 }
 
 void
@@ -141,10 +454,16 @@ kgsl_sharedmem_free(struct kgsl_memdesc *memdesc)
 
 			if (memdesc->hostptr)
 				vfree(memdesc->hostptr);
-		} else if (memdesc->priv & KGSL_MEMFLAGS_CONPHYS)
+
+			kgsl_driver.stats.vmalloc -= memdesc->size;
+
+		} else if (memdesc->priv & KGSL_MEMFLAGS_CONPHYS) {
 			dma_free_coherent(NULL, memdesc->size,
 					  memdesc->hostptr,
 					  memdesc->physaddr);
+
+			kgsl_driver.stats.coherent -= memdesc->size;
+		}
 		else
 			BUG();
 	}

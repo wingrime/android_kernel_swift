@@ -78,11 +78,19 @@
 #define KGSL_G12_DEVICE(device) \
 		KGSL_CONTAINER_OF(device, struct kgsl_g12_device, dev)
 
+/* A macro for memory statistics - add the new size to the stat and if
+   the statisic is greater then _max, set _max
+*/
+
+#define KGSL_STATS_ADD(_size, _stat, _max) \
+	do { _stat += (_size); if (_stat > _max) _max = _stat; } while (0)
+
 struct kgsl_driver {
 	struct cdev cdev;
 	dev_t major;
 	struct class *class;
 	struct kobject *ptkobj;
+	struct kobject *prockobj;
 	struct kgsl_device *devp[KGSL_DEVICE_MAX];
 	struct platform_device *pdev;
 
@@ -114,6 +122,14 @@ struct kgsl_driver {
 	unsigned int pt_va_base;
 
 	struct dma_pool *ptpool;
+
+	struct {
+		unsigned int vmalloc;
+		unsigned int vmalloc_max;
+		unsigned int coherent;
+		unsigned int coherent_max;
+		unsigned int histogram[16];
+	} stats;
 };
 
 extern struct kgsl_driver kgsl_driver;

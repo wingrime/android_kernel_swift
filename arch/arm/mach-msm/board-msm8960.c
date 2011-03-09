@@ -183,6 +183,7 @@ static void __init msm8960_rumi3_init(void)
 {
 	msm_clock_init(msm_clocks_8960, msm_num_clocks_8960);
 	platform_add_devices(rumi3_devices, ARRAY_SIZE(rumi3_devices));
+	msm8960_init_mmc();
 }
 
 MACHINE_START(MSM8960_SIM, "QCT MSM8960 SIMULATOR")

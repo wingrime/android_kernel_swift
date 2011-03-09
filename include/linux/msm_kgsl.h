@@ -134,33 +134,41 @@ struct kgsl_pwrlevel {
 #ifdef __KERNEL__
 #include <mach/msm_bus.h>
 
-struct kgsl_platform_data {
-	struct kgsl_pwrlevel pwrlevel_2d[KGSL_MAX_PWRLEVELS];
-	int init_level_2d;
-	int num_levels_2d;
-	struct kgsl_pwrlevel pwrlevel_3d[KGSL_MAX_PWRLEVELS];
-	int init_level_3d;
-	int num_levels_3d;
-	int (*set_grp2d_async)(void);
-	int (*set_grp3d_async)(void);
-	const char *imem_clk_name;
-	const char *imem_pclk_name;
-	const char *grp3d_clk_name;
-	const char *grp3d_pclk_name;
-	const char *grp2d0_clk_name;
-	const char *grp2d0_pclk_name;
-	const char *grp2d1_clk_name;
-	const char *grp2d1_pclk_name;
-	unsigned int idle_timeout_2d;
-	unsigned int idle_timeout_3d;
-	struct msm_bus_scale_pdata *grp3d_bus_scale_table;
-	struct msm_bus_scale_pdata *grp2d0_bus_scale_table;
-	struct msm_bus_scale_pdata *grp2d1_bus_scale_table;
+struct kgsl_grp_clk_name {
+	const char *clk;
+	const char *pclk;
+};
+
+struct kgsl_device_pwr_data {
+	struct kgsl_pwrlevel pwrlevel[KGSL_MAX_PWRLEVELS];
+	int init_level;
+	int num_levels;
+	int (*set_grp_async)(void);
+	unsigned int idle_timeout;
 	unsigned int nap_allowed;
-	/* pt_va_base is currently shared between kgsl devices */
+};
+
+struct kgsl_clk_data {
+	struct kgsl_grp_clk_name name;
+	struct msm_bus_scale_pdata *bus_scale_table;
+};
+
+struct kgsl_core_platform_data {
+	struct kgsl_grp_clk_name imem_clk_name;
 	unsigned int pt_va_base;
 	unsigned int pt_va_size;
-	unsigned int pt_max_count;
+};
+
+struct kgsl_device_platform_data {
+	struct kgsl_device_pwr_data pwr_data;
+	struct kgsl_clk_data clk;
+};
+
+struct kgsl_platform_data {
+	struct kgsl_core_platform_data *core;
+	struct kgsl_device_platform_data *dev_3d0;
+	struct kgsl_device_platform_data *dev_2d0;
+	struct kgsl_device_platform_data *dev_2d1;
 };
 
 #endif

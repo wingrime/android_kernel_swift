@@ -493,25 +493,28 @@ kgsl_yamato_init_pwrctrl(struct kgsl_device *device,
 	int i, result = 0;
 	struct clk *clk, *grp_clk;
 	struct kgsl_platform_data *pdata = pdev->dev.platform_data;
+	struct kgsl_core_platform_data *pdata_core = pdata->core;
+	struct kgsl_device_platform_data *pdata_dev = pdata->dev_3d0;
+	struct kgsl_device_pwr_data *pdata_pwr = &pdata_dev->pwr_data;
 
 	/*acquire clocks */
 	BUG_ON(device->pwrctrl.grp_clk != NULL);
-	if (pdata->grp3d_pclk_name) {
-		clk = clk_get(&pdev->dev, pdata->grp3d_pclk_name);
+	if (pdata_dev->clk.name.pclk) {
+		clk = clk_get(&pdev->dev, pdata_dev->clk.name.pclk);
 		if (IS_ERR(clk)) {
 			result = PTR_ERR(clk);
 			KGSL_DRV_ERR("clk_get(%s) returned %d\n",
-				pdata->grp3d_pclk_name, result);
+				pdata_dev->clk.name.pclk, result);
 			goto done;
 		}
 		device->pwrctrl.grp_pclk = clk;
 	}
 
-	clk = clk_get(&pdev->dev, pdata->grp3d_clk_name);
+	clk = clk_get(&pdev->dev, pdata_dev->clk.name.clk);
 	if (IS_ERR(clk)) {
 		result = PTR_ERR(clk);
-		KGSL_DRV_ERR("clk_get(%s) returned %d\n", pdata->grp3d_clk_name,
-					 result);
+		KGSL_DRV_ERR("clk_get(%s) returned %d\n",
+				pdata_dev->clk.name.clk, result);
 		goto done;
 	}
 	device->pwrctrl.grp_clk = grp_clk = clk;
@@ -522,45 +525,45 @@ kgsl_yamato_init_pwrctrl(struct kgsl_device *device,
 	device->pwrctrl.grp_src_clk = clk;
 
 	/* put the AXI bus into asynchronous mode with the graphics cores */
-	if (pdata->set_grp3d_async != NULL)
-		pdata->set_grp3d_async();
+	if (pdata_pwr->set_grp_async != NULL)
+		pdata_pwr->set_grp_async();
 
-	if (pdata->num_levels_3d > KGSL_MAX_PWRLEVELS) {
+	if (pdata_pwr->num_levels > KGSL_MAX_PWRLEVELS) {
 		result = -EINVAL;
 		goto done;
 	}
-	device->pwrctrl.num_pwrlevels = pdata->num_levels_3d;
-	device->pwrctrl.active_pwrlevel = pdata->init_level_3d;
-	for (i = 0; i < pdata->num_levels_3d; i++) {
+	device->pwrctrl.num_pwrlevels = pdata_pwr->num_levels;
+	device->pwrctrl.active_pwrlevel = pdata_pwr->init_level;
+	for (i = 0; i < pdata_pwr->num_levels; i++) {
 		device->pwrctrl.pwrlevels[i].gpu_freq =
-			(pdata->pwrlevel_3d[i].gpu_freq > 0) ?
-			clk_round_rate(clk, pdata->pwrlevel_3d[i].
+			(pdata_pwr->pwrlevel[i].gpu_freq > 0) ?
+			clk_round_rate(clk, pdata_pwr->pwrlevel[i].
 				gpu_freq) : 0;
 		device->pwrctrl.pwrlevels[i].bus_freq =
-			pdata->pwrlevel_3d[i].bus_freq;
+			pdata_pwr->pwrlevel[i].bus_freq;
 	}
 	/* Do not set_rate for targets in sync with AXI */
-	if (pdata->pwrlevel_3d[0].gpu_freq > 0)
+	if (pdata_pwr->pwrlevel[0].gpu_freq > 0)
 		clk_set_rate(clk, device->pwrctrl.
 			pwrlevels[KGSL_DEFAULT_PWRLEVEL].gpu_freq);
 
-	if (pdata->imem_clk_name != NULL) {
-		clk = clk_get(&pdev->dev, pdata->imem_clk_name);
+	if (pdata_core->imem_clk_name.clk != NULL) {
+		clk = clk_get(&pdev->dev, pdata_core->imem_clk_name.clk);
 		if (IS_ERR(clk)) {
 			result = PTR_ERR(clk);
 			KGSL_DRV_ERR("clk_get(%s) returned %d\n",
-						 pdata->imem_clk_name, result);
+				 pdata_core->imem_clk_name.clk, result);
 			goto done;
 		}
 		device->pwrctrl.imem_clk = clk;
 	}
 
-	if (pdata->imem_pclk_name != NULL) {
-		clk = clk_get(&pdev->dev, pdata->imem_pclk_name);
+	if (pdata_core->imem_clk_name.pclk != NULL) {
+		clk = clk_get(&pdev->dev, pdata_core->imem_clk_name.pclk);
 		if (IS_ERR(clk)) {
 			result = PTR_ERR(clk);
 			KGSL_DRV_ERR("clk_get(%s) returned %d\n",
-						 pdata->imem_pclk_name, result);
+				 pdata_core->imem_clk_name.pclk, result);
 			goto done;
 		}
 		device->pwrctrl.imem_pclk = clk;
@@ -573,7 +576,7 @@ kgsl_yamato_init_pwrctrl(struct kgsl_device *device,
 	device->pwrctrl.power_flags = KGSL_PWRFLAGS_CLK_OFF |
 		KGSL_PWRFLAGS_AXI_OFF | KGSL_PWRFLAGS_POWER_OFF |
 		KGSL_PWRFLAGS_IRQ_OFF;
-	device->pwrctrl.nap_allowed = pdata->nap_allowed;
+	device->pwrctrl.nap_allowed = pdata_pwr->nap_allowed;
 	device->pwrctrl.ebi1_clk = clk_get(NULL, "ebi1_kgsl_clk");
 	if (IS_ERR(device->pwrctrl.ebi1_clk))
 		device->pwrctrl.ebi1_clk = NULL;
@@ -582,20 +585,20 @@ kgsl_yamato_init_pwrctrl(struct kgsl_device *device,
 			device->pwrctrl.
 				pwrlevels[device->pwrctrl.active_pwrlevel].
 					 bus_freq);
-	if (pdata->grp3d_bus_scale_table != NULL) {
+	if (pdata_dev->clk.bus_scale_table != NULL) {
 		device->pwrctrl.pcl =
-		msm_bus_scale_register_client(pdata->grp3d_bus_scale_table);
+		msm_bus_scale_register_client(pdata_dev->clk.bus_scale_table);
 		if (!device->pwrctrl.pcl) {
 			KGSL_DRV_ERR("msm_bus_scale_register_client failed "
 				     "id %d table %p", device->id,
-				     pdata->grp3d_bus_scale_table);
+				     pdata_dev->clk.bus_scale_table);
 			result = -EINVAL;
 			goto done;
 		}
 	}
 
 	device->pwrctrl.pwr_rail = PWR_RAIL_GRP_CLK;
-	device->pwrctrl.interval_timeout = pdata->idle_timeout_3d;
+	device->pwrctrl.interval_timeout = pdata_pwr->idle_timeout;
 
 	if (internal_pwr_rail_mode(device->pwrctrl.pwr_rail,
 						PWR_RAIL_CTL_MANUAL)) {
@@ -626,7 +629,8 @@ kgsl_yamato_init(struct platform_device *pdev)
 	int status = -EINVAL;
 	struct kgsl_memregion *regspace = &device->regspace;
 	struct resource *res = NULL;
-	struct kgsl_platform_data *pdata = NULL;
+	struct kgsl_platform_data *pdata = pdev->dev.platform_data;
+	struct kgsl_core_platform_data *pdata_core = pdata->core;
 
 	KGSL_DRV_VDBG("enter (device=%p)\n", device);
 
@@ -700,9 +704,8 @@ kgsl_yamato_init(struct platform_device *pdev)
 
 	kgsl_yamato_getfunctable(&device->ftbl);
 
-	pdata = kgsl_driver.pdev->dev.platform_data;
-	device->mmu.va_base = pdata->pt_va_base;
-	device->mmu.va_range = pdata->pt_va_size;
+	device->mmu.va_base = pdata_core->pt_va_base;
+	device->mmu.va_range = pdata_core->pt_va_size;
 
 	status = kgsl_mmu_init(device);
 	if (status != 0) {

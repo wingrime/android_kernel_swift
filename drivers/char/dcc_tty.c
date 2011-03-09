@@ -16,6 +16,7 @@
 #include <linux/module.h>
 #include <linux/platform_device.h>
 #include <linux/delay.h>
+#include <linux/hrtimer.h>
 #include <linux/console.h>
 #include <linux/tty.h>
 #include <linux/tty_driver.h>
@@ -28,7 +29,8 @@ MODULE_LICENSE("GPL");
 MODULE_VERSION("1.0");
 
 static spinlock_t g_dcc_tty_lock = SPIN_LOCK_UNLOCKED;
-static char g_dcc_buffer[4096];
+static struct hrtimer g_dcc_timer;
+static char g_dcc_buffer[1024];
 static int g_dcc_buffer_head;
 static int g_dcc_buffer_count;
 static unsigned g_dcc_write_delay_usecs = 1;
@@ -36,11 +38,6 @@ static struct tty_driver *g_dcc_tty_driver;
 static struct tty_struct *g_dcc_tty;
 static int g_dcc_tty_open_count;
 static int dcc_chars_in_buffer;
-
-static void dcc_poll_locked_work_fn(struct work_struct *work);
-static DECLARE_WORK(dcc_poll_locked_work, dcc_poll_locked_work_fn);
-static DECLARE_DELAYED_WORK(dcc_poll_locked_delayed_work,
-					dcc_poll_locked_work_fn);
 
 static void dcc_poll_locked(void)
 {
@@ -92,11 +89,19 @@ static void dcc_poll_locked(void)
 	}
 
 	if (g_dcc_buffer_count)
-		schedule_delayed_work_on(0, &dcc_poll_locked_delayed_work,
-				usecs_to_jiffies(g_dcc_write_delay_usecs));
+		hrtimer_start(&g_dcc_timer, ktime_set(0,
+			g_dcc_write_delay_usecs * NSEC_PER_USEC),
+			      HRTIMER_MODE_REL);
 	else
-		schedule_delayed_work_on(0, &dcc_poll_locked_delayed_work,
-					msecs_to_jiffies(20));
+		hrtimer_start(&g_dcc_timer, ktime_set(0, 20 * NSEC_PER_MSEC),
+			HRTIMER_MODE_REL);
+
+	asm(
+		"mrc 14, 0, %0, c0, c1, 0\n"
+		"mov %0, %0, LSR #30\n"
+		"and %0, %0, #1\n"
+		: "=r" (dcc_chars_in_buffer)
+	);
 }
 
 static void dcc_poll_locked_work_fn(struct work_struct *work)
@@ -105,14 +110,10 @@ static void dcc_poll_locked_work_fn(struct work_struct *work)
 
 	spin_lock_irqsave(&g_dcc_tty_lock, irq_flags);
 	dcc_poll_locked();
-	asm(
-		"mrc 14, 0, %0, c0, c1, 0\n"
-		"mov %0, %0, LSR #30\n"
-		"and %0, %0, #1\n"
-		: "=r" (dcc_chars_in_buffer)
-	);
 	spin_unlock_irqrestore(&g_dcc_tty_lock, irq_flags);
 }
+
+static DECLARE_WORK(dcc_poll_locked_work, dcc_poll_locked_work_fn);
 
 static int dcc_tty_open(struct tty_struct * tty, struct file * filp)
 {
@@ -177,7 +178,6 @@ static int dcc_write(const unsigned char *buf_start, int count)
 			count -= copy_len;
 			g_dcc_buffer_count += copy_len;
 		}
-
 		schedule_work_on(0, &dcc_poll_locked_work);
 		space_left = ARRAY_SIZE(g_dcc_buffer) - g_dcc_buffer_count;
 
@@ -217,6 +217,17 @@ static void dcc_tty_unthrottle(struct tty_struct * tty)
 {
 	schedule_work_on(0, &dcc_poll_locked_work);
 }
+
+static enum hrtimer_restart dcc_tty_timer_func(struct hrtimer *timer)
+{
+	unsigned long irq_flags;
+
+	spin_lock_irqsave(&g_dcc_tty_lock, irq_flags);
+	dcc_poll_locked();
+	spin_unlock_irqrestore(&g_dcc_tty_lock, irq_flags);
+	return HRTIMER_NORESTART;
+}
+
 
 void dcc_console_write(struct console *co, const char *b, unsigned count)
 {
@@ -272,6 +283,9 @@ static int __init dcc_tty_init(void)
 {
 	int ret;
 
+	hrtimer_init(&g_dcc_timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
+	g_dcc_timer.function = dcc_tty_timer_func;
+
 	g_dcc_tty_driver = alloc_tty_driver(1);
 	if (!g_dcc_tty_driver) {
 		printk(KERN_ERR "dcc_tty_probe: alloc_tty_driver failed\n");
@@ -296,8 +310,7 @@ static int __init dcc_tty_init(void)
 	tty_register_device(g_dcc_tty_driver, 0, NULL);
 
 	register_console(&dcc_console);
-
-	schedule_work_on(0, &dcc_poll_locked_work);
+	hrtimer_start(&g_dcc_timer, ktime_set(0, 0), HRTIMER_MODE_REL);
 
 	return 0;
 

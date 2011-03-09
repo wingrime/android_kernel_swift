@@ -1814,6 +1814,9 @@ static void kgsl_driver_cleanup(void)
 		kgsl_driver.ptpool = NULL;
 	}
 
+	class_destroy(kgsl_driver.class);
+	kgsl_driver.class = NULL;
+
 	kgsl_driver.pdev = NULL;
 }
 
@@ -1967,6 +1970,17 @@ err:
 	return ret;
 }
 
+static int kgsl_platform_remove(struct platform_device *pdev)
+{
+	pm_runtime_disable(&pdev->dev);
+
+	kgsl_driver_cleanup();
+	kgsl_drm_exit();
+	kgsl_cffdump_destroy();
+
+	return 0;
+}
+
 static int __devinit kgsl_platform_probe(struct platform_device *pdev)
 {
 	int result = 0;
@@ -2001,20 +2015,9 @@ static int __devinit kgsl_platform_probe(struct platform_device *pdev)
 	}
 done:
 	if (result)
-		kgsl_driver_cleanup();
+		kgsl_platform_remove(pdev);
 
 	return result;
-}
-
-static int kgsl_platform_remove(struct platform_device *pdev)
-{
-	pm_runtime_disable(&pdev->dev);
-
-	kgsl_driver_cleanup();
-	kgsl_drm_exit();
-	kgsl_cffdump_destroy();
-
-	return 0;
 }
 
 static struct platform_driver kgsl_platform_driver = {

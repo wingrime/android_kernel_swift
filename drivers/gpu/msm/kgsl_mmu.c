@@ -43,7 +43,7 @@ struct kgsl_pte_debug {
 };
 
 #define GSL_PT_PAGE_BITS_MASK	0x00000007
-#define GSL_PT_PAGE_ADDR_MASK	(~(KGSL_PAGESIZE - 1))
+#define GSL_PT_PAGE_ADDR_MASK	PAGE_MASK
 
 #define GSL_MMU_INT_MASK \
 	(MH_INTERRUPT_MASK__AXI_READ_ERROR | \
@@ -249,7 +249,7 @@ err:
 static inline uint32_t
 kgsl_pt_entry_get(struct kgsl_pagetable *pt, uint32_t va)
 {
-	return (va - pt->va_base) >> KGSL_PAGESIZE_SHIFT;
+	return (va - pt->va_base) >> PAGE_SHIFT;
 }
 
 static inline void
@@ -327,10 +327,9 @@ static struct kgsl_pagetable *kgsl_mmu_createpagetableobject(
 	}
 	GSL_TLBFLUSH_FILTER_RESET();
 
-	pagetable->pool = gen_pool_create(KGSL_PAGESIZE_SHIFT, -1);
+	pagetable->pool = gen_pool_create(PAGE_SHIFT, -1);
 	if (pagetable->pool == NULL) {
-		KGSL_CORE_ERR("gen_pool_create(%d) failed\n",
-			KGSL_PAGESIZE_SHIFT);
+		KGSL_CORE_ERR("gen_pool_create(%d) failed\n", PAGE_SHIFT);
 		goto err_flushfilter;
 	}
 
@@ -494,8 +493,8 @@ int kgsl_mmu_init(struct kgsl_device *device)
 		return 0;
 
 	/* make sure aligned to pagesize */
-	BUG_ON(mmu->mpu_base & (KGSL_PAGESIZE - 1));
-	BUG_ON((mmu->mpu_base + mmu->mpu_range) & (KGSL_PAGESIZE - 1));
+	BUG_ON(mmu->mpu_base & (PAGE_SIZE - 1));
+	BUG_ON((mmu->mpu_base + mmu->mpu_range) & (PAGE_SIZE - 1));
 
 	/* sub-client MMU lookups require address translation */
 	if ((mmu->config & ~0x1) > 0) {
@@ -648,13 +647,13 @@ kgsl_mmu_map(struct kgsl_pagetable *pagetable,
 	}
 
 	/* Make sure address being mapped is at 4K boundary */
-	if (!IS_ALIGNED(address, KGSL_PAGESIZE) || range & ~KGSL_PAGEMASK) {
+	if (!IS_ALIGNED(address, PAGE_SIZE) || range & ~PAGE_MASK) {
 		KGSL_CORE_ERR("address %x not aligned\n", address);
 		return -EINVAL;
 	}
 	alloc_size = range;
 	if (align == KGSL_MEMFLAGS_ALIGN8K)
-		alloc_size += KGSL_PAGESIZE;
+		alloc_size += PAGE_SIZE;
 
 	*gpuaddr = gen_pool_alloc(pagetable->pool, alloc_size);
 	if (*gpuaddr == 0) {
@@ -668,14 +667,14 @@ kgsl_mmu_map(struct kgsl_pagetable *pagetable,
 	if (align == KGSL_MEMFLAGS_ALIGN8K) {
 		if (*gpuaddr & ((1 << 13) - 1)) {
 			/* Not 8k aligned, align it */
-			gen_pool_free(pagetable->pool, *gpuaddr, KGSL_PAGESIZE);
-			*gpuaddr = *gpuaddr + KGSL_PAGESIZE;
+			gen_pool_free(pagetable->pool, *gpuaddr, PAGE_SIZE);
+			*gpuaddr = *gpuaddr + PAGE_SIZE;
 		} else
 			gen_pool_free(pagetable->pool, *gpuaddr + range,
-				      KGSL_PAGESIZE);
+				      PAGE_SIZE);
 	}
 
-	numpages = (range >> KGSL_PAGESIZE_SHIFT);
+	numpages = (range >> PAGE_SHIFT);
 
 	ptefirst = kgsl_pt_entry_get(pagetable, *gpuaddr);
 	ptelast = ptefirst + numpages;
@@ -719,7 +718,7 @@ kgsl_mmu_map(struct kgsl_pagetable *pagetable,
 			kgsl_mmu_unmap(pagetable, *gpuaddr, range);
 			return -EFAULT;
 		}
-		address += KGSL_PAGESIZE;
+		address += PAGE_SIZE;
 	}
 
 	/* Keep track of the statistics for the sysfs files */
@@ -753,8 +752,8 @@ kgsl_mmu_unmap(struct kgsl_pagetable *pagetable, unsigned int gpuaddr,
 
 	BUG_ON(range <= 0);
 
-	numpages = (range >> KGSL_PAGESIZE_SHIFT);
-	if (range & (KGSL_PAGESIZE - 1))
+	numpages = (range >> PAGE_SHIFT);
+	if (range & (PAGE_SIZE - 1))
 		numpages++;
 
 	ptefirst = kgsl_pt_entry_get(pagetable, gpuaddr);

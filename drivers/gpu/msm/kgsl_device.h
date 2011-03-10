@@ -182,6 +182,15 @@ struct kgsl_process_private {
 	struct list_head mem_list;
 	struct kgsl_pagetable *pagetable;
 	struct list_head list;
+	struct kobject *kobj;
+
+	struct {
+		unsigned int vmalloc;
+		unsigned int vmalloc_max;
+		unsigned int exmem;
+		unsigned int exmem_max;
+		unsigned int flushes;
+	} stats;
 };
 
 struct kgsl_device_private {

@@ -353,6 +353,12 @@ static struct kgsl_pagetable *kgsl_mmu_createpagetableobject(
 		goto err_pool;
 	}
 
+	/* ptpool allocations are from coherent memory, so update the
+	   device statistics acordingly */
+
+	KGSL_STATS_ADD(kgsl_driver.ptsize, kgsl_driver.stats.coherent,
+		       kgsl_driver.stats.coherent_max);
+
 	pagetable->base.gpuaddr = pagetable->base.physaddr;
 	pagetable->base.size = kgsl_driver.ptsize;
 
@@ -768,16 +774,12 @@ kgsl_mmu_map(struct kgsl_pagetable *pagetable,
 	}
 
 	/* Keep track of the statistics for the sysfs files */
-	pagetable->stats.entries++;
-	pagetable->stats.mapped += alloc_size;
 
-	/* Keep track of the high watermarks */
+	KGSL_STATS_ADD(1, pagetable->stats.entries,
+		       pagetable->stats.max_entries);
 
-	if (pagetable->stats.entries > pagetable->stats.max_entries)
-		pagetable->stats.max_entries = pagetable->stats.entries;
-
-	if (pagetable->stats.mapped > pagetable->stats.max_mapped)
-		pagetable->stats.max_mapped = pagetable->stats.mapped;
+	KGSL_STATS_ADD(alloc_size, pagetable->stats.mapped,
+		       pagetable->stats.max_mapped);
 
 	KGSL_MEM_INFO("pt %p p %08x g %08x pte f %d l %d n %d f %d\n",
 		      pagetable, address, *gpuaddr, ptefirst, ptelast,

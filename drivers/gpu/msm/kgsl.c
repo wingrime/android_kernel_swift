@@ -449,6 +449,9 @@ kgsl_get_process_private(struct kgsl_device_private *cur_dev_priv)
 #endif
 
 	list_add(&private->list, &kgsl_driver.process_list);
+
+	kgsl_process_init_sysfs(private);
+
 out:
 	mutex_unlock(&kgsl_driver.process_mutex);
 	return private;
@@ -465,6 +468,12 @@ kgsl_put_process_private(struct kgsl_device *device,
 
 	if (--private->refcnt)
 		goto unlock;
+
+	KGSL_MEM_INFO("Memory usage: vmalloc (%d/%d) exmem (%d/%d)\n",
+			private->stats.vmalloc, private->stats.vmalloc_max,
+			private->stats.exmem, private->stats.exmem_max);
+
+	kgsl_process_uninit_sysfs(private);
 
 	list_del(&private->list);
 
@@ -1067,6 +1076,12 @@ void kgsl_destroy_mem_entry(struct kgsl_mem_entry *entry)
 	else
 		kgsl_put_phys_file(entry->file_ptr);
 
+	if (KGSL_MEMFLAGS_VMALLOC_MEM & entry->memdesc.priv) {
+		entry->priv->stats.vmalloc -= entry->memdesc.size;
+		kgsl_driver.stats.vmalloc -= entry->memdesc.size;
+	} else
+		entry->priv->stats.exmem -= entry->memdesc.size;
+
 	kfree(entry);
 }
 
@@ -1136,6 +1151,7 @@ kgsl_ioctl_sharedmem_from_vmalloc(struct kgsl_process_private *private,
 	struct kgsl_mem_entry *entry = NULL;
 	void *vmalloc_area;
 	struct vm_area_struct *vma;
+	int order;
 
 	if (copy_from_user(&param, arg, sizeof(param))) {
 		result = -EFAULT;
@@ -1166,7 +1182,9 @@ kgsl_ioctl_sharedmem_from_vmalloc(struct kgsl_process_private *private,
 	/* allocate memory and map it to user space */
 	vmalloc_area = vmalloc_user(len);
 	if (!vmalloc_area) {
-		KGSL_MEM_ERR("vmalloc failed\n");
+		KGSL_MEM_ERR("vmalloc failed: size=%d, allocated=%d\n",
+			      len, kgsl_driver.stats.vmalloc);
+
 		result = -ENOMEM;
 		goto error_free_entry;
 	}
@@ -1208,6 +1226,19 @@ kgsl_ioctl_sharedmem_from_vmalloc(struct kgsl_process_private *private,
 		result = -EFAULT;
 		goto error_unmap_entry;
 	}
+
+	/* Process specific statistics */
+	KGSL_STATS_ADD(len, private->stats.vmalloc,
+		       private->stats.vmalloc_max);
+
+	KGSL_STATS_ADD(len, kgsl_driver.stats.vmalloc,
+		       kgsl_driver.stats.vmalloc_max);
+
+	order = get_order(len);
+
+	if (order < 16)
+		kgsl_driver.stats.histogram[order]++;
+
 	spin_lock(&private->mem_lock);
 	list_add(&entry->list, &private->mem_list);
 	spin_unlock(&private->mem_lock);
@@ -1456,6 +1487,11 @@ static int kgsl_ioctl_map_user_mem(struct kgsl_process_private *private,
 		result = -EFAULT;
 		goto error_unmap_entry;
 	}
+
+	/* Statistics */
+	KGSL_STATS_ADD(param.len, private->stats.exmem,
+		       private->stats.exmem_max);
+
 	spin_lock(&private->mem_lock);
 	list_add(&entry->list, &private->mem_list);
 	spin_unlock(&private->mem_lock);
@@ -1517,6 +1553,10 @@ kgsl_ioctl_sharedmem_flush_cache(struct kgsl_process_private *private,
 				    KGSL_MEMFLAGS_HOSTADDR);
 		/* Mark memory as being flushed so we don't flush it again */
 		entry->memdesc.priv &= ~KGSL_MEMFLAGS_CACHE_MASK;
+
+		/* Statistics - keep track of how many flushes each process
+		   does */
+		private->stats.flushes++;
 	}
 	spin_unlock(&private->mem_lock);
 done:
@@ -1947,9 +1987,14 @@ kgsl_core_init(void)
 	  kobject_create_and_add("pagetables",
 				 &kgsl_driver.pdev->dev.kobj);
 
+	kgsl_driver.prockobj =
+		kobject_create_and_add("proc",
+				       &kgsl_driver.pdev->dev.kobj);
+
 	kgsl_debugfs_dir = debugfs_create_dir("kgsl", 0);
 	kgsl_debug_init(kgsl_debugfs_dir);
 
+	kgsl_sharedmem_init_sysfs();
 	kgsl_cffdump_init();
 
 	INIT_LIST_HEAD(&kgsl_driver.process_list);
@@ -1974,6 +2019,7 @@ static int kgsl_platform_remove(struct platform_device *pdev)
 {
 	pm_runtime_disable(&pdev->dev);
 
+	kgsl_sharedmem_uninit_sysfs();
 	kgsl_driver_cleanup();
 	kgsl_drm_exit();
 	kgsl_cffdump_destroy();

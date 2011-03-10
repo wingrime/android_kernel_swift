@@ -36,6 +36,7 @@
 #include <linux/mutex.h>
 #include <linux/msm_kgsl.h>
 #include <linux/idr.h>
+#include <linux/wakelock.h>
 
 #include <asm/atomic.h>
 
@@ -171,6 +172,7 @@ struct kgsl_device {
 	int drv_log;
 	int mem_log;
 	int pwr_log;
+	struct wake_lock idle_wakelock;
 };
 
 struct kgsl_context {

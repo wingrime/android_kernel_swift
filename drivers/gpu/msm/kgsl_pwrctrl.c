@@ -478,6 +478,7 @@ nap:
 
 	device->state = device->requested_state;
 	device->requested_state = KGSL_STATE_NONE;
+	wake_unlock(&device->idle_wakelock);
 	KGSL_PWR_WARN(device, "state -> NAP/SLEEP(%d), device %d\n",
 				  device->state, device->id);
 
@@ -507,6 +508,7 @@ int kgsl_pwrctrl_wake(struct kgsl_device *device)
 	mod_timer(&device->idle_timer,
 				jiffies + device->pwrctrl.interval_timeout);
 
+	wake_lock(&device->idle_wakelock);
 	KGSL_PWR_INFO(device, "wake return value %d, device %d\n",
 				  status, device->id);
 

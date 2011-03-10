@@ -516,6 +516,7 @@ _kgsl_g12_init(struct kgsl_device *device, struct platform_device *pdev)
 	if (status)
 		goto error_close_mmu;
 
+	wake_lock_init(&device->idle_wakelock, WAKE_LOCK_IDLE, device->name);
 	return 0;
 
 error_close_mmu:
@@ -563,6 +564,7 @@ int _kgsl_g12_close(struct kgsl_device *device)
 		device->work_queue = NULL;
 	}
 
+	wake_lock_destroy(&device->idle_wakelock);
 	return 0;
 }
 

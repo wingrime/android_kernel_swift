@@ -45,6 +45,57 @@
 #include "gpiomux.h"
 #include "board-msm8960.h"
 
+static struct gpiomux_setting gsbi1 = {
+	.func = GPIOMUX_FUNC_1,
+	.drv = GPIOMUX_DRV_8MA,
+	.pull = GPIOMUX_PULL_NONE,
+};
+
+static struct gpiomux_setting gsbi4 = {
+	.func = GPIOMUX_FUNC_1,
+	.drv = GPIOMUX_DRV_8MA,
+	.pull = GPIOMUX_PULL_NONE,
+};
+
+static struct msm_gpiomux_config msm8960_gsbi_configs[] __initdata = {
+	{
+		.gpio      = 6,		/* GSBI1 QUP SPI_DATA_MOSI */
+		.settings = {
+			[GPIOMUX_SUSPENDED] = &gsbi1,
+		},
+	},
+	{
+		.gpio      = 7,		/* GSBI1 QUP SPI_DATA_MISO */
+		.settings = {
+			[GPIOMUX_SUSPENDED] = &gsbi1,
+		},
+	},
+	{
+		.gpio      = 8,		/* GSBI1 QUP SPI_CS_N */
+		.settings = {
+			[GPIOMUX_SUSPENDED] = &gsbi1,
+		},
+	},
+	{
+		.gpio      = 9,		/* GSBI1 QUP SPI_CLK */
+		.settings = {
+			[GPIOMUX_SUSPENDED] = &gsbi1,
+		},
+	},
+	{
+		.gpio      = 20,	/* GSBI4 I2C QUP SDA */
+		.settings = {
+			[GPIOMUX_SUSPENDED] = &gsbi4,
+		},
+	},
+	{
+		.gpio      = 21,	/* GSBI4 I2C QUP SCL */
+		.settings = {
+			[GPIOMUX_SUSPENDED] = &gsbi4,
+		},
+	},
+};
+
 struct msm_gpiomux_config msm8960_gpiomux_configs[NR_GPIO_IRQS] = {};
 
 static int __init gpiomux_init(void)
@@ -59,6 +110,9 @@ static int __init gpiomux_init(void)
 
 	msm_gpiomux_install(msm8960_gpiomux_configs,
 			ARRAY_SIZE(msm8960_gpiomux_configs));
+
+	msm_gpiomux_install(msm8960_gsbi_configs,
+			ARRAY_SIZE(msm8960_gsbi_configs));
 
 	return 0;
 }

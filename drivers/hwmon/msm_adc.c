@@ -1385,10 +1385,12 @@ static int msm_adc_probe(struct platform_device *pdev)
 	msm_adc_drv = msm_adc;
 	msm_adc->pdev = pdev;
 
-	rc = msm_adc_init_hwmon(pdev, msm_adc);
-	if (rc) {
-		dev_err(&pdev->dev, "msm_adc_dev_init failed\n");
-		goto err_cleanup;
+	if (pdata->target_hw == MSM_8x60) {
+		rc = msm_adc_init_hwmon(pdev, msm_adc);
+		if (rc) {
+			dev_err(&pdev->dev, "msm_adc_dev_init failed\n");
+			goto err_cleanup;
+		}
 	}
 
 	msm_adc->hwmon = hwmon_device_register(&pdev->dev);
@@ -1415,8 +1417,13 @@ static int msm_adc_probe(struct platform_device *pdev)
 	if (!msm_adc->wq)
 		goto err_cleanup;
 
-	if (pdata->num_adc > 0)
-		platform_driver_register(&msm_adc_rpcrouter_remote_driver);
+	if (pdata->num_adc > 0) {
+		if (pdata->target_hw == MSM_8x60)
+			platform_driver_register(
+				&msm_adc_rpcrouter_remote_driver);
+		else
+			msm_rpc_adc_init(pdev);
+	}
 
 	pr_info("msm_adc successfully registered\n");
 

@@ -35,8 +35,11 @@
 
 #include "devices.h"
 
+#define MSM_SHARED_RAM_PHYS 0x40000000
+
 static void __init msm8960_map_io(void)
 {
+	msm_shared_ram_phys = MSM_SHARED_RAM_PHYS;
 	msm_map_msm8960_io();
 }
 
@@ -160,6 +163,7 @@ struct platform_device android_usb_device = {
 };
 
 static struct platform_device *sim_devices[] __initdata = {
+	&msm_device_smd,
 	&msm8960_device_uart_gsbi2,
 	&msm_device_otg,
 	&msm_device_gadget_peripheral,
@@ -168,6 +172,7 @@ static struct platform_device *sim_devices[] __initdata = {
 };
 
 static struct platform_device *rumi3_devices[] __initdata = {
+	&msm_device_smd,
 	&msm8960_device_uart_gsbi5,
 };
 

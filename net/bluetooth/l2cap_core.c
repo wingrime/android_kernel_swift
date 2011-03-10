@@ -2499,6 +2499,7 @@ static void l2cap_ertm_srej_list_clear(struct sock *sk)
 		if (skb) {
 			skb_unlink(skb, SREJ_QUEUE(sk));
 			kfree_skb(skb);
+			BT_DBG("Removed %d from srej list", seq);
 		}
 	}
 }
@@ -6423,13 +6424,15 @@ static int l2cap_ertm_rx_queued_iframes(struct sock *sk)
 		return 0;
 
 	while (l2cap_rmem_available(sk)) {
+		BT_DBG("Searching for skb with txseq %d (queue len %d)",
+			(int) pi->buffer_seq_srej,
+			skb_queue_len(SREJ_QUEUE(sk)));
+
 		skb = l2cap_ertm_seq_in_queue(SREJ_QUEUE(sk),
 						pi->buffer_seq_srej);
 
 		if (!skb)
 			break;
-
-		BT_DBG("Found skb with txseq %d", (int) pi->buffer_seq_srej);
 
 		skb_unlink(skb, SREJ_QUEUE(sk));
 		pi->buffer_seq_srej = __next_seq(pi->buffer_seq_srej, pi);
@@ -6668,8 +6671,9 @@ static int l2cap_ertm_rx_state_recv(struct sock *sk,
 				/* The frame can't be reassembled now,
 				 * so queue it for reassembly later.
 				 */
-				BT_DBG("Queuing %p", skb);
 				skb_queue_tail(SREJ_QUEUE(sk), skb);
+				BT_DBG("Queued %p (queue len %d)", skb,
+					skb_queue_len(SREJ_QUEUE(sk)));
 			} else {
 				BT_DBG("buffer_seq %d->%d", pi->buffer_seq,
 					__next_seq(pi->buffer_seq, pi));
@@ -6711,6 +6715,8 @@ static int l2cap_ertm_rx_state_recv(struct sock *sk,
 			 */
 			skb_queue_tail(SREJ_QUEUE(sk), skb);
 			skb_in_use = 1;
+			BT_DBG("Queued %p (queue len %d)", skb,
+			       skb_queue_len(SREJ_QUEUE(sk)));
 
 			pi->conn_state &= ~L2CAP_CONN_SREJ_ACT;
 			l2cap_seq_list_clear(&pi->srej_list);
@@ -6802,6 +6808,8 @@ static int l2cap_ertm_rx_state_srej_sent(struct sock *sk,
 			l2cap_ertm_pass_to_tx(sk, control);
 			skb_queue_tail(SREJ_QUEUE(sk), skb);
 			skb_in_use = 1;
+			BT_DBG("Queued %p (queue len %d)", skb,
+			       skb_queue_len(SREJ_QUEUE(sk)));
 
 			pi->expected_tx_seq = __next_seq(txseq, pi);
 			break;
@@ -6811,6 +6819,8 @@ static int l2cap_ertm_rx_state_srej_sent(struct sock *sk,
 			l2cap_ertm_pass_to_tx(sk, control);
 			skb_queue_tail(SREJ_QUEUE(sk), skb);
 			skb_in_use = 1;
+			BT_DBG("Queued %p (queue len %d)", skb,
+			       skb_queue_len(SREJ_QUEUE(sk)));
 
 			err = l2cap_ertm_rx_queued_iframes(sk);
 			if (err)
@@ -6828,6 +6838,9 @@ static int l2cap_ertm_rx_state_srej_sent(struct sock *sk,
 			 */
 			skb_queue_tail(SREJ_QUEUE(sk), skb);
 			skb_in_use = 1;
+			BT_DBG("Queued %p (queue len %d)", skb,
+			       skb_queue_len(SREJ_QUEUE(sk)));
+
 			l2cap_ertm_pass_to_tx(sk, control);
 			l2cap_ertm_send_srej(sk, control->txseq);
 			break;
@@ -6839,6 +6852,9 @@ static int l2cap_ertm_rx_state_srej_sent(struct sock *sk,
 			 */
 			skb_queue_tail(SREJ_QUEUE(sk), skb);
 			skb_in_use = 1;
+			BT_DBG("Queued %p (queue len %d)", skb,
+			       skb_queue_len(SREJ_QUEUE(sk)));
+
 			l2cap_ertm_pass_to_tx(sk, control);
 			l2cap_ertm_send_srej_list(sk, control->txseq);
 			break;

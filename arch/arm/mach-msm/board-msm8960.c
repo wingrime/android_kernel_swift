@@ -183,12 +183,14 @@ static struct platform_device *sim_devices[] __initdata = {
 	&android_usb_device,
 	&usb_diag_device,
 	&msm8960_device_qup_i2c_gsbi4,
+	&msm_device_wcnss_wlan,
 };
 
 static struct platform_device *rumi3_devices[] __initdata = {
 	&msm_device_smd,
 	&msm8960_device_uart_gsbi5,
 	&msm8960_device_qup_i2c_gsbi4,
+	&msm_device_wcnss_wlan,
 };
 
 static void __init msm8960_i2c_init(void)

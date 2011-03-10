@@ -8,12 +8,6 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
- * 02110-1301, USA.
- *
  */
 
 #include <linux/kernel.h>
@@ -83,6 +77,16 @@ static int msm_bus_fabric_add_node(struct msm_bus_fabric *fabric,
 		goto out;
 	status = radix_tree_insert(&fabric->fab_tree, info->node_info->priv_id,
 			info);
+
+	if (info->node_info->slaveclk) {
+		info->nodeclk = clk_get(NULL, info->node_info->slaveclk);
+		if (IS_ERR(info->nodeclk)) {
+			MSM_BUS_ERR("Could not get clock for %s\n",
+				info->node_info->slaveclk);
+			status = -EINVAL;
+			goto out;
+		}
+	}
 	radix_tree_preload_end();
 out:
 	return status;

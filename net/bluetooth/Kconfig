@@ -34,6 +34,8 @@ menuconfig BT
 config BT_L2CAP
 	tristate "L2CAP protocol support"
 	depends on BT
+	depends on CRYPTO_HMAC
+	depends on CRYPTO_SHA256
 	select CRC16
 	help
 	  L2CAP (Logical Link Control and Adaptation Protocol) provides

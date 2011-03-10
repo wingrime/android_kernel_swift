@@ -1,7 +1,7 @@
 /* arch/arm/mach-msm/smd_private.h
  *
  * Copyright (C) 2007 Google, Inc.
- * Copyright (c) 2007-2010, Code Aurora Forum. All rights reserved.
+ * Copyright (c) 2007-2011, Code Aurora Forum. All rights reserved.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -75,6 +75,11 @@ struct smsm_interrupt_info {
   uint32_t aArm_interrupts_pending;
   uint32_t aArm_wakeup_reason;
 };
+#elif !defined(CONFIG_MSM_SMD)
+static inline void *smem_alloc(unsigned id, unsigned size)
+{
+	return NULL;
+}
 #else
 #error No SMD Package Specified; aborting
 #endif

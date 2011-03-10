@@ -607,11 +607,6 @@ struct platform_device msm_device_rng = {
 #endif
 
 static struct kgsl_core_platform_data kgsl_core_pdata = {
-	.imem_clk_name = {
-		.clk = NULL,
-		.pclk = "imem_pclk",
-	},
-
 	.pt_va_base = 0x66000000,
 	/* The maximum possible range for any individual pagetable
 	   is 256MB - 64K (0xfff0000) */
@@ -659,6 +654,10 @@ static struct kgsl_device_platform_data kgsl_3d0_pdata = {
 #else
 		.bus_scale_table = NULL,
 #endif
+	},
+	.imem_clk_name = {
+		.clk = NULL,
+		.pclk = "imem_pclk",
 	},
 };
 

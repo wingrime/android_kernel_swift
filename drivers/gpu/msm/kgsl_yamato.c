@@ -493,7 +493,6 @@ kgsl_yamato_init_pwrctrl(struct kgsl_device *device,
 	int i, result = 0;
 	struct clk *clk, *grp_clk;
 	struct kgsl_platform_data *pdata = pdev->dev.platform_data;
-	struct kgsl_core_platform_data *pdata_core = pdata->core;
 	struct kgsl_device_platform_data *pdata_dev = pdata->dev_3d0;
 	struct kgsl_device_pwr_data *pdata_pwr = &pdata_dev->pwr_data;
 
@@ -547,23 +546,23 @@ kgsl_yamato_init_pwrctrl(struct kgsl_device *device,
 		clk_set_rate(clk, device->pwrctrl.
 			pwrlevels[KGSL_DEFAULT_PWRLEVEL].gpu_freq);
 
-	if (pdata_core->imem_clk_name.clk != NULL) {
-		clk = clk_get(&pdev->dev, pdata_core->imem_clk_name.clk);
+	if (pdata_dev->imem_clk_name.clk != NULL) {
+		clk = clk_get(&pdev->dev, pdata_dev->imem_clk_name.clk);
 		if (IS_ERR(clk)) {
 			result = PTR_ERR(clk);
 			KGSL_DRV_ERR("clk_get(%s) returned %d\n",
-				 pdata_core->imem_clk_name.clk, result);
+				 pdata_dev->imem_clk_name.clk, result);
 			goto done;
 		}
 		device->pwrctrl.imem_clk = clk;
 	}
 
-	if (pdata_core->imem_clk_name.pclk != NULL) {
-		clk = clk_get(&pdev->dev, pdata_core->imem_clk_name.pclk);
+	if (pdata_dev->imem_clk_name.pclk != NULL) {
+		clk = clk_get(&pdev->dev, pdata_dev->imem_clk_name.pclk);
 		if (IS_ERR(clk)) {
 			result = PTR_ERR(clk);
 			KGSL_DRV_ERR("clk_get(%s) returned %d\n",
-				 pdata_core->imem_clk_name.pclk, result);
+				 pdata_dev->imem_clk_name.pclk, result);
 			goto done;
 		}
 		device->pwrctrl.imem_pclk = clk;

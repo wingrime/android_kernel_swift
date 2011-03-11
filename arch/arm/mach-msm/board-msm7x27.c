@@ -1776,7 +1776,7 @@ static void __init msm7x2x_init_mmc(void)
 	msm_add_sdcc(1, &msm7x2x_sdc1_data);
 #endif
 
-	if (machine_is_msm7x25_surf() || machine_is_msm7x27_surf() ||
+	if (machine_is_msm7x25_surf() || machine_is_msm7x27_surf() ||  machine_is_msm7x27_swift() ||
 		machine_is_msm7x27_ffa()) {
 #ifdef CONFIG_MMC_MSM_SDC2_SUPPORT
 		msm_sdcc_setup_gpio(2, 1);
@@ -1784,7 +1784,7 @@ static void __init msm7x2x_init_mmc(void)
 #endif
 	}
 
-	if (machine_is_msm7x25_surf() || machine_is_msm7x27_surf()) {
+	if (machine_is_msm7x25_surf() || machine_is_msm7x27_surf() ||  machine_is_msm7x27_swift()) {
 #ifdef CONFIG_MMC_MSM_SDC3_SUPPORT
 		msm_add_sdcc(3, &msm7x2x_sdc3_data);
 #endif
@@ -1992,7 +1992,7 @@ static void __init msm7x2x_init(void)
 		msm_otg_pdata.cdr_autoreset = CDR_AUTO_RESET_ENABLE;
 		msm_otg_pdata.phy_reset = msm_otg_rpc_phy_reset;
 	}
-	if (machine_is_msm7x27_surf() || machine_is_msm7x27_ffa()) {
+	if (machine_is_msm7x27_surf() || machine_is_msm7x27_ffa() || machine_is_msm7x27_swift()) {
 		msm_otg_pdata.pemp_level =
 			PRE_EMPHASIS_WITH_10_PERCENT;
 		msm_otg_pdata.drv_ampl = HS_DRV_AMPLITUDE_5_PERCENT;
@@ -2140,7 +2140,7 @@ static void __init msm7x2x_map_io(void)
 		BUG();
 
 #ifdef CONFIG_CACHE_L2X0
-	if (machine_is_msm7x27_surf() || machine_is_msm7x27_ffa()) {
+	if (machine_is_msm7x27_surf() || machine_is_msm7x27_ffa() || machine_is_msm7x27_swift() ) {
 		/* 7x27 has 256KB L2 cache:
 			64Kb/Way and 4-Way Associativity;
 			evmon/parity/share disabled. */
@@ -2167,6 +2167,19 @@ MACHINE_START(MSM7X27_SURF, "QCT MSM7x27 SURF")
 	.init_machine	= msm7x2x_init,
 	.timer		= &msm_timer,
 MACHINE_END
+
+MACHINE_START(MSM7X27_SURF, "QCT MSM7x27 SWIFT")
+#ifdef CONFIG_MSM_DEBUG_UART
+	.phys_io        = MSM_DEBUG_UART_PHYS,
+	.io_pg_offst    = ((MSM_DEBUG_UART_BASE) >> 18) & 0xfffc,
+#endif
+	.boot_params	= PHYS_OFFSET + 0x100,
+	.map_io		= msm7x2x_map_io,
+	.init_irq	= msm7x2x_init_irq,
+	.init_machine	= msm7x2x_init,
+	.timer		= &msm_timer,
+MACHINE_END
+
 
 MACHINE_START(MSM7X27_FFA, "QCT MSM7x27 FFA")
 #ifdef CONFIG_MSM_DEBUG_UART

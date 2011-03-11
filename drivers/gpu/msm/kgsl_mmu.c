@@ -390,6 +390,8 @@ static void kgsl_mmu_destroypagetable(struct kgsl_pagetable *pagetable)
 	dma_pool_free(kgsl_driver.ptpool, pagetable->base.hostptr,
 		      pagetable->base.physaddr);
 
+	kgsl_driver.stats.coherent -= kgsl_driver.ptsize;
+
 	if (pagetable->pool) {
 		gen_pool_destroy(pagetable->pool);
 		pagetable->pool = NULL;

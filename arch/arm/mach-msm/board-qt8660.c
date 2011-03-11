@@ -866,10 +866,6 @@ static struct platform_device msm_vpe_device = {
 #endif
 
 #ifdef CONFIG_MSM_CAMERA
-#define VFE_CAMIF_TIMER1_GPIO 29
-#define VFE_CAMIF_TIMER2_GPIO 30
-#define VFE_CAMIF_TIMER3_GPIO_INT 31
-
 static int msm_cam_gpio_tbl[] = {
 	32,/*CAMIF_MCLK*/
 	47,/*CAMIF_I2C_DATA*/
@@ -990,15 +986,6 @@ static struct msm_camera_sensor_flash_src msm_flash_src = {
 	._fsrc.pmic_src.led_src_2 = PMIC8058_ID_FLASH_LED_1,
 	._fsrc.pmic_src.pmic_set_current = pm8058_set_flash_led_current,
 };
-#ifdef CONFIG_IMX074
-static struct msm_camera_sensor_strobe_flash_data strobe_flash_xenon = {
-	.flash_trigger = VFE_CAMIF_TIMER1_GPIO,
-	.flash_charge = VFE_CAMIF_TIMER2_GPIO,
-	.flash_charge_done = VFE_CAMIF_TIMER3_GPIO_INT,
-	.flash_recharge_duration = 50000,
-	.irq = MSM_GPIO_TO_INT(VFE_CAMIF_TIMER3_GPIO_INT),
-};
-#endif
 #endif
 #ifdef CONFIG_MT9E013
 static struct msm_camera_sensor_flash_data flash_mt9e013 = {
@@ -1023,32 +1010,6 @@ static struct platform_device msm_camera_sensor_mt9e013 = {
 	.name      = "msm_camera_mt9e013",
 	.dev       = {
 		.platform_data = &msm_camera_sensor_mt9e013_data,
-	},
-};
-#endif
-#ifdef CONFIG_IMX074
-static struct msm_camera_sensor_flash_data flash_imx074 = {
-	.flash_type		= MSM_CAMERA_FLASH_LED,
-	.flash_src		= &msm_flash_src
-};
-
-static struct msm_camera_sensor_info msm_camera_sensor_imx074_data = {
-	.sensor_name		= "imx074",
-	.sensor_reset		= 106,
-	.sensor_pwd		= 85,
-	.vcm_pwd		= GPIO_AUX_CAM_2P7_EN,
-	.vcm_enable		= 1,
-	.pdata			= &msm_camera_device_data,
-	.resource		= msm_camera_resources,
-	.num_resources		= ARRAY_SIZE(msm_camera_resources),
-	.flash_data		= &flash_imx074,
-	.strobe_flash_data	= &strobe_flash_xenon,
-	.csi_if			= 1
-};
-static struct platform_device msm_camera_sensor_imx074 = {
-	.name	= "msm_camera_imx074",
-	.dev	= {
-		.platform_data = &msm_camera_sensor_imx074_data,
 	},
 };
 #endif
@@ -1105,12 +1066,6 @@ static struct i2c_board_info msm_camera_boardinfo[] __initdata = {
 	#ifdef CONFIG_MT9E013
 	{
 		I2C_BOARD_INFO("mt9e013", 0x6C >> 2),
-	},
-	#endif
-
-	#ifdef CONFIG_IMX074
-	{
-		I2C_BOARD_INFO("imx074", 0x1A),
 	},
 	#endif
 	#ifdef CONFIG_WEBCAM_OV7692
@@ -2293,9 +2248,6 @@ static struct platform_device *qt_devices[] __initdata = {
 #ifdef CONFIG_MSM_CAMERA
 #ifdef CONFIG_MT9E013
 	&msm_camera_sensor_mt9e013,
-#endif
-#ifdef CONFIG_IMX074
-	&msm_camera_sensor_imx074,
 #endif
 #ifdef CONFIG_WEBCAM_OV7692
 	&msm_camera_sensor_webcam_ov7692,

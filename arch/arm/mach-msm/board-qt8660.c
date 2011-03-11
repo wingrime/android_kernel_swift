@@ -2203,9 +2203,6 @@ static struct platform_device *qt_devices[] __initdata = {
 	&msm_device_ssbi2,
 	&msm_device_ssbi3,
 #endif
-#ifdef CONFIG_USB_PEHCI_HCD
-	&isp1763_device,
-#endif
 
 #if defined(CONFIG_USB_GADGET_MSM_72K) || defined(CONFIG_USB_EHCI_HCD)
 	&msm_device_otg,

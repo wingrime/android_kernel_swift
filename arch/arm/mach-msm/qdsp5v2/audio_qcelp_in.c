@@ -94,6 +94,8 @@ struct audio_in {
 
 	struct msm_adsp_module *audrec;
 
+	struct audrec_session_info session_info; /*audrec session info*/
+
 	/* configuration to use on next enable */
 	uint32_t buffer_size; /* Frame size (36 bytes) */
 	uint32_t samp_rate;
@@ -549,7 +551,7 @@ static int audqcelp_in_enc_config(struct audio_in *audio, int enable)
 	struct audpreproc_audrec_cmd_enc_cfg cmd;
 
 	memset(&cmd, 0, sizeof(cmd));
-	cmd.cmd_id = AUDPREPROC_AUDREC_CMD_ENC_CFG;
+	cmd.cmd_id = AUDPREPROC_AUDREC_CMD_ENC_CFG_2;
 	cmd.stream_id = audio->enc_id;
 
 	if (enable)
@@ -784,6 +786,10 @@ static long audqcelp_in_ioctl(struct file *file,
 			MM_DBG("msm_snddev_withdraw_freq\n");
 			break;
 		}
+		/*update aurec session info in audpreproc layer*/
+		audio->session_info.session_id = audio->enc_id;
+		audio->session_info.sampling_freq = audio->samp_rate;
+		audpreproc_update_audrec_info(&audio->session_info);
 		rc = audqcelp_in_enable(audio);
 		if (!rc) {
 			rc =
@@ -800,6 +806,9 @@ static long audqcelp_in_ioctl(struct file *file,
 		break;
 	}
 	case AUDIO_STOP: {
+		/*reset the sampling frequency information at audpreproc layer*/
+		audio->session_info.sampling_freq = 0;
+		audpreproc_update_audrec_info(&audio->session_info);
 		rc = audqcelp_in_disable(audio);
 		rc = msm_snddev_withdraw_freq(audio->enc_id,
 					SNDDEV_CAP_TX, AUDDEV_CLNT_ENC);
@@ -1285,6 +1294,9 @@ static int audqcelp_in_release(struct inode *inode, struct file *file)
 	msm_snddev_withdraw_freq(audio->enc_id, SNDDEV_CAP_TX,
 					AUDDEV_CLNT_ENC);
 	auddev_unregister_evt_listner(AUDDEV_CLNT_ENC, audio->enc_id);
+	/*reset the sampling frequency information at audpreproc layer*/
+	audio->session_info.sampling_freq = 0;
+	audpreproc_update_audrec_info(&audio->session_info);
 	audqcelp_in_disable(audio);
 	audqcelp_in_flush(audio);
 	msm_adsp_put(audio->audrec);

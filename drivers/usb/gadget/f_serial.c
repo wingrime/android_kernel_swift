@@ -73,7 +73,6 @@ struct f_gser {
 
 enum transport_type transport;
 #define NR_PORTS	2
-struct sdio_port_info port_info[NR_PORTS];
 
 static inline bool is_transport_sdio(enum transport_type t)
 {
@@ -782,7 +781,7 @@ int fserial_modem_bind_config(struct usb_configuration *c)
 	 * two ports for modem and nmea.
 	 */
 	if (is_transport_sdio(transport))
-		ret = gsdio_setup(c->cdev->gadget, 2, port_info);
+		ret = gsdio_setup(c->cdev->gadget, 2);
 	else
 		ret = gserial_setup(c->cdev->gadget, 2);
 
@@ -827,12 +826,6 @@ static int __init fserial_probe(struct platform_device *pdev)
 				__func__, NR_PORTS, pdata->no_ports);
 		return -EINVAL;
 	}
-
-	/* REVISIT: How can we get this data from config/pdata...*/
-	port_info[0].data_ch_name = "SDIO_DUN";
-	port_info[0].ctrl_ch_id = 9;
-	port_info[1].data_ch_name = "SDIO_NMEA";
-	port_info[1].ctrl_ch_id = 10;
 
 probe_android_register:
 	android_register_function(&modem_function);

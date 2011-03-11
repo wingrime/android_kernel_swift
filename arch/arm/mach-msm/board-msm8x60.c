@@ -123,6 +123,15 @@
 
 #define MDM2AP_SYNC 129
 
+#define LCDC_SPI_GPIO_CLK				73
+#define LCDC_SPI_GPIO_CS				72
+#define LCDC_SPI_GPIO_MOSI				70
+#define LCDC_AUO_PANEL_NAME				"lcdc_auo_wvga"
+#define LCDC_SAMSUNG_OLED_PANEL_NAME	"lcdc_samsung_oled"
+#define LCDC_SAMSUNG_WSVGA_PANEL_NAME	"lcdc_samsung_wsvga"
+#define LCDC_SAMSUNG_SPI_DEVICE_NAME	"lcdc_samsung_ams367pe02"
+#define LCDC_AUO_SPI_DEVICE_NAME		"lcdc_auo_nt35582"
+
 enum {
 	GPIO_EXPANDER_IRQ_BASE  = PM8901_IRQ_BASE + NR_PMIC8901_IRQS,
 	GPIO_EXPANDER_GPIO_BASE = PM8901_GPIO_BASE + PM8901_MPPS,
@@ -2225,14 +2234,29 @@ static struct resource msm_fb_resources[] = {
 static int msm_fb_detect_panel(const char *name)
 {
 	if (machine_is_msm8x60_fluid()) {
-		if (!strncmp(name, "lcdc_samsung_oled", 20))
-			return 0;
-		if (!strncmp(name, "lcdc_samsung_wsvga", 20))
+		uint32_t soc_platform_version = socinfo_get_platform_version();
+		if (SOCINFO_VERSION_MAJOR(soc_platform_version) < 3) {
+#ifdef CONFIG_FB_MSM_LCDC_SAMSUNG_OLED_PT
+			if (!strncmp(name, LCDC_SAMSUNG_OLED_PANEL_NAME,
+					strlen(LCDC_SAMSUNG_OLED_PANEL_NAME)))
+				return 0;
+#endif
+		} else { /*P3 and up use AUO panel */
+#ifdef CONFIG_FB_MSM_LCDC_AUO_WVGA
+			if (!strncmp(name, LCDC_AUO_PANEL_NAME,
+					strlen(LCDC_AUO_PANEL_NAME)))
+				return 0;
+#endif
+		}
+		if (!strncmp(name, LCDC_SAMSUNG_WSVGA_PANEL_NAME,
+				strlen(LCDC_SAMSUNG_WSVGA_PANEL_NAME)))
 			return -ENODEV;
 	} else {
-		if (!strncmp(name, "lcdc_samsung_wsvga", 20))
+		if (!strncmp(name, LCDC_SAMSUNG_WSVGA_PANEL_NAME,
+				strlen(LCDC_SAMSUNG_WSVGA_PANEL_NAME)))
 			return 0;
-		if (!strncmp(name, "lcdc_samsung_oled", 20))
+		if (!strncmp(name, LCDC_SAMSUNG_OLED_PANEL_NAME,
+				strlen(LCDC_SAMSUNG_OLED_PANEL_NAME)))
 			return -ENODEV;
 	}
 	pr_warning("%s: not supported '%s'", __func__, name);
@@ -2357,38 +2381,29 @@ static struct msm_panel_common_pdata lcdc_samsung_panel_data = {
 };
 
 static struct platform_device lcdc_samsung_panel_device = {
-	.name = "lcdc_samsung_wsvga",
+	.name = LCDC_SAMSUNG_WSVGA_PANEL_NAME,
 	.id = 0,
 	.dev = {
 		.platform_data = &lcdc_samsung_panel_data,
 	}
 };
+#if (!defined(CONFIG_SPI_QUP)) && \
+	(defined(CONFIG_FB_MSM_LCDC_SAMSUNG_OLED_PT) || \
+	defined(CONFIG_FB_MSM_LCDC_AUO_WVGA))
 
-#ifdef CONFIG_FB_MSM_LCDC_SAMSUNG_OLED_PT
-#ifdef CONFIG_SPI_QUP
-static struct spi_board_info lcdc_samsung_spi_board_info[] __initdata = {
-	{
-		.modalias       = "lcdc_samsung_ams367pe02",
-		.mode           = SPI_MODE_3,
-		.bus_num        = 1,
-		.chip_select    = 0,
-		.max_speed_hz   = 10800000,
-	}
-};
-#else
 static int lcdc_spi_gpio_array_num[] = {
-				73, /* spi_clk */
-				72, /* spi_cs  */
-				70, /* spi_mosi */
-				};
+	LCDC_SPI_GPIO_CLK,
+	LCDC_SPI_GPIO_CS,
+	LCDC_SPI_GPIO_MOSI,
+};
 
 static uint32_t lcdc_spi_gpio_config_data[] = {
-	/* spi_clk */
-	GPIO_CFG(73, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),
-	/* spi_cs0 */
-	GPIO_CFG(72, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),
-	/* spi_mosi */
-	GPIO_CFG(70, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),
+	GPIO_CFG(LCDC_SPI_GPIO_CLK, 0,
+			GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),
+	GPIO_CFG(LCDC_SPI_GPIO_CS, 0,
+			GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),
+	GPIO_CFG(LCDC_SPI_GPIO_MOSI, 0,
+			GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),
 };
 
 static void lcdc_config_spi_gpios(int enable)
@@ -2399,6 +2414,19 @@ static void lcdc_config_spi_gpios(int enable)
 }
 #endif
 
+#ifdef CONFIG_FB_MSM_LCDC_SAMSUNG_OLED_PT
+#ifdef CONFIG_SPI_QUP
+static struct spi_board_info lcdc_samsung_spi_board_info[] __initdata = {
+	{
+		.modalias       = LCDC_SAMSUNG_SPI_DEVICE_NAME,
+		.mode           = SPI_MODE_3,
+		.bus_num        = 1,
+		.chip_select    = 0,
+		.max_speed_hz   = 10800000,
+	}
+};
+#endif /* CONFIG_SPI_QUP */
+
 static struct msm_panel_common_pdata lcdc_samsung_oled_panel_data = {
 #ifndef CONFIG_SPI_QUP
 	.panel_config_gpio = lcdc_config_spi_gpios,
@@ -2407,11 +2435,38 @@ static struct msm_panel_common_pdata lcdc_samsung_oled_panel_data = {
 };
 
 static struct platform_device lcdc_samsung_oled_panel_device = {
-	.name   = "lcdc_samsung_oled",
+	.name   = LCDC_SAMSUNG_OLED_PANEL_NAME,
 	.id     = 0,
 	.dev.platform_data = &lcdc_samsung_oled_panel_data,
 };
+#endif /*CONFIG_FB_MSM_LCDC_SAMSUNG_OLED_PT */
+
+#ifdef CONFIG_FB_MSM_LCDC_AUO_WVGA
+#ifdef CONFIG_SPI_QUP
+static struct spi_board_info lcdc_auo_spi_board_info[] __initdata = {
+	{
+		.modalias       = LCDC_AUO_SPI_DEVICE_NAME,
+		.mode           = SPI_MODE_3,
+		.bus_num        = 1,
+		.chip_select    = 0,
+		.max_speed_hz   = 10800000,
+	}
+};
 #endif
+
+static struct msm_panel_common_pdata lcdc_auo_wvga_panel_data = {
+#ifndef CONFIG_SPI_QUP
+	.panel_config_gpio = lcdc_config_spi_gpios,
+	.gpio_num          = lcdc_spi_gpio_array_num,
+#endif
+};
+
+static struct platform_device lcdc_auo_wvga_panel_device = {
+	.name   = LCDC_AUO_PANEL_NAME,
+	.id     = 0,
+	.dev.platform_data = &lcdc_auo_wvga_panel_data,
+};
+#endif /*CONFIG_FB_MSM_LCDC_AUO_WVGA*/
 
 #ifdef CONFIG_FB_MSM_HDMI_MSM_PANEL
 static struct resource hdmi_msm_resources[] = {
@@ -4190,6 +4245,9 @@ static struct platform_device *surf_devices[] __initdata = {
 	&lcdc_samsung_panel_device,
 #ifdef CONFIG_FB_MSM_LCDC_SAMSUNG_OLED_PT
 	&lcdc_samsung_oled_panel_device,
+#endif
+#ifdef CONFIG_FB_MSM_LCDC_AUO_WVGA
+	&lcdc_auo_wvga_panel_device,
 #endif
 #ifdef CONFIG_FB_MSM_HDMI_MSM_PANEL
 	&hdmi_msm_device,
@@ -7535,7 +7593,8 @@ static void display_common_power(int on)
 			}
 		}
 	}
-#ifdef CONFIG_FB_MSM_LCDC_SAMSUNG_OLED_PT
+#if defined(CONFIG_FB_MSM_LCDC_SAMSUNG_OLED_PT) || \
+	defined(CONFIG_FB_MSM_LCDC_AUO_WVGA)
 	else if (machine_is_msm8x60_fluid()) {
 		static struct regulator *fluid_reg;
 		static struct regulator *fluid_reg2;
@@ -8911,12 +8970,26 @@ static void __init msm8x60_init(struct msm_board_data *board_data)
 
 	platform_device_register(&smsc911x_device);
 
-#if defined(CONFIG_SPI_QUP) && defined(CONFIG_FB_MSM_LCDC_SAMSUNG_OLED_PT)
+#if (defined(CONFIG_SPI_QUP)) && \
+	(defined(CONFIG_FB_MSM_LCDC_SAMSUNG_OLED_PT) || \
+	defined(CONFIG_FB_MSM_LCDC_AUO_WVGA))
+
 	if (machine_is_msm8x60_fluid()) {
-		spi_register_board_info(lcdc_samsung_spi_board_info,
-			ARRAY_SIZE(lcdc_samsung_spi_board_info));
+#ifdef CONFIG_FB_MSM_LCDC_SAMSUNG_OLED_PT
+		if (SOCINFO_VERSION_MAJOR(soc_platform_version) < 3) {
+			spi_register_board_info(lcdc_samsung_spi_board_info,
+				ARRAY_SIZE(lcdc_samsung_spi_board_info));
+		} else
+#endif
+		{
+#ifdef CONFIG_FB_MSM_LCDC_AUO_WVGA
+			spi_register_board_info(lcdc_auo_spi_board_info,
+				ARRAY_SIZE(lcdc_auo_spi_board_info));
+#endif
+		}
 	}
 #endif
+
 	msm_pm_set_platform_data(msm_pm_data, ARRAY_SIZE(msm_pm_data));
 	msm_cpuidle_set_states(msm_cstates, ARRAY_SIZE(msm_cstates),
 				msm_pm_data);

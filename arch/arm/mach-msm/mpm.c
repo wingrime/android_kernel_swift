@@ -209,6 +209,8 @@ static inline void msm_mpm_write(
 
 static inline void msm_mpm_write_barrier(void)
 {
+	mb();
+
 	/*
 	 * By the time the read from memory returns, all previous
 	 * writes are guaranteed visible.

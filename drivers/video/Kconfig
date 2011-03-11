@@ -2550,6 +2550,11 @@ config FB_MSM_MDDI_SHARP_QVGA_128x128
 	select FB_MSM_MDDI
 	---help---
 	  Support for MDDI Sharp QVGA (240x320) and 128x128 dual panel
+config FB_MSM_MDDI_SWIFT
+       bool "MDDI LG GT540 Swift(Optimus)"
+       select FB_MSM_MDDI 
+       ---help---
+         Support for MDDI LG GT540 Swift(Optimus) 
 
 config FB_MSM_MIPI_TOSHIBA_VIDEO_WVGA_PT_PANEL
 	bool "MIPI Toshiba WVGA PT Panel"

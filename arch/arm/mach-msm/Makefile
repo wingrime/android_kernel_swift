@@ -170,7 +170,7 @@ obj-$(CONFIG_MACH_SAPPHIRE) += board-sapphire-keypad.o board-sapphire-panel.o
 obj-$(CONFIG_MACH_SAPPHIRE) += board-sapphire-mmc.o board-sapphire-wifi.o
 obj-$(CONFIG_MACH_SAPPHIRE) += board-sapphire-rfkill.o msm_vibrator.o
 
-obj-$(CONFIG_MACH_MSM7X27_SWIFT)  += keypad-swift.o
+obj-$(CONFIG_MACH_MSM7X27_SWIFT)  += keypad-swift.o board-swift-panel.o
 
 obj-$(CONFIG_TROUT_BATTCHG) += htc_battery.o
 

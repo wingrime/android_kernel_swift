@@ -874,6 +874,34 @@ static struct msm_fb_platform_data msm_fb_pdata = {
 	.mddi_prescan = 1,
 };
 
+#define MSM_TSSC_PHYS         0xAA300000
+static struct resource resources_tssc[] = {
+	{
+		.start	= MSM_TSSC_PHYS,
+		.end	= MSM_TSSC_PHYS + SZ_4K - 1,
+		.name	= "tssc",
+		.flags	= IORESOURCE_MEM,
+	},
+	{
+		.start	= INT_TCHSCRN1,
+		.end	= INT_TCHSCRN1,
+		.name	= "tssc1",
+		.flags	= IORESOURCE_IRQ | IRQF_TRIGGER_RISING,
+	},
+	{
+		.start	= INT_TCHSCRN2,
+		.end	= INT_TCHSCRN2,
+		.name	= "tssc2",
+		.flags	= IORESOURCE_IRQ | IRQF_TRIGGER_RISING,
+	},
+};
+
+struct platform_device msm_device_swift_touchscreen  = {
+	.name = "swift_touchscreen",
+	.id = 0,
+	.num_resources = ARRAY_SIZE(resources_tssc),
+	.resource = resources_tssc,
+};
 static struct platform_device msm_fb_device = {
 	.name   = "msm_fb",
 	.id     = 0,
@@ -1491,7 +1519,7 @@ static struct platform_device *devices[] __initdata = {
 #endif
 	&msm_device_i2c,
 	&smc91x_device,
-	&msm_device_tssc,
+	&msm_device_swift_touchscreen, 
 	&android_pmem_kernel_ebi1_device,
 	&android_pmem_device,
 	&android_pmem_adsp_device,

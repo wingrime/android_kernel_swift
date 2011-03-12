@@ -73,7 +73,7 @@ void map_page_strongly_ordered(void);
 #include <asm/mach-types.h>
 
 #define arch_barrier_extra() do \
-	{ if (machine_is_msm7x27_surf() || machine_is_msm7x27_ffa())  \
+	{ if (machine_is_msm7x27_surf() || machine_is_msm7x27_ffa() || machine_is_msm7x27_swift())  \
 		write_to_strongly_ordered_memory(); \
 	} while (0)
 #endif

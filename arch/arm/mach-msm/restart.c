@@ -170,7 +170,7 @@ void arch_reset(char mode, const char *cmd)
 
 	writel(1, WDT0_RST);
 	writel(0, WDT0_EN);
-	writel(0x31F3, WDT0_BARK_TIME);
+	writel(5*0x31F3, WDT0_BARK_TIME);
 	writel(0x31F3, WDT0_BITE_TIME);
 	writel(3, WDT0_EN);
 	dmb();

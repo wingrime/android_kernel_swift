@@ -18,5 +18,5 @@
 extern struct platform_device keypad_device_7k_ffa;
 extern struct platform_device keypad_device_8k_ffa;
 extern struct platform_device keypad_device_surf;
-
+extern struct platform_device keypad_device_swift;
 #endif

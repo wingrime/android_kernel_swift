@@ -2043,7 +2043,9 @@ static void __init msm7x2x_init(void)
 #ifdef CONFIG_SURF_FFA_GPIO_KEYPAD
 	if (machine_is_msm7x25_ffa() || machine_is_msm7x27_ffa())
 		platform_device_register(&keypad_device_7k_ffa);
-	else
+	else if (machine_is_msm7x27_swift() )
+		platform_device_register(&keypad_device_swift);
+	else 
 		platform_device_register(&keypad_device_surf);
 #endif
 	//lcdc_gordon_gpio_init();

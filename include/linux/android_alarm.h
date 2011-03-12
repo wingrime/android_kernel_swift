@@ -74,7 +74,6 @@ ktime_t alarm_get_elapsed_realtime(void);
 
 /* set rtc while preserving elapsed realtime */
 int alarm_set_rtc(const struct timespec ts);
-void alarm_update_timedelta(struct timespec tv, struct timespec ts);
 
 #endif
 

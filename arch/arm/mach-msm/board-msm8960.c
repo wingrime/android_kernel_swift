@@ -19,6 +19,7 @@
 #include <linux/platform_device.h>
 #include <linux/io.h>
 #include <linux/irq.h>
+#include <linux/i2c.h>
 
 #include <asm/mach-types.h>
 #include <asm/mach/arch.h>
@@ -162,6 +163,18 @@ struct platform_device android_usb_device = {
 	},
 };
 
+static void gsbi_qup_i2c_gpio_config(int adap_id, int config_type)
+{
+}
+
+static struct msm_i2c_platform_data msm8960_i2c_qup_gsbi4_pdata = {
+	.clk_freq = 100000,
+	.src_clk_rate = 24000000,
+	.clk = "gsbi_qup_clk",
+	.pclk = "gsbi_pclk",
+	.msm_i2c_config_gpio = gsbi_qup_i2c_gpio_config,
+};
+
 static struct platform_device *sim_devices[] __initdata = {
 	&msm_device_smd,
 	&msm8960_device_uart_gsbi2,
@@ -169,17 +182,26 @@ static struct platform_device *sim_devices[] __initdata = {
 	&msm_device_gadget_peripheral,
 	&android_usb_device,
 	&usb_diag_device,
+	&msm8960_device_qup_i2c_gsbi4,
 };
 
 static struct platform_device *rumi3_devices[] __initdata = {
 	&msm_device_smd,
 	&msm8960_device_uart_gsbi5,
+	&msm8960_device_qup_i2c_gsbi4,
 };
+
+static void __init msm8960_i2c_init(void)
+{
+	msm8960_device_qup_i2c_gsbi4.dev.platform_data =
+					&msm8960_i2c_qup_gsbi4_pdata;
+}
 
 static void __init msm8960_sim_init(void)
 {
 	msm_clock_init(msm_clocks_8960, msm_num_clocks_8960);
 	msm_device_otg.dev.platform_data = &msm_otg_pdata;
+	msm8960_i2c_init();
 	platform_add_devices(sim_devices, ARRAY_SIZE(sim_devices));
 	msm8960_init_mmc();
 }
@@ -187,6 +209,7 @@ static void __init msm8960_sim_init(void)
 static void __init msm8960_rumi3_init(void)
 {
 	msm_clock_init(msm_clocks_8960, msm_num_clocks_8960);
+	msm8960_i2c_init();
 	platform_add_devices(rumi3_devices, ARRAY_SIZE(rumi3_devices));
 	msm8960_init_mmc();
 }

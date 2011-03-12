@@ -79,10 +79,11 @@
 #endif
 
 #ifdef CONFIG_ARCH_MSM7X27
-#define MSM_PMEM_MDP_SIZE	0x1B76000
-#define MSM_PMEM_ADSP_SIZE	0xB71000
+#define MSM_PMEM_MDP_SIZE	0x1700000
+#define MSM_PMEM_ADSP_SIZE	0xAE4000
 #define MSM_PMEM_AUDIO_SIZE	0x5B000
-#define MSM_FB_SIZE		0x177000
+#define MSM_FB_SIZE		0x200000
+#define MSM_GPU_PHYS_SIZE	SZ_2M
 #define PMEM_KERNEL_EBI1_SIZE	0x1C000
 #endif
 
@@ -1006,6 +1007,12 @@ static struct resource kgsl_resources[] = {
 		.flags = IORESOURCE_MEM,
 	},
 	{
+		 .name   = "kgsl_phys_memory",
+		.start = 0,
+		.end = 0,
+		.flags = IORESOURCE_MEM,
+	},
+	{
 		.name = "kgsl_yamato_irq",
 		.start = INT_GRAPHICS,
 		.end = INT_GRAPHICS,
@@ -1440,6 +1447,17 @@ static struct platform_device msm_batt_device = {
 	.id		    = -1,
 	.dev.platform_data  = &msm_psy_batt_data,
 };
+static struct msm_panel_common_pdata mddi_ss_driveric_pdata = {
+
+};
+
+struct platform_device mddi_ss_driveric_device = {
+	.name   = "mddi_swift",
+	.id     = 0,
+	.dev    = {
+		.platform_data = &mddi_ss_driveric_pdata,
+	}
+};
 
 
 static struct platform_device *devices[] __initdata = {
@@ -1447,7 +1465,7 @@ static struct platform_device *devices[] __initdata = {
 	&msm_device_smd,
 	&msm_device_dmov,
 	&msm_device_nand,
-
+	
 #ifdef CONFIG_USB_MSM_OTG_72K
 	&msm_device_otg,
 #ifdef CONFIG_USB_GADGET
@@ -1479,7 +1497,8 @@ static struct platform_device *devices[] __initdata = {
 	&android_pmem_adsp_device,
 	&android_pmem_audio_device,
 	&msm_fb_device,
-	&lcdc_gordon_panel_device,
+
+	//&lcdc_gordon_panel_device,
 	&msm_device_uart_dm1,
 #ifdef CONFIG_BT
 	&msm_bt_power_device,
@@ -1514,17 +1533,18 @@ static struct platform_device *devices[] __initdata = {
 #endif
 	&hs_device,
 	&msm_batt_device,
+	&mddi_ss_driveric_device,	
 };
 
 static struct msm_panel_common_pdata mdp_pdata = {
-	.gpio = 97,
+	//.gpio = 97,
 };
 
 static void __init msm_fb_add_devices(void)
 {
-	msm_fb_register_device("mdp", &mdp_pdata);
-	msm_fb_register_device("pmdh", 0);
-	msm_fb_register_device("lcdc", &lcdc_pdata);
+	msm_fb_register_device("mdp",0 );
+	msm_fb_register_device("pmdh", &mdp_pdata);
+	//msm_fb_register_device("lcdc", &lcdc_pdata);
 }
 
 extern struct sys_timer msm_timer;
@@ -2026,7 +2046,7 @@ static void __init msm7x2x_init(void)
 	else
 		platform_device_register(&keypad_device_surf);
 #endif
-	lcdc_gordon_gpio_init();
+	//lcdc_gordon_gpio_init();
 	msm_fb_add_devices();
 #ifdef CONFIG_USB_EHCI_MSM
 	msm7x2x_init_host();
@@ -2082,7 +2102,12 @@ static int __init fb_size_setup(char *p)
 	return 0;
 }
 early_param("fb_size", fb_size_setup);
-
+static unsigned gpu_phys_size = MSM_GPU_PHYS_SIZE;
+static void __init gpu_phys_size_setup(char **p)
+{
+	gpu_phys_size = memparse(*p, p);
+}
+__early_param("gpu_phys_size=", gpu_phys_size_setup);
 static void __init msm_msm7x2x_allocate_memory_regions(void)
 {
 	void *addr;
@@ -2130,6 +2155,13 @@ static void __init msm_msm7x2x_allocate_memory_regions(void)
 		pr_info("allocating %lu bytes at %p (%lx physical) for kernel"
 			" ebi1 pmem arena\n", size, addr, __pa(addr));
 	}
+	size = gpu_phys_size ? : MSM_GPU_PHYS_SIZE;
+	addr = alloc_bootmem(size);
+	kgsl_resources[1].start = __pa(addr);
+	kgsl_resources[1].end = kgsl_resources[1].start + size - 1;
+	pr_info("allocating %lu bytes at %p (%lx physical) for KGSL\n",
+		size, addr, __pa(addr));
+
 }
 
 static void __init msm7x2x_map_io(void)

@@ -30,6 +30,7 @@
 #include <linux/msm_adc.h>
 #include <linux/pmic8058-xoadc.h>
 #include <linux/slab.h>
+#include <linux/semaphore.h>
 
 #include <mach/dal.h>
 
@@ -57,6 +58,22 @@ enum dal_error {
 enum dal_result_status {
 	DAL_RESULT_STATUS_INVALID,
 	DAL_RESULT_STATUS_VALID
+};
+
+struct dal_conv_state {
+	struct dal_conv_slot		context[MSM_ADC_DEV_MAX_INFLIGHT];
+	struct list_head		slots;
+	struct mutex			list_lock;
+	struct semaphore		slot_count;
+};
+
+struct adc_dev {
+	char				*name;
+	uint32_t			nchans;
+	struct dal_conv_state		conv;
+	struct dal_translation		transl;
+	struct sensor_device_attribute	*sens_attr;
+	char				**fnames;
 };
 
 struct msm_adc_drv {

@@ -31,7 +31,6 @@
 #define __MSM_ADC_H
 
 #include <linux/sched.h>
-#include <linux/semaphore.h>
 
 #define MSM_ADC_MAX_CHAN_STR 64
 
@@ -139,6 +138,7 @@ struct msm_adc_lookup {
 					     struct msm_adc_lookup)
 
 
+#ifdef __KERNEL__
 #define MSM_ADC_MAX_NUM_DEVS		3
 
 enum {
@@ -305,27 +305,11 @@ struct dal_conv_slot {
 	struct msm_client_data		*client;
 };
 
-struct dal_conv_state {
-	struct dal_conv_slot		context[MSM_ADC_DEV_MAX_INFLIGHT];
-	struct list_head		slots;
-	struct mutex			list_lock;
-	struct semaphore		slot_count;
-};
-
 struct dal_translation {
 	uint32_t			dal_dev_idx;
 	uint32_t			hwmon_dev_idx;
 	uint32_t			hwmon_start;
 	uint32_t			hwmon_end;
-};
-
-struct adc_dev {
-	char				*name;
-	uint32_t			nchans;
-	struct dal_conv_state		conv;
-	struct dal_translation		transl;
-	struct sensor_device_attribute	*sens_attr;
-	char				**fnames;
 };
 
 struct msm_client_data {
@@ -379,4 +363,5 @@ int32_t adc_channel_close(void *h);
 int32_t adc_channel_request_conv(void *h, struct completion *conv_complete_evt);
 int32_t adc_channel_read_result(void *h, struct adc_chan_result *chan_result);
 int32_t adc_calib_request(void *h, struct completion *calib_complete_evt);
+#endif
 #endif /* __MSM_ADC_H */

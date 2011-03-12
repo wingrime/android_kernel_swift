@@ -275,9 +275,6 @@ static struct display_table mddi_innotek_position[] = {
 static void display_table(struct display_table *table, unsigned int count)
 {
 	unsigned int i;
-
-	printk(KERN_INFO "%s: count : %d\n", __func__, count);
-
 	for(i = 0; i < count; i++) {
         unsigned reg;
         reg = table[i].reg;

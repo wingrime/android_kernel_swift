@@ -81,6 +81,7 @@ static int __init mddi_ss_driveric_hvga_init(void)
 
 	pinfo.xres = 320;
 	pinfo.yres = 480;
+	MSM_FB_SINGLE_MODE_PANEL(&pinfo);
 	pinfo.type = MDDI_PANEL;
 	pinfo.pdest = DISPLAY_1;
 	pinfo.mddi.vdopkt = MDDI_DEFAULT_PRIM_PIX_ATTR;

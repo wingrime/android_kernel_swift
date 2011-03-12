@@ -72,7 +72,7 @@ static void mdp_dma2_update_lcd(struct msm_fb_data_type *mfd)
 
 	dma2_cfg_reg = DMA_PACK_ALIGN_LSB |
 		    DMA_OUT_SEL_AHB | DMA_IBUF_NONCONTIGUOUS;
-
+mddi_ss_driveric_innotek_position();
 #ifdef CONFIG_FB_MSM_MDP22
 	dma2_cfg_reg |= DMA_PACK_TIGHT;
 #endif
@@ -123,6 +123,10 @@ static void mdp_dma2_update_lcd(struct msm_fb_data_type *mfd)
 						   iBuf->dma_w - 1, iBuf->dma_y,
 						   iBuf->dma_h - 1);
 #endif
+				iBuf->dma_x = 0;
+    			iBuf->dma_y = 0;
+    			iBuf->dma_w = 320;
+    			iBuf->dma_h = 480;
 			} else {
 				dma2_cfg_reg |=
 				    DMA_MDDI_DMAOUT_LCD_SEL_SECONDARY;
@@ -526,6 +530,8 @@ void mdp_dma_pan_update(struct fb_info *info)
 void mdp_refresh_screen(unsigned long data)
 {
 	struct msm_fb_data_type *mfd = (struct msm_fb_data_type *)data;
+	
+	mddi_ss_driveric_innotek_position();
 
 	if ((mfd->sw_currently_refreshing) && (mfd->sw_refreshing_enable)) {
 		init_timer(&mfd->refresh_timer);
@@ -541,7 +547,7 @@ void mdp_refresh_screen(unsigned long data)
 
 		add_timer(&mfd->refresh_timer);
 		
-		mddi_ss_driveric_innotek_position();
+		
 
 		if (!mfd->dma->busy) {
 			if (!queue_work(mdp_dma_wq, &mfd->dma_update_worker)) {

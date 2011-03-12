@@ -639,7 +639,6 @@ void mddi_host_register_cmd_write(unsigned reg_addr, unsigned count, unsigned in
    unsigned *data_list;
    unsigned i;
 
-	printk("%s: started.\n", __func__);
 
 	if (in_interrupt()) {
 		MDDI_MSG_CRIT("Called from ISR context\n");

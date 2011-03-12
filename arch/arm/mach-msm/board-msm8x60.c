@@ -6423,8 +6423,11 @@ static void __init msm8x60_init_buses(void)
 	if (machine_is_msm8x60_charm_surf() || machine_is_msm8x60_charm_ffa()) {
 		struct usb_gadget_fserial_platform_data *fserial_pdata =
 			usb_gadget_fserial_device.dev.platform_data;
+		int i;
 
-		fserial_pdata->transport = USB_GADGET_FSERIAL_TRANSPORT_SDIO;
+		for (i = 0; i < GSERIAL_NO_PORTS; i++)
+			fserial_pdata->transport[i] =
+				USB_GADGET_FSERIAL_TRANSPORT_SDIO;
 	}
 #endif
 

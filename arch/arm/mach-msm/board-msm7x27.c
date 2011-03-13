@@ -1490,14 +1490,34 @@ struct platform_device mddi_ss_driveric_device = {
 		.platform_data = &mddi_ss_driveric_pdata,
 	}
 };
+#define MSM7X27_EBI1_CS0_BASE      0x00200000
+#define SWIFT_RAM_CONSOLE_BASE (MSM7X27_EBI1_CS0_BASE + 214 * SZ_1M)
+#define SWIFT_RAM_CONSOLE_SIZE (128 * SZ_1K)
+static struct resource ram_console_resource[] = {
+   {
+      .name = "ram_console",
+      .start = SWIFT_RAM_CONSOLE_BASE,
+      .end = SWIFT_RAM_CONSOLE_BASE + SWIFT_RAM_CONSOLE_SIZE - 1,
+      .flags = IORESOURCE_MEM,
+   }
+};
+static struct platform_device ram_console_device = {
+   .name = "ram_console",
+   .id = -1,
+   .num_resources = ARRAY_SIZE(ram_console_resource),
+   .resource = ram_console_resource,
+};
 
+static struct platform_device swift_keyled_device = {
+	.name = "swift-keyled",
+};
 
 static struct platform_device *devices[] __initdata = {
 	&msm_device_uart3,
 	&msm_device_smd,
 	&msm_device_dmov,
 	&msm_device_nand,
-	
+	&ram_console_device,	
 #ifdef CONFIG_USB_MSM_OTG_72K
 	&msm_device_otg,
 #ifdef CONFIG_USB_GADGET
@@ -1567,6 +1587,7 @@ static struct platform_device *devices[] __initdata = {
 	&msm_batt_device,
 	&mddi_ss_driveric_device,	
 	&swift_backlight_device,
+	&swift_keyled_device,
 };
 
 static struct msm_panel_common_pdata mdp_pdata = {

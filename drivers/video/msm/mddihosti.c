@@ -617,14 +617,14 @@ void mddi_host_timer_service(unsigned long data)
 	if (mddi_log_stats_counter >= mddi_log_stats_frequency)
 		mddi_log_stats_counter = 0;
 
-	mutex_lock(&mddi_timer_lock);
+	//mutex_lock(&mddi_timer_lock);
 	if (!mddi_timer_shutdown_flag) {
 		mddi_host_timer.function = mddi_host_timer_service;
 		mddi_host_timer.data = 0;
 		mddi_host_timer.expires = jiffies + ((time_ms * HZ) / 1000);
 		add_timer(&mddi_host_timer);
 	}
-	mutex_unlock(&mddi_timer_lock);
+	//mutex_unlock(&mddi_timer_lock);
 
 	return;
 }				/* mddi_host_timer_cb */

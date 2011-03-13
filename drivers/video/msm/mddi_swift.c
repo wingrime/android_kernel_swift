@@ -65,8 +65,7 @@ extern int mddi_ss_driveric_register(struct msm_panel_info *pinfo,
 
 static u32 mddi_ss_driveric_panel_detect(void)
 {
-  printk(KERN_INFO "TODO: add swift panel detection code");
-	return 1;
+	return machine_is_msm7x27_swift();
 }
 
 static int __init mddi_ss_driveric_hvga_init(void)
@@ -75,7 +74,7 @@ static int __init mddi_ss_driveric_hvga_init(void)
 	struct msm_panel_info pinfo;
 	u32 panel;
 
-	printk(KERN_INFO "Swift MDDI Init\n");
+	printk(KERN_INFO "Swift innoteck MDDI Init\n");
 
 	panel = mddi_ss_driveric_panel_detect();
 

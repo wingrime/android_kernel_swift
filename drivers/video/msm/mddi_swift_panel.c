@@ -619,15 +619,14 @@ int mddi_ss_driveric_register(struct msm_panel_info *pinfo,
 
 	printk(KERN_INFO  "%s\n", __func__);
 
-#if 0
+
 	if ((channel > 2) || ch_used[channel])
 		return -ENODEV;
-#endif
 
-	//if ((channel != INNOTEK) &&
-	//	mddi_ss_driveric_pdata && mddi_ss_driveric_pdata->panel_num)
-	//	if (mddi_ss_driveric_pdata->panel_num() < 2)
-	//		return -ENODEV;
+	if ((channel != INNOTEK) &&
+		mddi_ss_driveric_pdata && mddi_ss_driveric_pdata->panel_num)
+		if (mddi_ss_driveric_pdata->panel_num() < 2)
+			return -ENODEV;
 
 	ch_used[channel] = TRUE;
 	

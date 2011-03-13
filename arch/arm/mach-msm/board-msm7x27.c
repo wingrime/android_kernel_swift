@@ -1479,6 +1479,10 @@ static struct msm_panel_common_pdata mddi_ss_driveric_pdata = {
 
 };
 
+static struct platform_device swift_backlight_device = {
+	.name = "swift_backlight",
+};
+
 struct platform_device mddi_ss_driveric_device = {
 	.name   = "mddi_swift",
 	.id     = 0,
@@ -1531,7 +1535,7 @@ static struct platform_device *devices[] __initdata = {
 #ifdef CONFIG_BT
 	&msm_bt_power_device,
 #endif
-	&msm_device_pmic_leds,
+//	&msm_device_pmic_leds,
 	&msm_device_snd,
 	&msm_device_adspdec,
 #ifdef CONFIG_MT9T013
@@ -1557,11 +1561,12 @@ static struct platform_device *devices[] __initdata = {
 	&msm_device_kgsl,
 #endif
 #if defined(CONFIG_TSIF) || defined(CONFIG_TSIF_MODULE)
-	&msm_device_tsif,
+//	&msm_device_tsif,
 #endif
 	&hs_device,
 	&msm_batt_device,
 	&mddi_ss_driveric_device,	
+	&swift_backlight_device,
 };
 
 static struct msm_panel_common_pdata mdp_pdata = {

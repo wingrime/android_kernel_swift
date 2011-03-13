@@ -246,7 +246,7 @@ int kgsl_pwrctrl_axi(struct kgsl_device *device, unsigned int pwrflag)
 				clk_disable(pwr->ebi1_clk);
 			if (pwr->pcl)
 				msm_bus_scale_client_update_request(pwr->pcl,
-								BW_INIT);
+								    0);
 			pwr->power_flags &=
 				~(KGSL_PWRFLAGS_AXI_ON);
 			pwr->power_flags |= KGSL_PWRFLAGS_AXI_OFF;
@@ -259,7 +259,8 @@ int kgsl_pwrctrl_axi(struct kgsl_device *device, unsigned int pwrflag)
 				clk_enable(pwr->ebi1_clk);
 			if (pwr->pcl)
 				msm_bus_scale_client_update_request(pwr->pcl,
-								BW_MAX);
+					pwr->pwrlevels[pwr->active_pwrlevel].
+						bus_freq);
 			pwr->power_flags &=
 				~(KGSL_PWRFLAGS_AXI_OFF);
 			pwr->power_flags |= KGSL_PWRFLAGS_AXI_ON;

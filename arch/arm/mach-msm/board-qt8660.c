@@ -1059,7 +1059,7 @@ static struct msm_camera_sensor_flash_data flash_ov9726 = {
 };
 static struct msm_camera_sensor_info msm_camera_sensor_ov9726_data = {
 	.sensor_name	= "ov9726",
-	.sensor_reset	= GPIO_FRONT_CAM_RESET_N,
+	.sensor_reset	= 106,
 	.sensor_pwd	= 85,
 	.vcm_pwd	= 1,
 	.vcm_enable	= 0,
@@ -1069,7 +1069,7 @@ static struct msm_camera_sensor_info msm_camera_sensor_ov9726_data = {
 	.flash_data	= &flash_ov9726,
 	.csi_if		= 1
 };
-struct platform_device msm_camera_sensor_webcam_ov9726 = {
+static struct platform_device msm_camera_sensor_webcam_ov9726 = {
 	.name	= "msm_camera_ov9726",
 	.dev	= {
 		.platform_data = &msm_camera_sensor_ov9726_data,

@@ -49,9 +49,6 @@
 #define KGSL_PWRFLAGS_IRQ_ON		0x00000040
 #define KGSL_PWRFLAGS_IRQ_OFF		0x00000080
 
-#define BW_INIT 0
-#define BW_MAX  1
-
 #define KGSL_DEFAULT_PWRLEVEL 1
 
 struct kgsl_pwrctrl {

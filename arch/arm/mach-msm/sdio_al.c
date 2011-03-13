@@ -2002,7 +2002,7 @@ static int sdio_al_wake_up(struct sdio_al_device *sdio_al_dev,
 	host->ops->set_ios(host, &host->ios);
 	msmsdcc_set_pwrsave(sdio_al_dev->card->host, 0);
 	/* Poll the GPIO */
-	time_to_wait = jiffies + msecs_to_jiffies(100);
+	time_to_wait = jiffies + msecs_to_jiffies(1000);
 	while (time_before(jiffies, time_to_wait)) {
 		if (sdio_al->pdata->get_mdm2ap_status())
 			break;
@@ -2010,6 +2010,11 @@ static int sdio_al_wake_up(struct sdio_al_device *sdio_al_dev,
 	}
 	LPM_DEBUG(MODULE_NAME ":GPIO mdm2ap_status=%d\n",
 		       sdio_al->pdata->get_mdm2ap_status());
+	if (sdio_al->pdata->get_mdm2ap_status() == 0) {
+		pr_err(MODULE_NAME ":Modem is not out of VDD MIN\n");
+		ret = -EIO;
+		goto error_exit;
+	}
 
 	if (enable_wake_up_func) {
 		/* Enable Wake up Function */
@@ -2017,16 +2022,20 @@ static int sdio_al_wake_up(struct sdio_al_device *sdio_al_dev,
 		if (ret) {
 			pr_err(MODULE_NAME ":sdio_enable_func() err=%d\n",
 			       -ret);
-			ret = -EIO;
-			WARN_ON(ret);
-			sdio_al_dev->is_err = true;
-			sdio_al_print_info();
-			return ret;
+			goto error_exit;
 		}
 	}
 	/* Mark NOT OK_TOSLEEP */
 	sdio_al_dev->is_ok_to_sleep = 0;
-	write_lpm_info(sdio_al_dev);
+	ret = write_lpm_info(sdio_al_dev);
+	if (ret) {
+		pr_err(MODULE_NAME ":write_lpm_info() failed, err=%d\n",
+			       -ret);
+		sdio_al_dev->is_ok_to_sleep = 1;
+		if (enable_wake_up_func)
+			sdio_disable_func(wk_func);
+		goto error_exit;
+	}
 
 	/* Restore default thresh for non packet channels */
 	for (i = 0; i < SDIO_AL_MAX_CHANNELS; i++) {
@@ -2053,6 +2062,13 @@ static int sdio_al_wake_up(struct sdio_al_device *sdio_al_dev,
 	msmsdcc_set_pwrsave(sdio_al_dev->card->host, 1);
 	pr_debug(MODULE_NAME ":Turn clock off\n");
 
+	return ret;
+error_exit:
+	sdio_al_dev->is_err = true;
+	wake_unlock(&sdio_al_dev->wake_lock);
+	msmsdcc_set_pwrsave(sdio_al_dev->card->host, 1);
+	WARN_ON(ret);
+	sdio_al_print_info();
 	return ret;
 }
 

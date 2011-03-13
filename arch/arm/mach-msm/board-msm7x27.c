@@ -87,6 +87,8 @@
 #define PMEM_KERNEL_EBI1_SIZE	0x1C000
 #endif
 
+void __init swift_add_btpower_devices(void);
+
 static struct resource smc91x_resources[] = {
 	[0] = {
 		.start	= 0x9C004300,
@@ -1532,9 +1534,9 @@ static struct platform_device *devices[] __initdata = {
 
 	//&lcdc_gordon_panel_device,
 	&msm_device_uart_dm1,
-#ifdef CONFIG_BT
-	&msm_bt_power_device,
-#endif
+	//#ifdef CONFIG_BT
+	//	&msm_bt_power_device,
+	//#endif
 //	&msm_device_pmic_leds,
 	&msm_device_snd,
 	&msm_device_adspdec,
@@ -1556,7 +1558,7 @@ static struct platform_device *devices[] __initdata = {
 #ifdef CONFIG_VB6801
 	&msm_camera_sensor_vb6801,
 #endif
-	&msm_bluesleep_device,
+	//&msm_bluesleep_device,
 #ifdef CONFIG_ARCH_MSM7X27
 	&msm_device_kgsl,
 #endif
@@ -2087,7 +2089,8 @@ static void __init msm7x2x_init(void)
 	msm7x2x_init_host();
 #endif
 	msm7x2x_init_mmc();
-	bt_power_init();
+	//	bt_power_init();
+
 
 	if (cpu_is_msm7x27())
 		msm_pm_set_platform_data(msm7x27_pm_data,
@@ -2096,6 +2099,7 @@ static void __init msm7x2x_init(void)
 		msm_pm_set_platform_data(msm7x25_pm_data,
 					ARRAY_SIZE(msm7x25_pm_data));
 	msm7x27_wlan_init();
+	swift_add_btpower_devices();
 }
 
 static unsigned pmem_kernel_ebi1_size = PMEM_KERNEL_EBI1_SIZE;

@@ -306,7 +306,7 @@ static int __init msm_pm_mode_sysfs_add(void)
 		kobj_attrs[1].attr.name = MSM_PM_MODE_ATTR_IDLE_ENABLED;
 		kobj_attrs[2].attr.name = MSM_PM_MODE_ATTR_LATENCY;
 		kobj_attrs[3].attr.name = MSM_PM_MODE_ATTR_RESIDENCY;
-
+		
 		for (k = 0; k < MSM_PM_MODE_ATTR_NR; k++) {
 			kobj_attrs[k].attr.mode = 0644;
 			kobj_attrs[k].show = msm_pm_mode_attr_show;
@@ -314,6 +314,10 @@ static int __init msm_pm_mode_sysfs_add(void)
 
 			attrs[k] = &kobj_attrs[k].attr;
 		}
+		sysfs_attr_init(&kobj_attrs[0].attr);
+		sysfs_attr_init(&kobj_attrs[1].attr);
+		sysfs_attr_init(&kobj_attrs[2].attr);
+		sysfs_attr_init(&kobj_attrs[3].attr);
 		attrs[MSM_PM_MODE_ATTR_NR] = NULL;
 
 		attr_group->attrs = attrs;

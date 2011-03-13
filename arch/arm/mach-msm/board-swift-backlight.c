@@ -239,7 +239,7 @@ static int rt9393_probe(struct platform_device *pdev)
 	
 	memset(&props, 0, sizeof(struct backlight_properties));
 	
-	bd = backlight_device_register("swift_backlight",&pdev->dev, NULL , &rt9393_ops,&props);
+	bd = backlight_device_register("rt9393",&pdev->dev, NULL , &rt9393_ops,&props);
 	if (IS_ERR(bd)) {
 		printk("failed to register backlight device\n");
 		return PTR_ERR(bd);

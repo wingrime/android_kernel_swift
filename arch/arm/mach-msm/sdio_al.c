@@ -3085,6 +3085,14 @@ static void sdio_print_mailbox(struct sdio_mailbox *mailbox,
 {
 	int k = 0;
 
+	if (!mailbox) {
+		snprintf(buf, FILE_ARRAY_SIZE,
+			 "\n" MODULE_NAME ": mailbox is NULL\n");
+		pr_info("%s", buf);
+		write_to_debug_file(fd, buf, FILE_ARRAY_SIZE);
+		return;
+	}
+
 	snprintf(buf,
 		 FILE_ARRAY_SIZE,
 		 "\n" MODULE_NAME ": eot_pipe(0_7)=%d, eot_pipe(8_15)=%d"
@@ -3290,6 +3298,9 @@ static void sdio_al_print_info(void)
 		if (sdio_al_dev == NULL)
 			continue;
 
+		if (sdio_al_dev->lpm_chan == INVALID_SDIO_CHAN)
+			continue;
+
 		offset = offsetof(struct peer_sdioc_sw_mailbox, ch_config)+
 		sizeof(struct peer_sdioc_channel_config) *
 		sdio_al_dev->lpm_chan+
@@ -3298,6 +3309,12 @@ static void sdio_al_print_info(void)
 		func1 = sdio_al_dev->card->sdio_func[0];
 		lpm_func = sdio_al_dev->card->sdio_func[sdio_al_dev->
 								lpm_chan+1];
+		if (!lpm_func) {
+			pr_err(MODULE_NAME ": %s - lpm_func is NULL\n",
+			       __func__);
+			continue;
+		}
+
 		sdio_claim_host(func1);
 		ret  =  sdio_memcpy_fromio(lpm_func,
 					    &is_ok_to_sleep,

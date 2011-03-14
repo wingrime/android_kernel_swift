@@ -90,15 +90,5 @@ static inline void clock_debug_print_enabled(void) { return; }
 
 extern struct clk_ops clk_ops_remote;
 
-static inline int msm_clock_require_tcxo(unsigned long *reason, int nbits)
-{
-	return 0;
-}
-
-static inline int msm_clock_get_name(uint32_t id, char *name, uint32_t size)
-{
-	return 0;
-}
-
 #endif
 

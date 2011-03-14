@@ -783,6 +783,8 @@ static int __init mipi_dsi_driver_init(void)
 		return PTR_ERR(dsi_byte_div_clk);
 	}
 
+	mipi_dsi_init();
+
 	ret = mipi_dsi_register_driver();
 
 	device_initialize(&dsi_dev);
@@ -801,8 +803,6 @@ static int __init mipi_dsi_driver_init(void)
 		printk(KERN_ERR "mipi_dsi_register_driver() failed!\n");
 		return ret;
 	}
-
-	mipi_dsi_init();
 
 	return ret;
 }

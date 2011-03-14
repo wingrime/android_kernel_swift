@@ -88,6 +88,8 @@
 #endif
 
 void __init swift_add_btpower_devices(void);
+void __init swift_init_timed_vibrator(void);
+
 
 static struct resource smc91x_resources[] = {
 	[0] = {
@@ -2120,7 +2122,11 @@ static void __init msm7x2x_init(void)
 		msm_pm_set_platform_data(msm7x25_pm_data,
 					ARRAY_SIZE(msm7x25_pm_data));
 	msm7x27_wlan_init();
+	
 	swift_add_btpower_devices();
+	
+	swift_init_timed_vibrator();
+	
 }
 
 static unsigned pmem_kernel_ebi1_size = PMEM_KERNEL_EBI1_SIZE;

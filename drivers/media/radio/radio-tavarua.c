@@ -733,7 +733,7 @@ static void tavarua_handle_interrupts(struct tavarua_device *radio)
 {
 	int i;
 	int retval;
-	enum tavarua_xfr_ctrl_t xfr_status;
+	unsigned char xfr_status;
 	if (!radio->handle_irq) {
 		FMDBG("IRQ happend, but I wont handle it\n");
 		return;
@@ -886,7 +886,7 @@ static void tavarua_handle_interrupts(struct tavarua_device *radio)
 		FMDBG("XFR Interrupt\n");
 		tavarua_read_registers(radio, XFRCTRL, XFR_REG_NUM+1);
 		FMDBG("XFRCTRL IS: %x\n", radio->registers[XFRCTRL]);
-		xfr_status = (enum tavarua_xfr_ctrl_t)radio->registers[XFRCTRL];
+		xfr_status = radio->registers[XFRCTRL];
 		switch (xfr_status) {
 		case RDS_PS_0:
 			FMDBG("PS Header\n");

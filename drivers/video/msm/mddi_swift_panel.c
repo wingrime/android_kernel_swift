@@ -575,7 +575,7 @@ mddi_ss_driveric_set_backlight(struct msm_fb_data_type * mfd)
 }
 #endif
 
-static int __init mddi_swift_probe(struct platform_device *pdev)
+static int __devinit mddi_swift_probe(struct platform_device *pdev)
 {
 	int err;
 

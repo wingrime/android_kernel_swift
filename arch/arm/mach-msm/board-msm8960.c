@@ -20,20 +20,20 @@
 #include <linux/io.h>
 #include <linux/irq.h>
 #include <linux/i2c.h>
+#include <linux/usb/android_composite.h>
 
 #include <asm/mach-types.h>
 #include <asm/mach/arch.h>
 #include <asm/hardware/gic.h>
+#include <asm/mach/mmc.h>
 
 #include <mach/board.h>
 #include <mach/msm_iomap.h>
-#include <asm/mach/mmc.h>
 #include <mach/msm_hsusb.h>
 #include <mach/usbdiag.h>
-#include <linux/usb/android_composite.h>
+#include <mach/socinfo.h>
 
 #include "timer.h"
-
 #include "devices.h"
 
 #define MSM_SHARED_RAM_PHYS 0x40000000
@@ -201,6 +201,8 @@ static void __init msm8960_i2c_init(void)
 
 static void __init msm8960_sim_init(void)
 {
+	if (socinfo_init() < 0)
+		pr_err("socinfo_init() failed!\n");
 	msm_clock_init(msm_clocks_8960, msm_num_clocks_8960);
 	msm_device_otg.dev.platform_data = &msm_otg_pdata;
 	msm8960_i2c_init();
@@ -210,6 +212,8 @@ static void __init msm8960_sim_init(void)
 
 static void __init msm8960_rumi3_init(void)
 {
+	if (socinfo_init() < 0)
+		pr_err("socinfo_init() failed!\n");
 	msm_clock_init(msm_clocks_8960, msm_num_clocks_8960);
 	msm8960_i2c_init();
 	platform_add_devices(rumi3_devices, ARRAY_SIZE(rumi3_devices));

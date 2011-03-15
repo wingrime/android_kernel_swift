@@ -1,7 +1,7 @@
 /* arch/arm/mach-msm/vreg.c
  *
  * Copyright (C) 2008 Google, Inc.
- * Copyright (c) 2009, Code Aurora Forum. All rights reserved.
+ * Copyright (c) 2009-2011 Code Aurora Forum. All rights reserved.
  * Author: Brian Swetland <swetland@google.com>
  *
  * This software is licensed under the terms of the GNU General Public
@@ -91,6 +91,15 @@ static struct vreg vregs[] = {
 	VREG("xo_out",	46, 0, 0),
 	VREG("lvsw0",	47, 0, 0),
 	VREG("lvsw1",	48, 0, 0),
+	VREG("mddi",	49, 0, 0),
+	VREG("pllx",	50, 0, 0),
+	VREG("wlan3",	51, 0, 0),
+	VREG("emmc",	52, 0,	0),
+	VREG("wlan_tcx0", 53, 0, 0),
+	VREG("usim2",	54, 0, 0),
+	VREG("usim",	55, 0, 0),
+	VREG("bt",	56, 0, 0),
+	VREG("wlan4",	57, 0, 0),
 };
 
 struct vreg *vreg_get(struct device *dev, const char *id)

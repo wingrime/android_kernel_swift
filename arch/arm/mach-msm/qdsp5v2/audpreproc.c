@@ -222,6 +222,10 @@ static void audpreproc_dsp_event(void *data, unsigned id, size_t len,
 	   }
 	break;
 #endif
+	case ADSP_MESSAGE_ID: {
+		MM_DBG("Received ADSP event:module audpreproctask\n");
+		break;
+	}
 	default:
 		MM_ERR("Unknown Event %d\n", id);
 	}

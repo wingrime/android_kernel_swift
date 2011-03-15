@@ -7854,18 +7854,18 @@ void __might_sleep(const char *file, int line, int preempt_offset)
 		return;
 	prev_jiffy = jiffies;
 
-	printk(KERN_ERR
-		"BUG: sleeping function called from invalid context at %s:%d\n",
-			file, line);
-	printk(KERN_ERR
-		"in_atomic(): %d, irqs_disabled(): %d, pid: %d, name: %s\n",
-			in_atomic(), irqs_disabled(),
-			current->pid, current->comm);
+	//printk(KERN_ERR
+	//	"BUG: sleeping function called from invalid context at %s:%d\n",
+	//		file, line);
+	//printk(KERN_ERR
+	//	"in_atomic(): %d, irqs_disabled(): %d, pid: %d, name: %s\n",
+	//		in_atomic(), irqs_disabled(),
+	//		current->pid, current->comm);
 
-	debug_show_held_locks(current);
-	if (irqs_disabled())
-		print_irqtrace_events(current);
-	dump_stack();
+	//debug_show_held_locks(current);
+	//if (irqs_disabled())
+	//	print_irqtrace_events(current);
+	//dump_stack();
 #endif
 }
 EXPORT_SYMBOL(__might_sleep);

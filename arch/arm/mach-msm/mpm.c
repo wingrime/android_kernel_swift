@@ -255,6 +255,19 @@ static void msm_mpm_set(bool wakeset)
 	msm_mpm_send_interrupt();
 }
 
+static void msm_mpm_clear(void)
+{
+	int i;
+
+	for (i = 0; i < MSM_MPM_REG_WIDTH; i++) {
+		msm_mpm_write(MSM_MPM_REQUEST_REG_ENABLE, i, 0);
+		msm_mpm_write(MSM_MPM_REQUEST_REG_CLEAR, i, 0xffffffff);
+	}
+
+	msm_mpm_write_barrier();
+	msm_mpm_send_interrupt();
+}
+
 /******************************************************************************
  * Interrupt Mapping Functions
  *****************************************************************************/
@@ -516,7 +529,7 @@ void msm_mpm_exit_sleep(bool from_idle)
 		}
 	}
 
-	msm_mpm_set(!from_idle);
+	msm_mpm_clear();
 }
 
 static int __init msm_mpm_early_init(void)

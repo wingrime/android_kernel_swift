@@ -1309,6 +1309,11 @@ CONFIG_GPIO_SX150X=y
 #
 # MODULbus GPIO expanders:
 #
+
+#
+# SSBI GPIO expanders:
+#
+CONFIG_GPIO_PM8XXX=y
 # CONFIG_W1 is not set
 # CONFIG_POWER_SUPPLY is not set
 # CONFIG_HWMON is not set
@@ -1324,12 +1329,16 @@ CONFIG_SSB_POSSIBLE=y
 #
 # Multifunction device drivers
 #
-# CONFIG_MFD_CORE is not set
+CONFIG_MFD_CORE=y
 # CONFIG_MFD_SM501 is not set
 # CONFIG_MFD_ASIC3 is not set
 # CONFIG_HTC_EGPIO is not set
 # CONFIG_HTC_PASIC3 is not set
 # CONFIG_TPS65010 is not set
+CONFIG_MFD_PM8XXX=y
+CONFIG_MFD_PM8921_CORE=y
+CONFIG_MFD_PM8XXX_IRQ=y
+CONFIG_MFD_PM8XXX_MPP=y
 # CONFIG_TWL4030_CORE is not set
 # CONFIG_MFD_TMIO is not set
 # CONFIG_MFD_T7L66XB is not set
@@ -1533,7 +1542,7 @@ CONFIG_ANDROID_LOW_MEMORY_KILLER=y
 #
 # Qualcomm MSM specific device drivers
 #
-# CONFIG_MSM_SSBI is not set
+CONFIG_MSM_SSBI=y
 
 #
 # File systems

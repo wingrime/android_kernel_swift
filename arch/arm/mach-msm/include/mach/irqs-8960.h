@@ -277,9 +277,10 @@
 
 /* For now, use the maximum number of interrupts until a pending GIC issue
  * is sorted out */
-#define NR_MSM_IRQS 1020
-#define NR_BOARD_IRQS 0
-#define NR_GPIO_IRQS 0
+#define NR_MSM_IRQS 256
+#define NR_GPIO_IRQS 150
+#define NR_PM8921_IRQS 256
+#define NR_BOARD_IRQS (NR_PM8921_IRQS)
 
 
 /* smd/smsm interrupts */

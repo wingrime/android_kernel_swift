@@ -22,6 +22,8 @@
 #include <linux/i2c.h>
 #include <linux/usb/android_composite.h>
 #include <linux/msm_ssbi.h>
+#include <linux/mfd/pm8xxx/pm8921.h>
+#include <mach/irqs.h>
 
 #include <asm/mach-types.h>
 #include <asm/mach/arch.h>
@@ -40,6 +42,14 @@
 #include "devices.h"
 
 #define MSM_SHARED_RAM_PHYS 0x40000000
+
+/* Macros assume PMIC GPIOs and MPPs start at 1 */
+#define PM8921_GPIO_BASE		NR_GPIO_IRQS
+#define PM8921_GPIO_PM_TO_SYS(pm_gpio)	(pm_gpio - 1 + PM8921_GPIO_BASE)
+#define PM8921_MPP_BASE			(PM8921_GPIO_BASE + PM8921_NR_GPIOS)
+#define PM8921_MPP_PM_TO_SYS(pm_gpio)	(pm_gpio - 1 + PM8921_MPP_BASE)
+#define PM8921_IRQ_BASE			(NR_MSM_IRQS + NR_GPIO_IRQS)
+#define PM8921_MPP_IRQ_BASE		(PM8921_IRQ_BASE + NR_GPIO_IRQS)
 
 static void __init msm8960_map_io(void)
 {
@@ -242,6 +252,7 @@ static struct platform_device *rumi3_devices[] __initdata = {
 	&msm_device_dmov,
 	&msm_device_smd,
 	&msm8960_device_uart_gsbi5,
+	&msm8960_device_ssbi_pm8921,
 	&msm_device_kgsl_8960,
 	&msm8960_device_qup_spi_gsbi1,
 	&msm8960_device_qup_i2c_gsbi4,
@@ -254,10 +265,31 @@ static void __init msm8960_i2c_init(void)
 					&msm8960_i2c_qup_gsbi4_pdata;
 }
 
-static struct msm_ssbi_platform_data msm8960_ssbi_pm8921_pdata = {
+static struct pm8xxx_irq_platform_data pm8xxx_irq_pdata __devinitdata = {
+	.irq_base		= PM8921_IRQ_BASE,
+	.devirq			= MSM_GPIO_TO_INT(104),
+	.irq_trigger_flag	= IRQF_TRIGGER_LOW,
+};
+
+static struct pm8xxx_gpio_platform_data pm8xxx_gpio_pdata __devinitdata = {
+	.gpio_base	= PM8921_GPIO_PM_TO_SYS(1),
+};
+
+static struct pm8xxx_mpp_platform_data pm8xxx_mpp_pdata __devinitdata = {
+	.mpp_base	= PM8921_MPP_PM_TO_SYS(1),
+};
+
+static struct pm8921_platform_data pm8921_platform_data __devinitdata = {
+	.irq_pdata		= &pm8xxx_irq_pdata,
+	.gpio_pdata		= &pm8xxx_gpio_pdata,
+	.mpp_pdata		= &pm8xxx_mpp_pdata,
+};
+
+static struct msm_ssbi_platform_data msm8960_ssbi_pm8921_pdata __devinitdata = {
 	.controller_type = MSM_SBI_CTRL_PMIC_ARBITER,
 	.slave	= {
-		.name		= "pm8921-core",
+		.name			= "pm8921-core",
+		.platform_data		= &pm8921_platform_data,
 	},
 };
 

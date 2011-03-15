@@ -172,8 +172,7 @@ kgsl_g12_cmdstream_issueibcmds(struct kgsl_device_private *dev_priv,
 		goto error;
 	}
 	if (numibs != 1) {
-		KGSL_DRV_ERR("Invalid number of ib's passed for z180,"
-				" numibs: %d\n", numibs);
+		KGSL_DRV_ERR(device, "Invalid number of ibs: %d\n", numibs);
 		result = -EINVAL;
 		goto error;
 	}
@@ -182,13 +181,13 @@ kgsl_g12_cmdstream_issueibcmds(struct kgsl_device_private *dev_priv,
 
 	tmp.hostptr = (void *)*timestamp;
 
-	KGSL_CMD_INFO("ctxt %d ibaddr 0x%08x sizedwords %d",
-		      context->id, cmd, sizedwords);
+	KGSL_CMD_INFO(device, "ctxt %d ibaddr 0x%08x sizedwords %d\n",
+		context->id, cmd, sizedwords);
 	/* context switch */
 	if ((context->id != (int)g12_device->ringbuffer.prevctx) ||
 	    (ctrl & KGSL_CONTEXT_CTX_SWITCH)) {
-		KGSL_CMD_INFO("context switch %d -> %d",
-				context->id, g12_device->ringbuffer.prevctx);
+		KGSL_CMD_INFO(device, "context switch %d -> %d\n",
+			context->id, g12_device->ringbuffer.prevctx);
 		kgsl_mmu_setstate(device, pagetable);
 		cnt = PACKETSIZE_STATESTREAM;
 		ofs = 0;
@@ -200,8 +199,8 @@ kgsl_g12_cmdstream_issueibcmds(struct kgsl_device_private *dev_priv,
 				  room_in_rb(g12_device),
 				  msecs_to_jiffies(KGSL_TIMEOUT_DEFAULT));
 	if (result < 0) {
-		KGSL_CMD_ERR("failed waiting for ringbuffer. result %d",
-			     result);
+		KGSL_CMD_ERR(device, "wait_event_interruptible_timeout "
+			"failed: %d\n", result);
 		goto error;
 	}
 	result = 0;

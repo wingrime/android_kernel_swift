@@ -174,13 +174,12 @@ irqreturn_t kgsl_g12_isr(int irq, void *data)
 		result = IRQ_HANDLED;
 
 		if (status & REG_VGC_IRQSTATUS__FIFO_MASK)
-			KGSL_DRV_ERR("g12 fifo interrupt\n");
+			KGSL_DRV_ERR(device, "g12 fifo interrupt\n");
 		if (status & REG_VGC_IRQSTATUS__MH_MASK)
 			kgsl_mh_intrcallback(device);
 		if (status & REG_VGC_IRQSTATUS__G2D_MASK) {
 			int count;
 
-			KGSL_DRV_VDBG("g12 g2d interrupt\n");
 			kgsl_g12_regread(device,
 					 ADDR_VGC_IRQ_ACTIVE_CNT >> 2,
 					 &count);
@@ -316,16 +315,16 @@ kgsl_g12_init_pwrctrl(struct kgsl_device *device,
 	if (IS_ERR(clk)) {
 		clk = NULL;
 		result = PTR_ERR(clk);
-		KGSL_DRV_ERR("clk_get(%s) returned %d\n",
-				pdata_dev->clk.name.clk, result);
+		KGSL_PWR_ERR(device, "clk_get(%s) failed: %d\n",
+			pdata_dev->clk.name.clk, result);
 		goto done;
 	}
 
 	if (pclk_name && IS_ERR(pclk)) {
 		pclk = NULL;
 		result = PTR_ERR(pclk);
-		KGSL_DRV_ERR("clk_get(%s) returned %d\n",
-					 pclk_name, result);
+		KGSL_PWR_ERR(device, "clk_get(%s): failed %d\n",
+			pclk_name, result);
 		goto done;
 	}
 
@@ -338,8 +337,8 @@ kgsl_g12_init_pwrctrl(struct kgsl_device *device,
 		platform_get_irq_byname(pdev, g12_device->irqname);
 
 	if (device->pwrctrl.interrupt_num <= 0) {
-		KGSL_DRV_ERR("platform_get_irq_byname() returned %d\n",
-					 device->pwrctrl.interrupt_num);
+		KGSL_PWR_ERR(device, "platform_get_irq_byname failed: %d\n",
+			device->pwrctrl.interrupt_num);
 		result = -EINVAL;
 		goto done;
 	}
@@ -349,6 +348,8 @@ kgsl_g12_init_pwrctrl(struct kgsl_device *device,
 		pdata_pwr->set_grp_async();
 
 	if (pdata_pwr->num_levels > KGSL_MAX_PWRLEVELS) {
+		KGSL_PWR_ERR(device, "invalid power level count: %d\n",
+			pdata_pwr->num_levels);
 		result = -EINVAL;
 		goto done;
 	}
@@ -379,7 +380,7 @@ kgsl_g12_init_pwrctrl(struct kgsl_device *device,
 
 	if (internal_pwr_rail_mode(device->pwrctrl.pwr_rail,
 						PWR_RAIL_CTL_MANUAL)) {
-		KGSL_DRV_ERR("call internal_pwr_rail_mode failed\n");
+		KGSL_PWR_ERR(device, "internal_pwr_rail_mode failed\n");
 		result = -EINVAL;
 		goto done;
 	}
@@ -397,9 +398,9 @@ kgsl_g12_init_pwrctrl(struct kgsl_device *device,
 	if (bus_table) {
 		device->pwrctrl.pcl = msm_bus_scale_register_client(bus_table);
 		if (!device->pwrctrl.pcl) {
-			KGSL_DRV_ERR("msm_bus_scale_register_client failed "
-				     "id %d table %p", device->id,
-				     bus_table);
+			KGSL_PWR_ERR(device,
+				"msm_bus_scale_register_client failed: "
+				"id %d table %p", device->id, bus_table);
 			result = -EINVAL;
 			goto done;
 		}
@@ -417,8 +418,6 @@ _kgsl_g12_init(struct kgsl_device *device, struct platform_device *pdev)
 	struct resource *res;
 	struct kgsl_platform_data *pdata = pdev->dev.platform_data;
 
-	KGSL_DRV_VDBG("enter (device=%p)\n", device);
-
 	kgsl_g12_init_pwrctrl(device, pdev);
 
 	/* initilization of timestamp wait */
@@ -428,7 +427,7 @@ _kgsl_g12_init(struct kgsl_device *device, struct platform_device *pdev)
 					   g12_device->iomemname);
 
 	if (res == NULL) {
-		KGSL_DRV_ERR("platform_get_resource_byname failed\n");
+		KGSL_DRV_ERR(device, "platform_get_resource_byname failed\n");
 		status = -EINVAL;
 		goto error;
 	}
@@ -437,23 +436,22 @@ _kgsl_g12_init(struct kgsl_device *device, struct platform_device *pdev)
 	regspace->sizebytes = resource_size(res);
 
 	if (regspace->mmio_phys_base == 0 || regspace->sizebytes == 0) {
-		KGSL_DRV_ERR("dev %d invalid regspace\n", device->id);
+		KGSL_DRV_ERR(device, "dev %d invalid regspace\n", device->id);
 		status = -ENODEV;
 		goto error;
 	}
 	if (!request_mem_region(regspace->mmio_phys_base,
 				regspace->sizebytes, DRIVER_NAME)) {
-		KGSL_DRV_ERR("request_mem_region failed for " \
-					"register memory\n");
+		KGSL_DRV_ERR(device, "request_mem_region failed\n");
 		status = -ENODEV;
 		goto error;
 	}
 
 	regspace->mmio_virt_base = ioremap(regspace->mmio_phys_base,
 					   regspace->sizebytes);
-	KGSL_MEM_INFO("ioremap(regs) = %p\n", regspace->mmio_virt_base);
+
 	if (regspace->mmio_virt_base == NULL) {
-		KGSL_DRV_ERR("ioremap failed for register memory\n");
+		KGSL_DRV_ERR(device, "ioremap failed\n");
 		status = -ENODEV;
 		goto error_release_mem;
 	}
@@ -461,16 +459,17 @@ _kgsl_g12_init(struct kgsl_device *device, struct platform_device *pdev)
 	status = request_irq(device->pwrctrl.interrupt_num, kgsl_g12_isr,
 			     IRQF_TRIGGER_HIGH, DRIVER_NAME, device);
 	if (status) {
-		KGSL_DRV_ERR("request_irq(%d) returned %d\n",
+		KGSL_DRV_ERR(device, "request_irq(%d) failed: %d\n",
 			      device->pwrctrl.interrupt_num, status);
 		goto error_iounmap;
 	}
 	device->pwrctrl.have_irq = 1;
 	disable_irq(device->pwrctrl.interrupt_num);
 
-	KGSL_DRV_INFO("dev_id %d regs phys 0x%08x size 0x%08x virt %p\n",
-			device->id, regspace->mmio_phys_base,
-			regspace->sizebytes, regspace->mmio_virt_base);
+	KGSL_DRV_INFO(device,
+		"dev_id %d regs phys 0x%08x size 0x%08x virt %p\n",
+		device->id, regspace->mmio_phys_base,
+		regspace->sizebytes, regspace->mmio_virt_base);
 
 	kgsl_cffdump_open(device->id);
 
@@ -543,8 +542,6 @@ int _kgsl_g12_close(struct kgsl_device *device)
 	kgsl_g12_cmdstream_close(device);
 
 	if (regspace->mmio_virt_base != NULL) {
-		KGSL_MEM_INFO("iounmap(regs) = %p\n",
-				regspace->mmio_virt_base);
 		iounmap(regspace->mmio_virt_base);
 		regspace->mmio_virt_base = NULL;
 		release_mem_region(regspace->mmio_phys_base,
@@ -559,7 +556,6 @@ int _kgsl_g12_close(struct kgsl_device *device)
 		device->work_queue = NULL;
 	}
 
-	KGSL_DRV_VDBG("return %d\n", 0);
 	return 0;
 }
 
@@ -588,11 +584,10 @@ int kgsl_g12_init(struct platform_device *pdev)
 static int kgsl_g12_start(struct kgsl_device *device, unsigned int init_ram)
 {
 	int status = 0;
-	KGSL_DRV_VDBG("enter (device=%p)\n", device);
 
 	device->state = KGSL_STATE_INIT;
 	device->requested_state = KGSL_STATE_NONE;
-	KGSL_PWR_INFO("state -> INIT, device %d\n", device->id);
+	KGSL_PWR_WARN(device, "state -> INIT, device %d\n", device->id);
 
 	kgsl_pwrctrl_pwrrail(device, KGSL_PWRFLAGS_POWER_ON);
 	kgsl_pwrctrl_clk(device, KGSL_PWRFLAGS_CLK_ON);
@@ -694,9 +689,8 @@ static int kgsl_g12_getproperty(struct kgsl_device *device,
 		break;
 
 	default:
-	KGSL_DRV_ERR("invalid property: %d\n", type);
-	status = -EINVAL;
-
+		KGSL_DRV_ERR(device, "invalid property: %d\n", type);
+		status = -EINVAL;
 	}
 	return status;
 }
@@ -706,16 +700,12 @@ int kgsl_g12_idle(struct kgsl_device *device, unsigned int timeout)
 	int status = KGSL_SUCCESS;
 	struct kgsl_g12_device *g12_device = KGSL_G12_DEVICE(device);
 
-	KGSL_DRV_VDBG("enter (device=%p, timeout=%d)\n", device, timeout);
-
 	if (g12_device->current_timestamp > g12_device->timestamp)
 		status = kgsl_g12_waittimestamp(device,
 					g12_device->current_timestamp, timeout);
 
 	if (status)
-		KGSL_DRV_ERR("Error, kgsl_g12_waittimestamp() timed out\n");
-
-	KGSL_DRV_VDBG("return %d\n", status);
+		KGSL_DRV_ERR(device, "kgsl_g12_waittimestamp() timed out\n");
 
 	return status;
 }
@@ -765,7 +755,8 @@ int kgsl_g12_regread(struct kgsl_device *device, unsigned int offsetwords,
 	} else {
 		if (offsetwords * sizeof(uint32_t) >=
 				device->regspace.sizebytes) {
-			KGSL_DRV_ERR("invalid offset %d\n", offsetwords);
+			KGSL_DRV_ERR(device, "invalid offset %d\n",
+				offsetwords);
 			return -ERANGE;
 		}
 
@@ -793,7 +784,8 @@ int kgsl_g12_regwrite(struct kgsl_device *device, unsigned int offsetwords,
 	} else {
 		if (offsetwords*sizeof(uint32_t) >=
 				device->regspace.sizebytes) {
-			KGSL_DRV_ERR("invalid offset %d\n", offsetwords);
+			KGSL_DRV_ERR(device,
+				"invalid offset %d\n", offsetwords);
 			return -ERANGE;
 		}
 
@@ -822,10 +814,7 @@ static int kgsl_g12_waittimestamp(struct kgsl_device *device,
 	struct kgsl_g12_device *g12_device = KGSL_G12_DEVICE(device);
 	long timeout = 0;
 
-	KGSL_DRV_INFO("enter (device=%p,timestamp=%d,timeout=0x%08x)\n",
-			device, timestamp, msecs);
-
-	KGSL_DRV_INFO("current (device=%p,timestamp=%d)\n",
+	KGSL_DRV_INFO(device, "current (device=%p,timestamp=%d)\n",
 			device, g12_device->timestamp);
 
 	mutex_unlock(&device->mutex);
@@ -840,12 +829,11 @@ static int kgsl_g12_waittimestamp(struct kgsl_device *device,
 	else if (timeout == 0) {
 		status = -ETIMEDOUT;
 		device->state = KGSL_STATE_HUNG;
-		KGSL_PWR_INFO("state -> HUNG, device %d\n", device->id);
+		KGSL_PWR_WARN(device, "state -> HUNG, device %d\n", device->id);
 	}
 	else
 		status = timeout;
 
-	KGSL_DRV_INFO("return %d\n", status);
 	return status;
 }
 
@@ -888,7 +876,8 @@ static long kgsl_g12_ioctl(struct kgsl_device_private *dev_priv,
 							(void __user *)arg);
 		break;
 	default:
-		KGSL_DRV_ERR("invalid ioctl code %08x\n", cmd);
+		KGSL_DRV_INFO(dev_priv->device,
+			"invalid ioctl code %08x\n", cmd);
 		result = -EINVAL;
 		break;
 	}

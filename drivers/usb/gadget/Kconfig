@@ -993,6 +993,18 @@ config USB_F_SERIAL_SDIO
           separate transport layer u_sdio(very similar to u_serial.c)
           Say "y" to link the driver staticall
 
+config USB_F_SERIAL_SMD
+	boolean "generic serial function driver over SMD"
+	depends on USB_ANDROID && MSM_SMD
+	default n
+	help
+          Gadget serial driver is one way to communicate with modem
+          device. This option enables serial driver to communicate
+          to modem device using smd. It makes very minimal changes
+          to Gadget usb serial interface(f_serial.c) and adds
+          separate transport layer u_smd(very similar to u_serial.c)
+          Say "y" to link the driver statically
+
 config USB_CDC_COMPOSITE
 	tristate "CDC Composite Device (Ethernet and ACM)"
 	depends on NET

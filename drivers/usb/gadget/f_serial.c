@@ -76,6 +76,7 @@ struct f_gser {
 #ifdef CONFIG_USB_F_SERIAL
 static unsigned int no_tty_ports;
 static unsigned int no_sdio_ports;
+static unsigned int no_smd_ports;
 static unsigned int nr_ports;
 #endif
 
@@ -259,6 +260,8 @@ static char *transport_to_str(enum transport_type t)
 		return "TTY";
 	case USB_GADGET_FSERIAL_TRANSPORT_SDIO:
 		return "SDIO";
+	case USB_GADGET_FSERIAL_TRANSPORT_SMD:
+		return "SMD";
 	}
 
 	return "NONE";
@@ -276,6 +279,8 @@ static int gport_setup(struct usb_configuration *c)
 		ret = gserial_setup(c->cdev->gadget, no_tty_ports);
 	if (no_sdio_ports)
 		ret = gsdio_setup(c->cdev->gadget, no_sdio_ports);
+	if (no_smd_ports)
+		ret = gsmd_setup(c->cdev->gadget, no_smd_ports);
 
 	return ret;
 }
@@ -296,6 +301,9 @@ static int gport_connect(struct f_gser *gser)
 		break;
 	case USB_GADGET_FSERIAL_TRANSPORT_SDIO:
 		gsdio_connect(&gser->port, port_num);
+		break;
+	case USB_GADGET_FSERIAL_TRANSPORT_SMD:
+		gsmd_connect(&gser->port, port_num);
 		break;
 	default:
 		pr_err("%s: Un-supported transport: %s\n", __func__,
@@ -322,6 +330,9 @@ static int gport_disconnect(struct f_gser *gser)
 		break;
 	case USB_GADGET_FSERIAL_TRANSPORT_SDIO:
 		gsdio_disconnect(&gser->port, port_num);
+		break;
+	case USB_GADGET_FSERIAL_TRANSPORT_SMD:
+		gsmd_disconnect(&gser->port, port_num);
 		break;
 	default:
 		pr_err("%s: Un-supported transport:%s\n", __func__,
@@ -923,6 +934,10 @@ static int __init fserial_probe(struct platform_device *pdev)
 			gserial_ports[i].client_port_num = no_sdio_ports;
 			no_sdio_ports++;
 			break;
+		case USB_GADGET_FSERIAL_TRANSPORT_SMD:
+			gserial_ports[i].client_port_num = no_smd_ports;
+			no_smd_ports++;
+			break;
 		default:
 			pr_err("%s: Un-supported transport transport: %u\n",
 					__func__, gserial_ports[i].transport);
@@ -932,8 +947,10 @@ static int __init fserial_probe(struct platform_device *pdev)
 		nr_ports++;
 	}
 
-	pr_info("%s: gport: no_tty_ports:%u no_sdio_ports:%u nr_ports:%u\n",
-			__func__, no_tty_ports, no_sdio_ports, nr_ports);
+	pr_info("%s:gport:tty_ports:%u sdio_ports:%u "
+			"smd_ports:%u nr_ports:%u\n",
+			__func__, no_tty_ports, no_sdio_ports,
+			no_smd_ports, nr_ports);
 
 probe_android_register:
 	android_register_function(&modem_function);

@@ -1242,8 +1242,10 @@ int mt9p012_sensor_release(void)
 	gpio_direction_output(mt9p012_ctrl->sensordata->sensor_reset, 0);
 	gpio_free(mt9p012_ctrl->sensordata->sensor_reset);
 
-	gpio_direction_output(mt9p012_ctrl->sensordata->vcm_pwd, 0);
-	gpio_free(mt9p012_ctrl->sensordata->vcm_pwd);
+	if (mt9p012_ctrl->sensordata->vcm_enable) {
+		gpio_direction_output(mt9p012_ctrl->sensordata->vcm_pwd, 0);
+		gpio_free(mt9p012_ctrl->sensordata->vcm_pwd);
+	}
 
 	kfree(mt9p012_ctrl);
 	mt9p012_ctrl = NULL;

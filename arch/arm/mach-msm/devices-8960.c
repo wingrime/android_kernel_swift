@@ -23,18 +23,40 @@
 
 #include <mach/irqs-8960.h>
 #include <mach/board.h>
+#include <mach/msm_iomap.h>
+#include <mach/msm_hsusb.h>
 
 #include "clock.h"
 #include "clock-dummy.h"
 #include "devices.h"
-#include <mach/msm_iomap.h>
-#include <mach/msm_hsusb.h>
 
+/* Address of GSBI blocks */
+#define MSM_GSBI1_PHYS		0x16000000
 #define MSM_GSBI2_PHYS		0x16100000
-#define MSM_UART2DM_PHYS	(MSM_GSBI2_PHYS + 0x40000)
-
+#define MSM_GSBI3_PHYS		0x16200000
+#define MSM_GSBI4_PHYS		0x16300000
 #define MSM_GSBI5_PHYS		0x16400000
+#define MSM_GSBI6_PHYS		0x16500000
+#define MSM_GSBI7_PHYS		0x16600000
+#define MSM_GSBI8_PHYS		0x1A000000
+#define MSM_GSBI9_PHYS		0x1A100000
+#define MSM_GSBI10_PHYS		0x1A200000
+
+#define MSM_UART2DM_PHYS	(MSM_GSBI2_PHYS + 0x40000)
 #define MSM_UART5DM_PHYS	(MSM_GSBI5_PHYS + 0x40000)
+
+/* GSBI QUP devices */
+#define MSM_GSBI1_QUP_PHYS	(MSM_GSBI1_PHYS + 0x80000)
+#define MSM_GSBI2_QUP_PHYS	(MSM_GSBI2_PHYS + 0x80000)
+#define MSM_GSBI3_QUP_PHYS	(MSM_GSBI3_PHYS + 0x80000)
+#define MSM_GSBI4_QUP_PHYS	(MSM_GSBI4_PHYS + 0x80000)
+#define MSM_GSBI5_QUP_PHYS	(MSM_GSBI5_PHYS + 0x80000)
+#define MSM_GSBI6_QUP_PHYS	(MSM_GSBI6_PHYS + 0x80000)
+#define MSM_GSBI7_QUP_PHYS	(MSM_GSBI7_PHYS + 0x80000)
+#define MSM_GSBI8_QUP_PHYS	(MSM_GSBI8_PHYS + 0x80000)
+#define MSM_GSBI9_QUP_PHYS	(MSM_GSBI9_PHYS + 0x80000)
+#define MSM_GSBI10_QUP_PHYS	(MSM_GSBI10_PHYS + 0x80000)
+#define MSM_QUP_SIZE		SZ_4K
 
 static struct resource resources_otg[] = {
 	{
@@ -134,6 +156,37 @@ struct platform_device msm8960_device_uart_gsbi5 = {
 	.id	= 0,
 	.num_resources	= ARRAY_SIZE(resources_uart_gsbi5),
 	.resource	= resources_uart_gsbi5,
+};
+
+#define MSM_WCNSS_PHYS	0x03000000
+#define MSM_WCNSS_SIZE	0x01000000
+
+static struct resource resources_wcnss_wlan[] = {
+	{
+		.start	= RIVA_APPS_WLAN_RX_DATA_AVAIL_IRQ,
+		.end	= RIVA_APPS_WLAN_RX_DATA_AVAIL_IRQ,
+		.name	= "wcnss_wlanrx_irq",
+		.flags	= IORESOURCE_IRQ,
+	},
+	{
+		.start	= RIVA_APPS_WLAN_DATA_XFER_DONE_IRQ,
+		.end	= RIVA_APPS_WLAN_DATA_XFER_DONE_IRQ,
+		.name	= "wcnss_wlantx_irq",
+		.flags	= IORESOURCE_IRQ,
+	},
+	{
+		.start	= MSM_WCNSS_PHYS,
+		.end	= MSM_WCNSS_PHYS + MSM_WCNSS_SIZE - 1,
+		.name	= "wcnss_mmio",
+		.flags	= IORESOURCE_MEM,
+	},
+};
+
+struct platform_device msm_device_wcnss_wlan = {
+	.name		= "wcnss_wlan",
+	.id		= 0,
+	.num_resources	= ARRAY_SIZE(resources_wcnss_wlan),
+	.resource	= resources_wcnss_wlan,
 };
 
 #define MSM_SDC1_BASE         0x12400000
@@ -292,6 +345,34 @@ int __init msm_add_sdcc(unsigned int controller, struct mmc_platform_data *plat)
 	return platform_device_register(pdev);
 }
 
+static struct resource resources_qup_i2c_gsbi4[] = {
+	{
+		.name	= "gsbi_qup_i2c_addr",
+		.start	= MSM_GSBI4_PHYS,
+		.end	= MSM_GSBI4_PHYS + MSM_QUP_SIZE - 1,
+		.flags	= IORESOURCE_MEM,
+	},
+	{
+		.name	= "qup_phys_addr",
+		.start	= MSM_GSBI4_QUP_PHYS,
+		.end	= MSM_GSBI4_QUP_PHYS + 4 - 1,
+		.flags	= IORESOURCE_MEM,
+	},
+	{
+		.name	= "qup_err_intr",
+		.start	= GSBI4_QUP_IRQ,
+		.end	= GSBI4_QUP_IRQ,
+		.flags	= IORESOURCE_IRQ,
+	},
+};
+
+struct platform_device msm8960_device_qup_i2c_gsbi4 = {
+	.name		= "qup_i2c",
+	.id		= 4,
+	.num_resources	= ARRAY_SIZE(resources_qup_i2c_gsbi4),
+	.resource	= resources_qup_i2c_gsbi4,
+};
+
 struct clk_lookup msm_clocks_8960[] = {
 	CLK_DUMMY("ce_clk",		CE2_CLK,		NULL, OFF),
 	CLK_DUMMY("gsbi_uart_clk",	GSBI1_UART_CLK,		NULL, OFF),
@@ -310,7 +391,8 @@ struct clk_lookup msm_clocks_8960[] = {
 	CLK_DUMMY("gsbi_qup_clk",	GSBI1_QUP_CLK,		NULL, OFF),
 	CLK_DUMMY("gsbi_qup_clk",	GSBI2_QUP_CLK,		NULL, OFF),
 	CLK_DUMMY("gsbi_qup_clk",	GSBI3_QUP_CLK,		NULL, OFF),
-	CLK_DUMMY("gsbi_qup_clk",	GSBI4_QUP_CLK,		NULL, OFF),
+	CLK_DUMMY("gsbi_qup_clk",	GSBI4_QUP_CLK,
+							"qup_i2c.4", OFF),
 	CLK_DUMMY("gsbi_qup_clk",	GSBI5_QUP_CLK,		NULL, OFF),
 	CLK_DUMMY("gsbi_qup_clk",	GSBI6_QUP_CLK,		NULL, OFF),
 	CLK_DUMMY("gsbi_qup_clk",	GSBI7_QUP_CLK,		NULL, OFF),
@@ -341,7 +423,8 @@ struct clk_lookup msm_clocks_8960[] = {
 	CLK_DUMMY("gsbi_pclk",		GSBI2_P_CLK,
 						  "msm_serial_hsl.0", OFF),
 	CLK_DUMMY("gsbi_pclk",		GSBI3_P_CLK,		NULL, OFF),
-	CLK_DUMMY("gsbi_pclk",		GSBI4_P_CLK,		NULL, OFF),
+	CLK_DUMMY("gsbi_pclk",		GSBI4_P_CLK,
+							"qup_i2c.4", OFF),
 	CLK_DUMMY("gsbi_pclk",		GSBI5_P_CLK,		NULL, OFF),
 	CLK_DUMMY("uartdm_pclk",	GSBI6_P_CLK,		NULL, OFF),
 	CLK_DUMMY("gsbi_pclk",		GSBI7_P_CLK,		NULL, OFF),
@@ -451,6 +534,14 @@ struct clk_lookup msm_clocks_8960[] = {
 	CLK_DUMMY("iommu_clk",		GFX3D_CLK,	NULL, 0),
 	CLK_DUMMY("iommu_clk",		GFX2D0_CLK,	NULL, 0),
 	CLK_DUMMY("iommu_clk",		GFX2D1_CLK,	NULL, 0),
+
+	CLK_DUMMY("dfab_dsps_clk",	DFAB_DSPS_CLK, NULL, 0),
+	CLK_DUMMY("dfab_usb_hs_clk",	DFAB_USB_HS_CLK, NULL, 0),
+	CLK_DUMMY("dfab_sdc_clk",	DFAB_SDC1_CLK, "msm_sdcc.1", 0),
+	CLK_DUMMY("dfab_sdc_clk",	DFAB_SDC2_CLK, "msm_sdcc.2", 0),
+	CLK_DUMMY("dfab_sdc_clk",	DFAB_SDC3_CLK, "msm_sdcc.3", 0),
+	CLK_DUMMY("dfab_sdc_clk",	DFAB_SDC4_CLK, "msm_sdcc.4", 0),
+	CLK_DUMMY("dfab_sdc_clk",	DFAB_SDC5_CLK, "msm_sdcc.5", 0),
 };
 
 unsigned msm_num_clocks_8960 = ARRAY_SIZE(msm_clocks_8960);

@@ -1493,6 +1493,7 @@ static struct usb_mass_storage_platform_data mass_storage_pdata = {
 	.nluns		= 1,
 	.vendor		= "Qualcomm Incorporated",
 	.product        = "Mass storage",
+	.can_stall	= 1,
 };
 
 static struct platform_device usb_mass_storage_device = {
@@ -7813,7 +7814,7 @@ static int mipi_dsi_panel_power(int on)
 			return rc;
 		}
 
-		rc = regulator_set_voltage(ldo0, 3300000, 3300000);
+		rc = regulator_set_voltage(ldo0, 1200000, 1200000);
 		if (rc)
 			goto out;
 
@@ -7825,12 +7826,12 @@ static int mipi_dsi_panel_power(int on)
 	if (on) {
 		/* set ldo0 to HPM */
 		rc = regulator_set_optimum_mode(ldo0, 100000);
-		if (rc)
+		if (rc < 0)
 			goto out;
 	} else {
 		/* set ldo0 to LPM */
 		rc = regulator_set_optimum_mode(ldo0, 9000);
-		if (rc)
+		if (rc < 0)
 			goto out;
 	}
 

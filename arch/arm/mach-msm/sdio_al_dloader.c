@@ -37,6 +37,7 @@
 #include <linux/kthread.h>
 #include <linux/version.h>
 #include <linux/errno.h>
+#include <linux/syscalls.h>
 
 /* DEFINES AND MACROS */
 #define MAX_NUM_DEVICES		1
@@ -74,6 +75,7 @@
 #define SDIO_DLD_BOOT_TEST_MODE_NAME	"SDIO DLD BOOT TEST MODE"
 #define SDIO_DLD_AMSS_TEST_MODE_NAME	"SDIO DLD AMSS TEST MODE"
 #define TEST_NAME_MAX_SIZE		30
+#define SDIO_DLD_OP_MODE_FILE_PATH	"/data/sdio_al_dbg/op_mode.txt"
 
 #define PUSH_STRING
 #define DLOADER_DBG
@@ -2186,6 +2188,11 @@ int sdio_downloader_setup(struct mmc_card *card,
 	int status = 0;
 	int func_in_array = 0;
 	struct sdio_func *str_func = NULL;
+	int fd;
+	char ch[2] = {0, '\0'};
+	int result = 0;
+	unsigned int base = 10;
+	long res = 0;
 
 	if (num_of_devices == 0 || num_of_devices > MAX_NUM_DEVICES) {
 		pr_err(MODULE_NAME ": %s - invalid number of devices\n",
@@ -2224,6 +2231,69 @@ int sdio_downloader_setup(struct mmc_card *card,
 		pr_err(MODULE_NAME ": %s - param ""sdio_dld.tty_drv"" is "
 				   "NULL.\n", __func__);
 		return -EINVAL;
+	}
+
+	fd = sys_open(SDIO_DLD_OP_MODE_FILE_PATH, O_RDWR, 0644);
+	if (fd < 0) {
+		pr_err(MODULE_NAME ": %s - FLASHLESS BOOT - Fail to Open or "
+		       "locate the file %s\n",
+			__func__, SDIO_DLD_OP_MODE_FILE_PATH);
+		sdio_dld_set_op_mode(SDIO_DLD_NORMAL_MODE);
+	} else {
+		result = sys_read(fd, ch, 1);
+
+		if (result < 1) {
+			pr_info(MODULE_NAME ": %s - FLASHLESS BOOT - "
+				"sys_read() failed. Returned with %d",
+				__func__, result);
+			sdio_dld_set_op_mode(SDIO_DLD_NORMAL_MODE);
+		} else {
+			result = strict_strtol(ch, base, &res);
+			if (result) {
+				pr_info(MODULE_NAME ": %s - FLASHLESS BOOT - "
+					"strict_strtol() failed. Returned "
+					"with %d", __func__, result);
+				sdio_dld_set_op_mode(SDIO_DLD_NORMAL_MODE);
+			} else {
+				switch (res) {
+				case SDIO_DLD_NO_MODE:
+					pr_info(MODULE_NAME ": %s - "
+						"FLASHLESSBOOT '0'\n",
+						__func__);
+					sdio_dld_set_op_mode(
+					    SDIO_DLD_NORMAL_MODE);
+					break;
+				case SDIO_DLD_NORMAL_MODE:
+					pr_info(MODULE_NAME ": %s - "
+						"FLASHLESSBOOT '1'\n",
+						__func__);
+					sdio_dld_set_op_mode(
+					    SDIO_DLD_NORMAL_MODE);
+					break;
+				case SDIO_DLD_BOOT_TEST_MODE:
+					pr_info(MODULE_NAME ": %s - "
+						"FLASHLESSBOOT '2'\n",
+						__func__);
+					sdio_dld_set_op_mode(
+					    SDIO_DLD_BOOT_TEST_MODE);
+					break;
+				case SDIO_DLD_AMSS_TEST_MODE:
+					pr_info(MODULE_NAME ": %s - "
+						"FLASHLESSBOOT '3'\n",
+						__func__);
+					sdio_dld_set_op_mode(
+					    SDIO_DLD_AMSS_TEST_MODE);
+					break;
+				default:
+					pr_info(MODULE_NAME ": %s - "
+						"FLASHLESSBOOT 'default'\n",
+						__func__);
+					sdio_dld_set_op_mode(
+					    SDIO_DLD_NORMAL_MODE);
+					break;
+				}
+			}
+		}
 	}
 
 	/* according to op_mode, a different tty device is created */

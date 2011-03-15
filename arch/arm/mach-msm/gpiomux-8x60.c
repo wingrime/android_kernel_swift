@@ -1663,6 +1663,50 @@ static struct msm_gpiomux_config msm8x60_cam_configs[] __initdata = {
 		},
 	},
 };
+static struct msm_gpiomux_config msm_qt_cam_configs[] __initdata = {
+	{
+		.gpio = 32,
+		.settings = {
+			[GPIOMUX_ACTIVE]    = &cam_active_1_cfg,
+			[GPIOMUX_SUSPENDED] = &cam_suspend_cfg,
+		},
+	},
+	{
+		.gpio = 42,
+		.settings = {
+			[GPIOMUX_ACTIVE]    = &cam_active_2_cfg,
+			[GPIOMUX_SUSPENDED] = &cam_suspend_cfg,
+		},
+	},
+	{
+		.gpio = 47,
+		.settings = {
+			[GPIOMUX_ACTIVE]    = &cam_active_3_cfg,
+			[GPIOMUX_SUSPENDED] = &cam_suspend_cfg,
+		},
+	},
+	{
+		.gpio = 48,
+		.settings = {
+			[GPIOMUX_ACTIVE]    = &cam_active_3_cfg,
+			[GPIOMUX_SUSPENDED] = &cam_suspend_cfg,
+		},
+	},
+	{
+		.gpio = 105,
+		.settings = {
+			[GPIOMUX_ACTIVE]    = &cam_active_2_cfg,
+			[GPIOMUX_SUSPENDED] = &cam_suspend_cfg,
+		},
+	},
+	{
+		.gpio = 106,
+		.settings = {
+			[GPIOMUX_ACTIVE]    = &cam_active_2_cfg,
+			[GPIOMUX_SUSPENDED] = &cam_suspend_cfg,
+		},
+	},
+};
 
 static struct msm_gpiomux_config msm8x60_charm_configs[] __initdata = {
 	/* AP2MDM_WAKEUP */
@@ -1835,7 +1879,7 @@ msm8x60_qt_gpiomux_cfgs[] __initdata = {
 	{msm8x60_hdmi_configs, ARRAY_SIZE(msm8x60_hdmi_configs)},
 	{msm8x60_pmic_configs, ARRAY_SIZE(msm8x60_pmic_configs)},
 	{msm8x60_common_configs, ARRAY_SIZE(msm8x60_common_configs)},
-	{msm8x60_cam_configs, ARRAY_SIZE(msm8x60_cam_configs)},
+	{msm_qt_cam_configs, ARRAY_SIZE(msm_qt_cam_configs)},
 	{msm_qt_usb_configs, ARRAY_SIZE(msm_qt_usb_configs)},
 	{NULL, 0},
 };

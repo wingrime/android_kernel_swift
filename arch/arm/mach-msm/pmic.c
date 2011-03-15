@@ -1,4 +1,4 @@
-/* Copyright (c) 2009, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2009, 2011 Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -120,6 +120,7 @@
 #define PMIC_RPC_VER_1_1	0x00010001
 #define PMIC_RPC_VER_2_1	0x00020001
 #define PMIC_RPC_VER_3_1	0x00030001
+#define PMIC_RPC_VER_5_1	0x00050001
 
 /* error bit flags defined by modem side */
 #define PM_ERR_FLAG__PAR1_OUT_OF_RANGE		(0x0001)
@@ -154,6 +155,14 @@ struct pmic_ctrl {
 
 static struct pmic_ctrl pmic_ctrl = {
 	.inited = -1,
+};
+
+/* Add newer versions at the top of array */
+static const unsigned int rpc_vers[] = {
+	PMIC_RPC_VER_5_1,
+	PMIC_RPC_VER_3_1,
+	PMIC_RPC_VER_2_1,
+	PMIC_RPC_VER_1_1,
 };
 
 static int pmic_rpc_req_reply(struct pmic_buf *tbuf,
@@ -294,28 +303,31 @@ static int pmic_rpc_req_reply(struct pmic_buf *tbuf, struct pmic_buf *rbuf,
 	int	proc)
 {
 	struct pmic_ctrl *pm = &pmic_ctrl;
-	int	ans, len;
+	int	ans, len, i;
 
 
 	if ((pm->endpoint == NULL) || IS_ERR(pm->endpoint)) {
-		pm->endpoint = msm_rpc_connect_compatible(PMIC_RPC_PROG,
-					PMIC_RPC_VER_3_1, 0);
-		if (IS_ERR(pm->endpoint)) {
+		for (i = 0; i < ARRAY_SIZE(rpc_vers); i++) {
 			pm->endpoint = msm_rpc_connect_compatible(PMIC_RPC_PROG,
-						PMIC_RPC_VER_2_1, 0);
+					rpc_vers[i], 0);
+
 			if (IS_ERR(pm->endpoint)) {
-				pm->endpoint = msm_rpc_connect_compatible(
-						PMIC_RPC_PROG,
-						PMIC_RPC_VER_1_1, 0);
+				ans  = PTR_ERR(pm->endpoint);
+				printk(KERN_ERR "%s: init rpc failed! ans = %d"
+						" for 0x%x version, fallback\n",
+						__func__, ans, rpc_vers[i]);
+			} else {
+				printk(KERN_DEBUG "%s: successfully connected"
+					" to 0x%x rpc version\n",
+					 __func__, rpc_vers[i]);
+				break;
 			}
 		}
+	}
 
-		if (IS_ERR(pm->endpoint)) {
-			ans  = PTR_ERR(pm->endpoint);
-			printk(KERN_ERR "%s: init rpc failed! ans = %d\n",
-						__func__, ans);
-			return ans;
-		}
+	if (IS_ERR(pm->endpoint)) {
+		ans  = PTR_ERR(pm->endpoint);
+		return ans;
 	}
 
 	/*

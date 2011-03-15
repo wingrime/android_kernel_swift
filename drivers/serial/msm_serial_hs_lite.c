@@ -723,7 +723,6 @@ static void msm_hsl_release_port(struct uart_port *port)
 							     "gsbi_resource");
 
 		size = gsbi_resource->end - gsbi_resource->start + 1;
-		release_mem_region(gsbi_resource->start, size);
 		iounmap(msm_hsl_port->mapped_gsbi);
 		msm_hsl_port->mapped_gsbi = NULL;
 	}
@@ -767,16 +766,9 @@ static int msm_hsl_request_port(struct uart_port *port)
 		}
 
 		size = gsbi_resource->end - gsbi_resource->start + 1;
-		if (unlikely(!request_mem_region(gsbi_resource->start, size,
-						 "msm_serial_hsl"))) {
-			pr_err("%s: can't get mem region for gsbi\n", __func__);
-			return -EBUSY;
-		}
-
 		msm_hsl_port->mapped_gsbi = ioremap(gsbi_resource->start,
 						    size);
 		if (!msm_hsl_port->mapped_gsbi) {
-			release_mem_region(gsbi_resource->start, size);
 			return -EBUSY;
 		}
 	}

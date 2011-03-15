@@ -390,7 +390,6 @@ static struct clk_freq_tbl clk_tbl_vpe[] = {
 };
 
 static struct clk_freq_tbl clk_tbl_mfc[] = {
-	F_MND8(        0,  0,  0, GND,  1,   0,   0, NONE),
 	F_MND8( 24576000, 24, 17, LPXO, 1,   0,   0, NOMINAL),
 	F_MND8( 30720000, 24, 17, PLL3, 4,   1,   6, NOMINAL),
 	F_MND8( 61440000, 24, 17, PLL3, 4,   1,   3, NOMINAL),
@@ -404,8 +403,8 @@ static struct clk_freq_tbl clk_tbl_mfc[] = {
 
 static struct clk_freq_tbl clk_tbl_spi[] = {
 	F_MND8(       0,  0,  0, GND,  1,   0,     0, NONE),
-	F_MND8( 9963243, 19, 12, PLL3, 4,   7,   129, NOMINAL),
-	F_MND8(26331429, 19, 12, PLL3, 4,  34,   241, NOMINAL),
+	F_MND8( 9963243, 19, 12, PLL3, 4,   2,    37, NOMINAL),
+	F_MND8(26331429, 19, 12, PLL3, 4,   1,     7, NOMINAL),
 	F_END,
 };
 

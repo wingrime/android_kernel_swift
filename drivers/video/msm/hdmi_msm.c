@@ -1493,7 +1493,7 @@ static int hdcp_authentication_part1(void)
 	DEV_DBG("HDCP: Link0-BKSV=%02x%08x\n", link0_bksv_1, link0_bksv_0);
 
 	/* Reading R0' 2 bytes at offset 0x08 */
-	ret = hdmi_msm_ddc_read(0x74, 0x00, buf, 16, 5, "RO'");
+	ret = hdmi_msm_ddc_read(0x74, 0x08, buf, 16, 5, "RO'");
 	if (ret) {
 		DEV_ERR("%s(%d): Read RO's failed", __func__, __LINE__);
 		goto error;
@@ -1765,7 +1765,7 @@ error:
 	mutex_lock(&hdmi_msm_state_mutex);
 	hdmi_msm_state->hdcp_activating = FALSE;
 	mutex_unlock(&hdmi_msm_state_mutex);
-	if (hdmi_msm_state->panel_power_on)
+	if (hdmi_msm_state->panel_power_on || external_common_state->hpd_state)
 		schedule_work(&hdmi_msm_state->hdcp_reauth_work);
 }
 #endif /* CONFIG_FB_MSM_HDMI_MSM_PANEL_HDCP_SUPPORT */

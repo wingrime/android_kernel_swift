@@ -56,19 +56,12 @@ int msm_cpuidle_register_notifier(unsigned int cpu,
 		struct notifier_block *nb);
 int msm_cpuidle_unregister_notifier(unsigned int cpu,
 		struct notifier_block *nb);
-
-int msm_idle_register_cb(void (*pre)(int, unsigned int),
-			void (*post)(int, unsigned int));
 #else
 static inline int msm_cpuidle_register_notifier(unsigned int cpu,
 		struct notifier_block *nb)
 { return -ENODEV; }
 static inline int msm_cpuidle_unregister_notifier(unsigned int cpu,
 		struct notifier_block *nb)
-{ return -ENODEV; }
-
-static inline int msm_idle_register_cb(void (*pre)(int, unsigned int),
-			void (*post)(int, unsigned int))
 { return -ENODEV; }
 #endif
 

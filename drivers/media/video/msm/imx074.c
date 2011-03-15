@@ -290,30 +290,22 @@ static void imx074_get_pict_fps(uint16_t fps, uint16_t *pfps)
 {
 	/* input fps is preview fps in Q8 format */
 	uint16_t preview_frame_length_lines, snapshot_frame_length_lines;
-	uint16_t preview_line_length_pck, snapshot_line_length_pck;
-	uint32_t divider, d1, d2;
+	uint32_t divider, d1;
 	uint32_t pclk_mult;/*Q10 */
-
 	/* Total frame_length_lines and line_length_pck for preview */
 	preview_frame_length_lines = IMX074_QTR_SIZE_HEIGHT +
 		IMX074_VER_QTR_BLK_LINES;
-	preview_line_length_pck = IMX074_QTR_SIZE_WIDTH +
-		IMX074_HRZ_QTR_BLK_PIXELS;
 	/* Total frame_length_lines and line_length_pck for snapshot */
 	snapshot_frame_length_lines = IMX074_FULL_SIZE_HEIGHT +
 		IMX074_VER_FULL_BLK_LINES;
-	snapshot_line_length_pck = IMX074_FULL_SIZE_WIDTH +
-		IMX074_HRZ_FULL_BLK_PIXELS;
-	d1 = preview_frame_length_lines * 0x00000400 /
+	d1 = preview_frame_length_lines * 0x00010000 /
 		snapshot_frame_length_lines;
-	d2 = preview_line_length_pck * 0x00000400 /
-		snapshot_line_length_pck;
 	pclk_mult =
 		(uint32_t) ((imx074_regs.reg_pat[RES_CAPTURE].pll_multiplier *
-		0x00000400) /
+		0x00010000) /
 		(imx074_regs.reg_pat[RES_PREVIEW].pll_multiplier));
-	divider = d1 * d2 * pclk_mult / 0x400;
-	*pfps = (uint16_t) (fps * divider / 0x400 / 0x400);
+	divider = d1 * pclk_mult / 0x00010000;
+	*pfps = (uint16_t) (fps * divider / 0x00010000);
 }
 
 static uint16_t imx074_get_prev_lines_pf(void)
@@ -383,87 +375,82 @@ static int32_t imx074_write_exp_gain(uint16_t gain, uint32_t line)
 	static uint16_t max_legal_gain = 0x00E0;
 	uint8_t gain_msb, gain_lsb;
 	uint8_t intg_time_msb, intg_time_lsb;
-	uint8_t line_length_pck_msb, line_length_pck_lsb;
-	uint16_t line_length_pck, frame_length_lines;
-	uint32_t line_length_ratio = 1 * Q8;
+	uint8_t frame_length_line_msb, frame_length_line_lsb;
+	uint16_t frame_length_lines;
 	int32_t rc = -1;
+
 	CDBG("imx074_write_exp_gain : gain = %d line = %d", gain, line);
-	if (imx074_ctrl->sensormode != SENSOR_SNAPSHOT_MODE) {
-		if (imx074_ctrl->curr_res == QTR_SIZE) {
-			frame_length_lines = IMX074_QTR_SIZE_HEIGHT +
-				IMX074_VER_QTR_BLK_LINES;
-			line_length_pck = IMX074_QTR_SIZE_WIDTH +
-				IMX074_HRZ_QTR_BLK_PIXELS;
-		} else {
-			frame_length_lines = IMX074_FULL_SIZE_HEIGHT +
-				IMX074_VER_FULL_BLK_LINES;
-			line_length_pck = IMX074_FULL_SIZE_WIDTH +
-				IMX074_HRZ_FULL_BLK_PIXELS;
-		}
-		if (line > (frame_length_lines - IMX074_OFFSET))
-			imx074_ctrl->fps = (uint16_t) (30 * Q8 *
-				(frame_length_lines - IMX074_OFFSET) / line);
-		else
-			imx074_ctrl->fps = (uint16_t) (30 * Q8);
-	} else {
+	if (imx074_ctrl->curr_res  == QTR_SIZE)
+		frame_length_lines = IMX074_QTR_SIZE_HEIGHT +
+			IMX074_VER_QTR_BLK_LINES;
+	else
 		frame_length_lines = IMX074_FULL_SIZE_HEIGHT +
 			IMX074_VER_FULL_BLK_LINES;
-		line_length_pck = IMX074_FULL_SIZE_WIDTH +
-			IMX074_HRZ_FULL_BLK_PIXELS;
-	}
-	if (imx074_ctrl->sensormode != SENSOR_SNAPSHOT_MODE) {
-		line = (uint32_t) (line * imx074_ctrl->fps_divider /
-					0x00000400);
-	} else {
-		line = (uint32_t) (line * imx074_ctrl->pict_fps_divider /
-					0x00000400);
-	}
-	/* calculate line_length_ratio */
-	if (line > (frame_length_lines - IMX074_OFFSET)) {
-		line_length_ratio = (line * Q8) / (frame_length_lines -
-							IMX074_OFFSET);
-		line = frame_length_lines - IMX074_OFFSET;
-	} else
-		line_length_ratio = 1 * Q8;
-	/* range: 0 to 224 */
+
+	if (line > (frame_length_lines - IMX074_OFFSET))
+		frame_length_lines = line + IMX074_OFFSET;
+
+	CDBG("imx074 setting line = %d\n", line);
+
+
+	CDBG("imx074 setting frame_length_lines = %d\n",
+					frame_length_lines);
+
 	if (gain > max_legal_gain)
+		/* range: 0 to 224 */
 		gain = max_legal_gain;
+
 	/* update gain registers */
 	gain_msb = (uint8_t) ((gain & 0xFF00) >> 8);
 	gain_lsb = (uint8_t) (gain & 0x00FF);
-	/* linear AFR horizontal stretch */
-	line_length_pck = (uint16_t) (line_length_pck * line_length_ratio / Q8);
-	line_length_pck_msb = (uint8_t) ((line_length_pck & 0xFF00) >> 8);
-	line_length_pck_lsb = (uint8_t) (line_length_pck & 0x00FF);
+
+	frame_length_line_msb = (uint8_t) ((frame_length_lines & 0xFF00) >> 8);
+	frame_length_line_lsb = (uint8_t) (frame_length_lines & 0x00FF);
+
 	/* update line count registers */
 	intg_time_msb = (uint8_t) ((line & 0xFF00) >> 8);
 	intg_time_lsb = (uint8_t) (line & 0x00FF);
+
 	rc = imx074_i2c_write_b_sensor(REG_GROUPED_PARAMETER_HOLD,
 					GROUPED_PARAMETER_HOLD);
 	if (rc < 0)
 		return rc;
+	CDBG("imx074 setting REG_ANALOGUE_GAIN_CODE_GLOBAL_HI = 0x%X\n",
+					gain_msb);
 	rc = imx074_i2c_write_b_sensor(REG_ANALOGUE_GAIN_CODE_GLOBAL_HI,
 					gain_msb);
 	if (rc < 0)
 		return rc;
+	CDBG("imx074 setting REG_ANALOGUE_GAIN_CODE_GLOBAL_LO = 0x%X\n",
+					gain_lsb);
 	rc = imx074_i2c_write_b_sensor(REG_ANALOGUE_GAIN_CODE_GLOBAL_LO,
 					gain_lsb);
 	if (rc < 0)
 		return rc;
-	rc = imx074_i2c_write_b_sensor(REG_LINE_LENGTH_PCK_HI,
-					line_length_pck_msb);
+
+	CDBG("imx074 setting REG_FRAME_LENGTH_LINES_HI = 0x%X\n",
+					frame_length_line_msb);
+	rc = imx074_i2c_write_b_sensor(REG_FRAME_LENGTH_LINES_HI,
+			frame_length_line_msb);
 	if (rc < 0)
 		return rc;
 
-	rc = imx074_i2c_write_b_sensor(REG_LINE_LENGTH_PCK_LO,
-					line_length_pck_lsb);
+	CDBG("imx074 setting REG_FRAME_LENGTH_LINES_LO = 0x%X\n",
+			frame_length_line_lsb);
+	rc = imx074_i2c_write_b_sensor(REG_FRAME_LENGTH_LINES_LO,
+			frame_length_line_lsb);
 	if (rc < 0)
 		return rc;
+
+	CDBG("imx074 setting REG_COARSE_INTEGRATION_TIME_HI = 0x%X\n",
+					intg_time_msb);
 	rc = imx074_i2c_write_b_sensor(REG_COARSE_INTEGRATION_TIME_HI,
 					intg_time_msb);
 	if (rc < 0)
 		return rc;
 
+	CDBG("imx074 setting REG_COARSE_INTEGRATION_TIME_LO = 0x%X\n",
+					intg_time_lsb);
 	rc = imx074_i2c_write_b_sensor(REG_COARSE_INTEGRATION_TIME_LO,
 					intg_time_lsb);
 	if (rc < 0)

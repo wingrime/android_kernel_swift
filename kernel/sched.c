@@ -3640,8 +3640,8 @@ static inline void schedule_debug(struct task_struct *prev)
 	 * schedule() atomically, we ignore that path for now.
 	 * Otherwise, whine if we are scheduling when we should not be.
 	 */
-	if (unlikely(in_atomic_preempt_off() && !prev->exit_state))
-		__schedule_bug(prev);
+	//if (unlikely(in_atomic_preempt_off() && !prev->exit_state))
+	//	__schedule_bug(prev);
 
 	profile_hit(SCHED_PROFILING, __builtin_return_address(0));
 

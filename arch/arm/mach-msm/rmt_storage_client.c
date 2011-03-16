@@ -80,6 +80,7 @@ struct rmt_storage_client_info {
 	/* Wakelock to be acquired when processing requests from modem */
 	struct wake_lock wlock;
 	atomic_t wcount;
+	struct workqueue_struct *workq;
 };
 
 struct rmt_storage_kevent {
@@ -93,6 +94,7 @@ struct rmt_storage_srv {
 	int sync_token;
 	struct platform_driver plat_drv;
 	struct msm_rpc_client *rpc_client;
+	struct delayed_work restart_work;
 };
 
 /* Remote storage client on modem */
@@ -1366,6 +1368,114 @@ static struct attribute_group dev_attr_grp = {
 	.attrs = dev_attrs,
 };
 
+static void handle_restart_teardown(struct msm_rpc_client *client)
+{
+	struct rmt_storage_srv *srv;
+
+	srv = rmt_storage_get_srv(client->prog);
+	if (!srv)
+		return;
+	pr_debug("%s: Modem restart for 0x%08x\n", __func__, srv->prog);
+	cancel_delayed_work_sync(&srv->restart_work);
+}
+
+#define RESTART_WORK_DELAY_MS	1000
+
+static void handle_restart_setup(struct msm_rpc_client *client)
+{
+	struct rmt_storage_srv *srv;
+
+	srv = rmt_storage_get_srv(client->prog);
+	if (!srv)
+		return;
+	pr_debug("%s: Scheduling restart for 0x%08x\n", __func__, srv->prog);
+	queue_delayed_work(rmc->workq, &srv->restart_work,
+			msecs_to_jiffies(RESTART_WORK_DELAY_MS));
+}
+
+static int rmt_storage_reg_callbacks(struct msm_rpc_client *client)
+{
+	int ret;
+
+	ret = rmt_storage_reg_cb(client,
+				 RMT_STORAGE_REGISTER_OPEN_PROC,
+				 RMT_STORAGE_EVNT_OPEN,
+				 rmt_storage_event_open_cb);
+	if (ret)
+		return ret;
+	ret = rmt_storage_reg_cb(client,
+				 RMT_STORAGE_REGISTER_CB_PROC,
+				 RMT_STORAGE_EVNT_CLOSE,
+				 rmt_storage_event_close_cb);
+	if (ret)
+		return ret;
+	ret = rmt_storage_reg_cb(client,
+				 RMT_STORAGE_REGISTER_CB_PROC,
+				 RMT_STORAGE_EVNT_WRITE_BLOCK,
+				 rmt_storage_event_write_block_cb);
+	if (ret)
+		return ret;
+	ret = rmt_storage_reg_cb(client,
+				 RMT_STORAGE_REGISTER_CB_PROC,
+				 RMT_STORAGE_EVNT_GET_DEV_ERROR,
+				 rmt_storage_event_get_err_cb);
+	if (ret)
+		return ret;
+	ret = rmt_storage_reg_cb(client,
+				 RMT_STORAGE_REGISTER_WRITE_IOVEC_PROC,
+				 RMT_STORAGE_EVNT_WRITE_IOVEC,
+				 rmt_storage_event_write_iovec_cb);
+	if (ret)
+		return ret;
+	ret = rmt_storage_reg_cb(client,
+				 RMT_STORAGE_REGISTER_READ_IOVEC_PROC,
+				 RMT_STORAGE_EVNT_READ_IOVEC,
+				 rmt_storage_event_read_iovec_cb);
+	if (ret)
+		return ret;
+	ret = rmt_storage_reg_cb(client,
+				 RMT_STORAGE_REGISTER_CB_PROC,
+				 RMT_STORAGE_EVNT_SEND_USER_DATA,
+				 rmt_storage_event_user_data_cb);
+	if (ret)
+		return ret;
+	ret = rmt_storage_reg_cb(client,
+				 RMT_STORAGE_REGISTER_ALLOC_RMT_BUF_PROC,
+				 RMT_STORAGE_EVNT_ALLOC_RMT_BUF,
+				 rmt_storage_event_alloc_rmt_buf_cb);
+	if (ret)
+		pr_info("%s: Unable (%d) registering aloc_rmt_buf\n",
+			__func__, ret);
+
+	pr_debug("%s: Callbacks (re)registered for 0x%08x\n\n", __func__,
+		 client->prog);
+	return 0;
+}
+
+static void rmt_storage_restart_work(struct work_struct *work)
+{
+	struct rmt_storage_srv *srv;
+	int ret;
+
+	srv = container_of((struct delayed_work *)work,
+			   struct rmt_storage_srv, restart_work);
+	if (!rmt_storage_get_srv(srv->prog)) {
+		pr_err("%s: Invalid server\n", __func__);
+		return;
+	}
+
+	ret = rmt_storage_reg_callbacks(srv->rpc_client);
+	if (!ret)
+		return;
+
+	pr_err("%s: Error (%d) re-registering callbacks for0x%08x\n",
+	       __func__, ret, srv->prog);
+
+	if (!msm_rpc_client_in_reset(srv->rpc_client))
+		queue_delayed_work(rmc->workq, &srv->restart_work,
+				msecs_to_jiffies(RESTART_WORK_DELAY_MS));
+}
+
 static int rmt_storage_probe(struct platform_device *pdev)
 {
 	struct rpcsvr_platform_device *dev;
@@ -1382,6 +1492,8 @@ static int rmt_storage_probe(struct platform_device *pdev)
 	rmt_storage_init_ramfs(srv);
 	rmt_storage_get_ramfs(srv);
 
+	INIT_DELAYED_WORK(&srv->restart_work, rmt_storage_restart_work);
+
 	/* Client Registration */
 	srv->rpc_client = msm_rpc_register_client2("rmt_storage",
 						   dev->prog, dev->vers, 1,
@@ -1393,75 +1505,19 @@ static int rmt_storage_probe(struct platform_device *pdev)
 		return ret;
 	}
 
+	ret = msm_rpc_register_reset_callbacks(srv->rpc_client,
+		handle_restart_teardown,
+		handle_restart_setup);
+	if (ret)
+		goto unregister_client;
+
 	pr_info("%s: Remote storage RPC client (0x%x)initialized\n",
 		__func__, dev->prog);
 
-	/* Register a callback for each event */
-	ret = rmt_storage_reg_cb(srv->rpc_client,
-				 RMT_STORAGE_REGISTER_OPEN_PROC,
-				 RMT_STORAGE_EVNT_OPEN,
-				 rmt_storage_event_open_cb);
-
+	/* register server callbacks */
+	ret = rmt_storage_reg_callbacks(srv->rpc_client);
 	if (ret)
 		goto unregister_client;
-
-	ret = rmt_storage_reg_cb(srv->rpc_client,
-				 RMT_STORAGE_REGISTER_CB_PROC,
-				 RMT_STORAGE_EVNT_CLOSE,
-				 rmt_storage_event_close_cb);
-
-	if (ret)
-		goto unregister_client;
-
-	ret = rmt_storage_reg_cb(srv->rpc_client,
-				 RMT_STORAGE_REGISTER_CB_PROC,
-				 RMT_STORAGE_EVNT_WRITE_BLOCK,
-				 rmt_storage_event_write_block_cb);
-
-	if (ret)
-		goto unregister_client;
-
-	ret = rmt_storage_reg_cb(srv->rpc_client,
-				 RMT_STORAGE_REGISTER_CB_PROC,
-				 RMT_STORAGE_EVNT_GET_DEV_ERROR,
-				 rmt_storage_event_get_err_cb);
-
-	if (ret)
-		goto unregister_client;
-
-	ret = rmt_storage_reg_cb(srv->rpc_client,
-				 RMT_STORAGE_REGISTER_WRITE_IOVEC_PROC,
-				 RMT_STORAGE_EVNT_WRITE_IOVEC,
-				 rmt_storage_event_write_iovec_cb);
-
-	if (ret)
-		goto unregister_client;
-
-	ret = rmt_storage_reg_cb(srv->rpc_client,
-				 RMT_STORAGE_REGISTER_READ_IOVEC_PROC,
-				 RMT_STORAGE_EVNT_READ_IOVEC,
-				 rmt_storage_event_read_iovec_cb);
-
-	if (ret)
-		pr_err("%s: unable to register read iovec callback %d\n",
-			__func__, ret);
-
-	ret = rmt_storage_reg_cb(srv->rpc_client,
-				 RMT_STORAGE_REGISTER_CB_PROC,
-				 RMT_STORAGE_EVNT_SEND_USER_DATA,
-				 rmt_storage_event_user_data_cb);
-
-	if (ret)
-		goto unregister_client;
-
-	ret = rmt_storage_reg_cb(srv->rpc_client,
-				 RMT_STORAGE_REGISTER_ALLOC_RMT_BUF_PROC,
-				 RMT_STORAGE_EVNT_ALLOC_RMT_BUF,
-				 rmt_storage_event_alloc_rmt_buf_cb);
-
-	if (ret)
-		pr_info("%s: unable to register alloc rmt buf callback %d\n",
-			__func__, ret);
 
 	/* For targets that poll SMEM, set status to ready */
 	rmt_storage_set_client_status(srv, 1);
@@ -1590,6 +1646,10 @@ static int __init rmt_storage_init(void)
 				MISC_DYNAMIC_MINOR);
 		goto unreg_mdm_rpc;
 	}
+
+	rmc->workq = create_singlethread_workqueue("rmt_storage");
+	if (!rmc->workq)
+		return -ENOMEM;
 
 #ifdef CONFIG_MSM_RMT_STORAGE_CLIENT_STATS
 	stats_dentry = debugfs_create_file("rmt_storage_stats", 0444, 0,

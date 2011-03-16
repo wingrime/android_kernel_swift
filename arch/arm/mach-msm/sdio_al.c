@@ -1258,7 +1258,7 @@ static int sdio_ch_write(struct sdio_channel *ch, const u8 *buf, u32 len)
 	u32 fn = ch->func->num;
 
 	if (len == 0) {
-		pr_err(MODULE_NAME ":channel %s tryint to write 0 bytes\n",
+		pr_err(MODULE_NAME ":channel %s trying to write 0 bytes\n",
 			ch->name);
 		return -EINVAL;
 	}
@@ -1267,12 +1267,17 @@ static int sdio_ch_write(struct sdio_channel *ch, const u8 *buf, u32 len)
 
 	if (remain_bytes) {
 		/* CMD53 */
-		if (blocks)
+		if (blocks) {
 			ret = sdio_memcpy_toio(ch->func, PIPE_TX_FIFO_ADDR,
 					       (void *) buf, blocks*blksz);
-
-		if (ret != 0)
-			return ret;
+			if (ret != 0) {
+				pr_err(MODULE_NAME ":%s: sdio_memcpy_toio "
+						   "failed for channel %s\n",
+							__func__, ch->name);
+				ch->sdio_al_dev->is_err = true;
+				return ret;
+			}
+		}
 
 		buf += (blocks*blksz);
 
@@ -1281,6 +1286,14 @@ static int sdio_ch_write(struct sdio_channel *ch, const u8 *buf, u32 len)
 	} else {
 		ret = sdio_write_cmd54(card, fn, PIPE_TX_FIFO_ADDR,
 				buf, blocks, blksz);
+	}
+
+	if (ret != 0) {
+		pr_err(MODULE_NAME ":%s: sdio_write_cmd54 "
+				   "failed for channel %s\n",
+					__func__, ch->name);
+		ch->sdio_al_dev->is_err = true;
+		return ret;
 	}
 
 	return ret;
@@ -2427,8 +2440,14 @@ int sdio_read(struct sdio_channel *ch, void *data, int len)
 
 	sdio_claim_host(sdio_al_dev->card->sdio_func[0]);
 
+	if (len == 0) {
+		pr_err(MODULE_NAME ":channel %s trying to read 0 bytes\n",
+		       ch->name);
+		return -EINVAL;
+	}
+
 	if ((ch->is_packet_mode) && (len != ch->read_avail)) {
-		pr_info(MODULE_NAME ":sdio_read ch %s len != read_avail\n",
+		pr_err(MODULE_NAME ":sdio_read ch %s len != read_avail\n",
 				 ch->name);
 		return -EINVAL;
 	}
@@ -2442,8 +2461,13 @@ int sdio_read(struct sdio_channel *ch, void *data, int len)
 
 	ret = sdio_memcpy_fromio(ch->func, data, PIPE_RX_FIFO_ADDR, len);
 
-	if (ret)
-		pr_err(MODULE_NAME ":sdio_read err=%d\n", -ret);
+	if (ret) {
+		pr_err(MODULE_NAME ":sdio_read err=%d, len=%d, read_avail=%d\n",
+		       -ret, len, ch->read_avail);
+		sdio_al_dev->is_err = true;
+		sdio_release_host(sdio_al_dev->card->sdio_func[0]);
+		return ret;
+	}
 
 	/* Remove handled packet from the list regardless if ret is ok */
 	if (ch->is_packet_mode)
@@ -2519,21 +2543,22 @@ int sdio_write(struct sdio_channel *ch, const void *data, int len)
 	}
 
 	ret = sdio_ch_write(ch, data, len);
+	if (ret) {
+		pr_err(MODULE_NAME ":sdio_write on channel %s err=%d\n",
+			ch->name, -ret);
+		sdio_release_host(sdio_al_dev->card->sdio_func[0]);
+		return ret;
+	}
 
 	ch->total_tx_bytes += len;
 	DATA_DEBUG(MODULE_NAME ":end ch %s write %d avail %d total %d.\n",
 		ch->name, len, ch->write_avail, ch->total_tx_bytes);
 
-	if (ret) {
-		pr_err(MODULE_NAME ":sdio_write on channel %s err=%d\n",
-			ch->name, -ret);
-	} else {
-		/* Round up to whole buffer size */
-		len = ROUND_UP(len, ch->peer_tx_buf_size);
-		/* Protect from wraparound */
-		len = min(len, (int) ch->write_avail);
-		ch->write_avail -= len;
-	}
+	/* Round up to whole buffer size */
+	len = ROUND_UP(len, ch->peer_tx_buf_size);
+	/* Protect from wraparound */
+	len = min(len, (int) ch->write_avail);
+	ch->write_avail -= len;
 
 	if (ch->write_avail < ch->min_write_avail)
 		ask_reading_mailbox(sdio_al_dev);

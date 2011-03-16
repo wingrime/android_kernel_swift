@@ -1046,7 +1046,7 @@ done:
 void kgsl_destroy_mem_entry(struct kgsl_mem_entry *entry)
 {
 	kgsl_mmu_unmap(entry->memdesc.pagetable,
-			entry->memdesc.gpuaddr & KGSL_PAGEMASK,
+			entry->memdesc.gpuaddr & PAGE_MASK,
 			entry->memdesc.size);
 	if (KGSL_MEMFLAGS_VMALLOC_MEM & entry->memdesc.priv)
 		vfree((void *)entry->memdesc.physaddr);
@@ -1404,7 +1404,7 @@ static long kgsl_ioctl_map_user_mem(struct kgsl_device_private *dev_priv,
 	/* Any MMU mapped memory must have a length in multiple of PAGESIZE */
 	entry->memdesc.size = ALIGN(param->len, PAGE_SIZE);
 	/* ensure that MMU mappings are at page boundary */
-	entry->memdesc.physaddr = start + (param->offset & KGSL_PAGEMASK);
+	entry->memdesc.physaddr = start + (param->offset & PAGE_MASK);
 	entry->memdesc.hostptr = __va(entry->memdesc.physaddr);
 	if (param->memtype != KGSL_USER_MEM_TYPE_PMEM) {
 		result = kgsl_mmu_map(private->pagetable,
@@ -1426,7 +1426,7 @@ static long kgsl_ioctl_map_user_mem(struct kgsl_device_private *dev_priv,
 	/* If the offset is not at 4K boundary then add the correct offset
 	 * value to gpuaddr */
 	total_offset = entry->memdesc.gpuaddr +
-		(param->offset & ~KGSL_PAGEMASK);
+		(param->offset & ~PAGE_MASK);
 	if (total_offset > (uint64_t)UINT_MAX) {
 		result = -EINVAL;
 		goto error_unmap_entry;
@@ -1448,7 +1448,7 @@ static long kgsl_ioctl_map_user_mem(struct kgsl_device_private *dev_priv,
 
 error_unmap_entry:
 	kgsl_mmu_unmap(entry->memdesc.pagetable,
-			entry->memdesc.gpuaddr & KGSL_PAGEMASK,
+			entry->memdesc.gpuaddr & PAGE_MASK,
 			entry->memdesc.size);
 error_free_entry:
 	kfree(entry);
@@ -1837,7 +1837,7 @@ kgsl_ptdata_init(void)
 
 	kgsl_driver.ptsize = KGSL_PAGETABLE_ENTRIES(core->pt_va_size) *
 		KGSL_PAGETABLE_ENTRY_SIZE;
-	kgsl_driver.ptsize = ALIGN(kgsl_driver.ptsize, KGSL_PAGESIZE);
+	kgsl_driver.ptsize = ALIGN(kgsl_driver.ptsize, PAGE_SIZE);
 
 	kgsl_driver.pt_va_size = core->pt_va_size;
 	kgsl_driver.pt_va_base = core->pt_va_base;

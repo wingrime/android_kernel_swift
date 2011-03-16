@@ -656,9 +656,6 @@ kgsl_ringbuffer_addcmds(struct kgsl_ringbuffer *rb,
 
 	kgsl_ringbuffer_submit(rb);
 
-	GSL_RB_STATS(rb->stats.words_total += sizedwords);
-	GSL_RB_STATS(rb->stats.issues++);
-
 	/* return timestamp of issued coREG_ands */
 	return timestamp;
 }

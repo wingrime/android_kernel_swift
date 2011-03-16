@@ -438,25 +438,25 @@ static void process_cb_request(void *buffer)
 			rtc_cb->cb_info_data.tod_update.stamp,
 			rtc_cb->cb_info_data.tod_update.freq);
 
-		getnstimeofday(&ts);
-		if (atomic_read(&suspend_state.state)) {
-			int64_t now, sleep;
-			now = msm_timer_get_sclk_time(NULL);
-
-			if (now && suspend_state.tick_at_suspend) {
-				sleep = now -
-					suspend_state.tick_at_suspend;
-				timespec_add_ns(&ts, sleep);
-			} else
-				pr_err("%s: Invalid ticks from SCLK"
-					"now=%lld tick_at_suspend=%lld",
-					__func__, now,
-					suspend_state.tick_at_suspend);
-		}
+		//getnstimeofday(&ts);
+		//if (atomic_read(&suspend_state.state)) {
+		//	int64_t now, sleep;
+		//	now = msm_timer_get_sclk_time(NULL);
+//
+//			if (now && suspend_state.tick_at_suspend) {
+//				sleep = now -
+//					suspend_state.tick_at_suspend;
+//				timespec_add_ns(&ts, sleep);
+//			} else
+//				pr_err("%s: Invalid ticks from SCLK"
+//					"now=%lld tick_at_suspend=%lld",
+//					__func__, now,
+//					suspend_state.tick_at_suspend);
+//		}
 		rtc_hctosys();
-		getnstimeofday(&tv);
+//		getnstimeofday(&tv);
 		/* Update the alarm information with the new time info. */
-		alarm_update_timedelta(ts, tv);
+//		alarm_update_timedelta(ts, tv);
 
 	} else
 		pr_err("%s: Unknown event EVENT=%x\n",

@@ -115,8 +115,7 @@ struct kgsl_functable {
 	int (*device_drawctxt_destroy) (struct kgsl_device *device,
 					struct kgsl_context *context);
 	long (*device_ioctl) (struct kgsl_device_private *dev_priv,
-					unsigned int cmd,
-					unsigned long arg);
+					unsigned int cmd, void *data);
 	int (*device_setup_pt)(struct kgsl_device *device,
 			       struct kgsl_pagetable *pagetable);
 
@@ -135,6 +134,8 @@ struct kgsl_memregion {
 struct kgsl_device {
 	struct device *dev;
 	const char *name;
+	unsigned int ver_major;
+	unsigned int ver_minor;
 	uint32_t       flags;
 	enum kgsl_deviceid    id;
 	unsigned int      chip_id;

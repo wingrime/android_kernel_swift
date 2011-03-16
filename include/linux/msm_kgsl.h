@@ -29,6 +29,9 @@
 #ifndef _MSM_KGSL_H
 #define _MSM_KGSL_H
 
+#define KGSL_VERSION_MAJOR        3
+#define KGSL_VERSION_MINOR        2
+
 /*context flags */
 #define KGSL_CONTEXT_SAVE_GMEM	1
 #define KGSL_CONTEXT_NO_GMEM_ALLOC	2
@@ -118,6 +121,7 @@ enum kgsl_property_type {
 	KGSL_PROP_SHMEM_APERTURES = 0x00000005,
 	KGSL_PROP_MMU_ENABLE 	  = 0x00000006,
 	KGSL_PROP_INTERRUPT_WAITS = 0x00000007,
+	KGSL_PROP_VERSION         = 0x00000008,
 };
 
 struct kgsl_shadowprop {
@@ -129,6 +133,13 @@ struct kgsl_shadowprop {
 struct kgsl_pwrlevel {
 	unsigned int gpu_freq;
 	unsigned int bus_freq;
+};
+
+struct kgsl_version {
+	unsigned int drv_major;
+	unsigned int drv_minor;
+	unsigned int dev_major;
+	unsigned int dev_minor;
 };
 
 #ifdef __KERNEL__
@@ -273,6 +284,15 @@ struct kgsl_cmdstream_freememontimestamp {
 };
 
 #define IOCTL_KGSL_CMDSTREAM_FREEMEMONTIMESTAMP \
+	_IOW(KGSL_IOC_TYPE, 0x12, struct kgsl_cmdstream_freememontimestamp)
+
+/* Previous versions of this header had incorrectly defined
+   IOCTL_KGSL_CMDSTREAM_FREEMEMONTIMESTAMP as a read-only ioctl instead
+   of a write only ioctl.  To ensure binary compatability, the following
+   #define will be used to intercept the incorrect ioctl
+*/
+
+#define IOCTL_KGSL_CMDSTREAM_FREEMEMONTIMESTAMP_OLD \
 	_IOR(KGSL_IOC_TYPE, 0x12, struct kgsl_cmdstream_freememontimestamp)
 
 /* create a draw context, which is used to preserve GPU state.

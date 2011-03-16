@@ -39,6 +39,9 @@
 
 #include "g12_reg.h"
 
+#define DRIVER_VERSION_MAJOR   3
+#define DRIVER_VERSION_MINOR   1
+
 #define GSL_VGC_INT_MASK \
 	 (REG_VGC_IRQSTATUS__MH_MASK | \
 	  REG_VGC_IRQSTATUS__G2D_MASK | \
@@ -89,6 +92,8 @@ static struct kgsl_g12_device device_2d0 = {
 	.dev = {
 		.name = "kgsl-2d0",
 		.id = KGSL_DEVICE_2D0,
+		.ver_major = DRIVER_VERSION_MAJOR,
+		.ver_minor = DRIVER_VERSION_MINOR,
 		.mmu = {
 			.config = KGSL_2D_MMU_CONFIG,
 			/* turn off memory protection unit by setting
@@ -124,6 +129,8 @@ static struct kgsl_g12_device device_2d1 = {
 	.dev = {
 		.name = "kgsl-2d1",
 		.id = KGSL_DEVICE_2D1,
+		.ver_major = DRIVER_VERSION_MAJOR,
+		.ver_minor = DRIVER_VERSION_MINOR,
 		.mmu = {
 			.config = KGSL_2D_MMU_CONFIG,
 			/* turn off memory protection unit by setting
@@ -838,42 +845,24 @@ static int kgsl_g12_waittimestamp(struct kgsl_device *device,
 }
 
 static long kgsl_g12_ioctl_cmdwindow_write(struct kgsl_device_private *dev_priv,
-				     void __user *arg)
+					   void *data)
 {
-	int result = 0;
-	struct kgsl_cmdwindow_write param;
+	struct kgsl_cmdwindow_write *param = data;
 
-	if (copy_from_user(&param, arg, sizeof(param))) {
-		result = -EFAULT;
-		goto done;
-	}
-
-	result = kgsl_g12_cmdwindow_write(dev_priv->device,
-					     param.target,
-					     param.addr,
-					     param.data);
-
-	if (result != 0)
-		goto done;
-
-	if (copy_to_user(arg, &param, sizeof(param))) {
-		result = -EFAULT;
-		goto done;
-	}
-done:
-	return result;
+	return kgsl_g12_cmdwindow_write(dev_priv->device,
+					param->target,
+					param->addr,
+					param->data);
 }
 
 static long kgsl_g12_ioctl(struct kgsl_device_private *dev_priv,
-			unsigned int cmd,
-			unsigned long arg)
+			   unsigned int cmd, void *data)
 {
 	int result = 0;
 
 	switch (cmd) {
 	case IOCTL_KGSL_CMDWINDOW_WRITE:
-		result = kgsl_g12_ioctl_cmdwindow_write(dev_priv,
-							(void __user *)arg);
+		result = kgsl_g12_ioctl_cmdwindow_write(dev_priv, data);
 		break;
 	default:
 		KGSL_DRV_INFO(dev_priv->device,

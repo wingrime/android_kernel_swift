@@ -137,14 +137,6 @@ struct kgsl_mmu {
 	struct kgsl_pagetable  *hwpagetable;
 };
 
-
-static inline int
-kgsl_mmu_isenabled(struct kgsl_mmu *mmu)
-{
-	return ((mmu)->flags & KGSL_FLAGS_STARTED) ? 1 : 0;
-}
-
-
 int kgsl_mmu_init(struct kgsl_device *device);
 
 int kgsl_mmu_start(struct kgsl_device *device);
@@ -173,7 +165,6 @@ static inline unsigned int kgsl_pt_get_flags(struct kgsl_pagetable *pt,
 	return result;
 }
 
-
 #ifdef CONFIG_MSM_KGSL_MMU
 int kgsl_mmu_map(struct kgsl_pagetable *pagetable,
 		 unsigned int address,
@@ -186,6 +177,13 @@ int kgsl_mmu_unmap(struct kgsl_pagetable *pagetable,
 					unsigned int gpuaddr, int range);
 
 unsigned int kgsl_virtaddr_to_physaddr(unsigned int virtaddr);
+
+static inline int
+kgsl_mmu_isenabled(struct kgsl_mmu *mmu)
+{
+	return ((mmu)->flags & KGSL_FLAGS_STARTED) ? 1 : 0;
+}
+
 #else
 static inline int kgsl_mmu_map(struct kgsl_pagetable *pagetable,
 		 unsigned int address,
@@ -201,6 +199,8 @@ static inline int kgsl_mmu_map(struct kgsl_pagetable *pagetable,
 static inline int kgsl_mmu_unmap(struct kgsl_pagetable *pagetable,
 					unsigned int gpuaddr, int range)
 { return 0; }
+
+static inline int kgsl_mmu_isenabled(struct kgsl_mmu *mmu) { return 0; }
 
 #endif
 

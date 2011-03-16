@@ -235,6 +235,7 @@ int mdp_lcdc_on(struct platform_device *pdev)
 #ifdef CONFIG_MSM_BUS_SCALING
 	mdp_bus_scale_update_request(2);
 #endif
+	mdp_histogram_ctrl(TRUE);
 
 	ret = panel_next_on(pdev);
 	if (ret == 0) {
@@ -259,6 +260,7 @@ int mdp_lcdc_off(struct platform_device *pdev)
 	mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_OFF, FALSE);
 	mdp_pipe_ctrl(MDP_OVERLAY0_BLOCK, MDP_BLOCK_POWER_OFF, FALSE);
 
+	mdp_histogram_ctrl(FALSE);
 	ret = panel_next_off(pdev);
 
 	/* delay to make sure the last frame finishes */

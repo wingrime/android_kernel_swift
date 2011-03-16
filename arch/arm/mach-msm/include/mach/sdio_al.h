@@ -150,16 +150,6 @@ int sdio_set_write_threshold(struct sdio_channel *ch, int threshold);
 int sdio_set_read_threshold(struct sdio_channel *ch, int threshold);
 
 /**
- *  Set the polling delay.
- *
- * @ch: channel handle.
- * @poll_delay_msec: time in milliseconds.
- *
- * @return new poll time.
- */
-int sdio_set_poll_time(struct sdio_channel *ch, int poll_delay_msec);
-
-/**
  * sdio_downloader_setup
  * initializes the TTY driver
  *

@@ -2644,44 +2644,6 @@ int sdio_set_read_threshold(struct sdio_channel *ch, int threshold)
 }
 EXPORT_SYMBOL(sdio_set_read_threshold);
 
-
-/**
- *  Set the polling delay.
- *  Only values between 1 ms and 1 sec are permitted.
- *
- */
-int sdio_set_poll_time(struct sdio_channel *ch, int poll_delay_msec)
-{
-	int ret;
-	struct sdio_al_device *sdio_al_dev = ch->sdio_al_dev;
-
-	BUG_ON(sdio_al_dev == NULL);
-
-	BUG_ON(ch->signature != SDIO_AL_SIGNATURE);
-	if (sdio_al_dev->is_err) {
-		SDIO_AL_ERR(__func__);
-		return -ENODEV;
-	}
-
-	if (poll_delay_msec <= 0 || poll_delay_msec > INACTIVITY_TIME_MSEC)
-		return -EPERM;
-
-	sdio_claim_host(sdio_al_dev->card->sdio_func[0]);
-	ret = sdio_al_wake_up(sdio_al_dev, 1);
-	sdio_release_host(sdio_al_dev->card->sdio_func[0]);
-	if (ret)
-		return ret;
-
-	ch->poll_delay_msec = poll_delay_msec;
-
-	/* The new delay will be updated at the next time
-	   that the timer expires */
-	sdio_al_dev->poll_delay_msec = get_min_poll_time_msec(sdio_al_dev);
-
-	return sdio_al_dev->poll_delay_msec;
-}
-EXPORT_SYMBOL(sdio_set_poll_time);
-
 static int __devinit msm_sdio_al_probe(struct platform_device *pdev)
 {
 	if (!sdio_al) {

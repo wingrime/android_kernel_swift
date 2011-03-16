@@ -29,6 +29,73 @@
 #include "clock-dummy.h"
 #include "clock-voter.h"
 #include "devices.h"
+#include "devices-msm7x2xa.h"
+
+/* Address of GSBI blocks */
+#define MSM_GSBI0_PHYS		0xA1200000
+#define MSM_GSBI1_PHYS		0xA1300000
+
+/* GSBI QUPe devices */
+#define MSM_GSBI0_QUP_PHYS	(MSM_GSBI0_PHYS + 0x80000)
+#define MSM_GSBI1_QUP_PHYS	(MSM_GSBI1_PHYS + 0x80000)
+
+static struct resource gsbi0_qup_i2c_resources[] = {
+	{
+		.name	= "qup_phys_addr",
+		.start	= MSM_GSBI0_QUP_PHYS,
+		.end	= MSM_GSBI0_QUP_PHYS + SZ_4K - 1,
+		.flags	= IORESOURCE_MEM,
+	},
+	{
+		.name	= "gsbi_qup_i2c_addr",
+		.start	= MSM_GSBI0_PHYS,
+		.end	= MSM_GSBI0_PHYS + SZ_4K - 1,
+		.flags	= IORESOURCE_MEM,
+	},
+	{
+		.name	= "qup_err_intr",
+		.start	= INT_PWB_I2C,
+		.end	= INT_PWB_I2C,
+		.flags	= IORESOURCE_IRQ,
+	},
+};
+
+/* Use GSBI0 QUP for /dev/i2c-0 */
+struct platform_device msm_gsbi0_qup_i2c_device = {
+	.name		= "qup_i2c",
+	.id		= MSM_GSBI0_QUP_I2C_BUS_ID,
+	.num_resources	= ARRAY_SIZE(gsbi0_qup_i2c_resources),
+	.resource	= gsbi0_qup_i2c_resources,
+};
+
+static struct resource gsbi1_qup_i2c_resources[] = {
+	{
+		.name	= "qup_phys_addr",
+		.start	= MSM_GSBI1_QUP_PHYS,
+		.end	= MSM_GSBI1_QUP_PHYS + SZ_4K - 1,
+		.flags	= IORESOURCE_MEM,
+	},
+	{
+		.name	= "gsbi_qup_i2c_addr",
+		.start	= MSM_GSBI1_PHYS,
+		.end	= MSM_GSBI1_PHYS + SZ_4K - 1,
+		.flags	= IORESOURCE_MEM,
+	},
+	{
+		.name	= "qup_err_intr",
+		.start	= INT_ARM11_DMA,
+		.end	= INT_ARM11_DMA,
+		.flags	= IORESOURCE_IRQ,
+	},
+};
+
+/* Use GSBI1 QUP for /dev/i2c-1 */
+struct platform_device msm_gsbi1_qup_i2c_device = {
+	.name		= "qup_i2c",
+	.id		= MSM_GSBI1_QUP_I2C_BUS_ID,
+	.num_resources	= ARRAY_SIZE(gsbi1_qup_i2c_resources),
+	.resource	= gsbi1_qup_i2c_resources,
+};
 
 static struct resource msm_dmov_resource[] = {
 	{
@@ -315,10 +382,10 @@ struct clk_lookup msm_clocks_7x27a[] = {
 	CLK_DUMMY("vdc_clk",	VDC_CLK,	NULL, OFF | CLK_MIN),
 	CLK_DUMMY("vfe_clk",	VFE_CLK,	NULL, OFF),
 	CLK_DUMMY("vfe_mdc_clk",	VFE_MDC_CLK,	NULL, OFF),
-	CLK_DUMMY("gsbi_qup_clk", GSBI1_QUP_CLK,		NULL, OFF),
-	CLK_DUMMY("gsbi_qup_clk", GSBI2_QUP_CLK,		NULL, OFF),
-	CLK_DUMMY("gsbi_qup_pclk", GSBI1_QUP_P_CLK,	NULL, OFF),
-	CLK_DUMMY("gsbi_qup_pclk", GSBI2_QUP_P_CLK,	NULL, OFF),
+	CLK_DUMMY("gsbi_qup_clk", GSBI1_QUP_CLK,	"qup_i2c.0", OFF),
+	CLK_DUMMY("gsbi_qup_clk", GSBI2_QUP_CLK,	"qup_i2c.1", OFF),
+	CLK_DUMMY("gsbi_qup_pclk", GSBI1_QUP_P_CLK,	"qup_i2c.0", OFF),
+	CLK_DUMMY("gsbi_qup_pclk", GSBI2_QUP_P_CLK,	"qup_i2c.1", OFF),
 	CLK_DUMMY("dsi_clk",	DSI_CLK,		NULL, OFF),
 	CLK_DUMMY("dsi_esc_clk",	DSI_ESC_CLK,		NULL, OFF),
 	CLK_DUMMY("dsi_pixel_clk", DSI_PIXEL_CLK,	NULL, OFF),

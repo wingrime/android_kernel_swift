@@ -27,6 +27,7 @@ int smd_open(const char *name, smd_channel_t **ch, void *priv,
 #define SMD_EVENT_DATA 1
 #define SMD_EVENT_OPEN 2
 #define SMD_EVENT_CLOSE 3
+#define SMD_EVENT_STATUS 4
 
 int smd_close(smd_channel_t *ch);
 

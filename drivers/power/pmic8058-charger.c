@@ -28,7 +28,7 @@
 #include <linux/msm-charger.h>
 #include <linux/debugfs.h>
 #include <linux/slab.h>
-#include <linux/m_adc.h>
+#include <linux/msm_adc.h>
 
 #include <mach/msm_xo.h>
 #include <mach/msm_hsusb.h>

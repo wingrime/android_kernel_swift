@@ -17,7 +17,7 @@
 
 #include <linux/kernel.h>
 
-#include <linux/m_adc.h>
+#include <linux/msm_adc.h>
 
 #define KELVINMIL_DEGMIL	273160
 

@@ -1,4 +1,4 @@
-/* Copyright (c) 2010, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2010-2011, Code Aurora Forum. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -30,7 +30,7 @@
 #ifndef _M_ADC_PROC_H
 #define _M_ADC_PROC_H
 
-#include <linux/m_adc.h>
+#include <linux/msm_adc.h>
 int32_t tdkntcgtherm(int32_t adc_code, const struct adc_properties *,
 		const struct chan_properties *, struct adc_chan_result *);
 int32_t scale_default(int32_t adc_code, const struct adc_properties *,

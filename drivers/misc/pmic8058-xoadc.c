@@ -21,7 +21,7 @@
 #include <linux/module.h>
 #include <linux/platform_device.h>
 #include <linux/err.h>
-#include <linux/m_adc.h>
+#include <linux/msm_adc.h>
 #include <linux/pmic8058-xoadc.h>
 #include <linux/mfd/pmic8058.h>
 #include <linux/interrupt.h>

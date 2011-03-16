@@ -36,7 +36,7 @@
 #include <linux/pmic8058-pwm.h>
 #include <linux/leds-pmic8058.h>
 #include <linux/pmic8058-xoadc.h>
-#include <linux/m_adc.h>
+#include <linux/msm_adc.h>
 #include <linux/m_adcproc.h>
 #include <linux/mfd/marimba.h>
 #include <linux/msm-charger.h>

@@ -27,7 +27,7 @@
 #include <linux/msm-charger.h>
 #include <linux/slab.h>
 #include <linux/i2c/isl9519.h>
-#include <linux/m_adc.h>
+#include <linux/msm_adc.h>
 
 #define CHG_CURRENT_REG		0x14
 #define MAX_SYS_VOLTAGE_REG	0x15

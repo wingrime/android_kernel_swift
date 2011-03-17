@@ -712,7 +712,8 @@ kgsl_yamato_init(struct platform_device *pdev)
 	}
 
 	status = kgsl_sharedmem_alloc_coherent(&device->memstore,
-					       sizeof(device->memstore));
+					       sizeof(struct kgsl_devmemstore));
+
 	if (status != 0)  {
 		status = -ENODEV;
 		goto error_close_cmdstream;

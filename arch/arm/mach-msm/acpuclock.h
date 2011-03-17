@@ -26,6 +26,7 @@ enum setrate_reason {
 	SETRATE_CPUFREQ = 0,
 	SETRATE_SWFI,
 	SETRATE_PC,
+	SETRATE_HOTPLUG,
 	SETRATE_INIT,
 };
 
@@ -34,6 +35,7 @@ unsigned long acpuclk_get_rate(int cpu);
 uint32_t acpuclk_get_switch_time(void);
 unsigned long acpuclk_wait_for_irq(void);
 unsigned long acpuclk_power_collapse(void);
+unsigned long acpuclk_hot_unplug(void);
 
 #endif
 

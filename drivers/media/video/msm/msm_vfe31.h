@@ -1,4 +1,4 @@
-/* Copyright (c) 2010, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2010-2011, Code Aurora Forum. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -56,6 +56,9 @@
 
 /* clear the halt bit. */
 #define AXI_HALT_CLEAR  0x00000000
+
+/* clear axi_halt_irq */
+#define MASK_AXI_HALT_IRQ	0xFF7FFFFF
 
 /* reset the pipeline when stop command is issued.
  * (without reset the register.) bit 26-31 = 0,
@@ -127,7 +130,10 @@
  * irq_status_1, bit 22 for reset irq, bit 23 for axi_halt_ack
    irq */
 #define VFE_IMASK_WHILE_STOPPING_0  0xF0000000
-#define VFE_IMASK_WHILE_STOPPING_1  0x00400000
+#define VFE_IMASK_WHILE_STOPPING_1  0x00C00000
+#define VFE_IMASK_RESET             0x00400000
+#define VFE_IMASK_AXI_HALT          0x00800000
+
 
 /* no error irq in mask 0 */
 #define VFE_IMASK_ERROR_ONLY_0  0x0
@@ -995,9 +1001,7 @@ struct vfe31_ctrl_type {
 
 	uint32_t vfeImaskCompositePacked;
 
-	spinlock_t  stop_flag_lock;
 	spinlock_t  update_ack_lock;
-	spinlock_t  state_lock;
 	spinlock_t  io_lock;
 
 	spinlock_t  aec_ack_lock;
@@ -1009,7 +1013,7 @@ struct vfe31_ctrl_type {
 	void *extdata;
 
 	int8_t start_ack_pending;
-	int8_t stop_ack_pending;
+	atomic_t stop_ack_pending;
 	int8_t reset_ack_pending;
 	int8_t update_ack_pending;
 	int8_t req_start_video_rec;
@@ -1026,7 +1030,7 @@ struct vfe31_ctrl_type {
 	struct resource *vfeio;
 
 	uint32_t stats_comp;
-	uint8_t vstate;
+	atomic_t vstate;
 	uint32_t vfe_capture_count;
 	uint32_t sync_timer_repeat_count;
 	uint32_t sync_timer_state;

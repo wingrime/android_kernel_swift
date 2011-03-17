@@ -1,4 +1,4 @@
-/* Copyright (c) 2010, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2010-2011, Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -20,8 +20,6 @@
  * RMNET SDIO Module.
  */
 
-#define DEBUG
-
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/string.h>
@@ -42,18 +40,25 @@
 
 #include <mach/sdio_dmux.h>
 
-static int msm_rmnet_sdio_debug_enable;
-module_param_named(debug_enable, msm_rmnet_sdio_debug_enable,
+/* Debug message support */
+static int msm_rmnet_sdio_debug_mask;
+module_param_named(debug_enable, msm_rmnet_sdio_debug_mask,
 			int, S_IRUGO | S_IWUSR | S_IWGRP);
 
-#ifdef DEBUG
-#define DBG(x...) do {				\
-		if (msm_rmnet_sdio_debug_enable)\
-			pr_debug(x);		\
-	} while (0)
-#else
-#define DBG(x...) do {} while (0)
-#endif
+#define DEBUG_MASK_LVL0 (1U << 0)
+#define DEBUG_MASK_LVL1 (1U << 1)
+#define DEBUG_MASK_LVL2 (1U << 2)
+
+#define DBG(m, x...) do {			   \
+		if (msm_rmnet_sdio_debug_mask & m) \
+			pr_info(x);		   \
+} while (0)
+#define DBG0(x...) DBG(DEBUG_MASK_LVL0, x)
+#define DBG1(x...) DBG(DEBUG_MASK_LVL1, x)
+#define DBG2(x...) DBG(DEBUG_MASK_LVL2, x)
+
+/* Configure device instances */
+#define RMNET_DEVICE_COUNT (8)
 
 /* allow larger frames */
 #define RMNET_DATA_LEN 2000
@@ -224,8 +229,8 @@ static __be16 rmnet_ip_type_trans(struct sk_buff *skb, struct net_device *dev)
 		protocol = htons(ETH_P_IPV6);
 		break;
 	default:
-		pr_err("rmnet_recv() L3 protocol decode error: 0x%02x",
-		       skb->data[0] & 0xf0);
+		pr_err("[%s] rmnet_recv() L3 protocol decode error: 0x%02x",
+		       dev->name, skb->data[0] & 0xf0);
 		/* skb will be dropped in upper layer for unknown protocol */
 	}
 	return protocol;
@@ -240,7 +245,8 @@ static int count_this_packet(void *_hdr, int len)
 
 	return 1;
 }
-/*Rx Callback, Called in Work Queue context*/
+
+/* Rx Callback, Called in Work Queue context */
 static void sdio_recv_notify(void *dev, struct sk_buff *skb)
 {
 	struct rmnet_private *p = netdev_priv(dev);
@@ -269,9 +275,15 @@ static void sdio_recv_notify(void *dev, struct sk_buff *skb)
 			p->stats.rx_packets++;
 			p->stats.rx_bytes += skb->len;
 		}
+		DBG1("[%s] Rx packet #%lu len=%d\n",
+			((struct net_device *)dev)->name,
+			p->stats.rx_packets, skb->len);
+
+		/* Deliver to network stack */
 		netif_rx(skb);
 	} else
-		pr_err("%s: No skb received", __func__);
+		pr_err("[%s] %s: No skb received",
+			((struct net_device *)dev)->name, __func__);
 }
 
 static int _rmnet_xmit(struct sk_buff *skb, struct net_device *dev)
@@ -299,7 +311,8 @@ static int _rmnet_xmit(struct sk_buff *skb, struct net_device *dev)
 	sdio_ret = msm_sdio_dmux_write(p->ch_id, skb);
 
 	if (sdio_ret != 0) {
-		pr_err("%s: write returned error %d", __func__, sdio_ret);
+		pr_err("[%s] %s: write returned error %d",
+			dev->name, __func__, sdio_ret);
 		goto xmit_out;
 	}
 
@@ -310,6 +323,8 @@ static int _rmnet_xmit(struct sk_buff *skb, struct net_device *dev)
 		p->wakeups_xmit += rmnet_cause_wakeup(p);
 #endif
 	}
+	DBG1("[%s] Tx packet #%lu len=%d mark=0x%x\n",
+	    dev->name, p->stats.tx_packets, skb->len, skb->mark);
 
 	return 0;
 xmit_out:
@@ -320,7 +335,7 @@ xmit_out:
 
 static void sdio_write_done(void *dev, struct sk_buff *skb)
 {
-	DBG("%s: write complete\n", __func__);
+	DBG1("%s: write complete\n", __func__);
 	dev_kfree_skb_any(skb);
 	netif_wake_queue(dev);
 }
@@ -330,7 +345,7 @@ static int __rmnet_open(struct net_device *dev)
 	int r;
 	struct rmnet_private *p = netdev_priv(dev);
 
-	pr_info("__rmnet_open()\n");
+	DBG0("[%s] __rmnet_open()\n", dev->name);
 
 	if (!p->device_up) {
 		r = msm_sdio_dmux_open(p->ch_id, dev,
@@ -348,7 +363,7 @@ static int rmnet_open(struct net_device *dev)
 {
 	int rc = 0;
 
-	pr_info("rmnet_open()\n");
+	DBG0("[%s] rmnet_open()\n", dev->name);
 
 	rc = __rmnet_open(dev);
 
@@ -377,7 +392,7 @@ static int __rmnet_close(struct net_device *dev)
 
 static int rmnet_stop(struct net_device *dev)
 {
-	pr_info("rmnet_stop()\n");
+	DBG0("[%s] rmnet_stop()\n", dev->name);
 
 	__rmnet_close(dev);
 	netif_stop_queue(dev);
@@ -390,6 +405,8 @@ static int rmnet_change_mtu(struct net_device *dev, int new_mtu)
 	if (0 > new_mtu || RMNET_DATA_LEN < new_mtu)
 		return -EINVAL;
 
+	DBG0("[%s] MTU change: old=%d new=%d\n",
+		dev->name, dev->mtu, new_mtu);
 	dev->mtu = new_mtu;
 
 	return 0;
@@ -398,7 +415,8 @@ static int rmnet_change_mtu(struct net_device *dev, int new_mtu)
 static int rmnet_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	if (netif_queue_stopped(dev)) {
-		pr_err("fatal: rmnet_xmit called when netif_queue is stopped");
+		pr_err("[%s]fatal: rmnet_xmit called when "
+			"netif_queue is stopped", dev->name);
 		return 0;
 	}
 
@@ -420,7 +438,7 @@ static void rmnet_set_multicast_list(struct net_device *dev)
 
 static void rmnet_tx_timeout(struct net_device *dev)
 {
-	pr_info("rmnet_tx_timeout()\n");
+	pr_warning("[%s] rmnet_tx_timeout()\n", dev->name);
 }
 
 static const struct net_device_ops rmnet_ops_ether = {
@@ -471,8 +489,9 @@ static int rmnet_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 			p->operation_mode &= ~RMNET_MODE_LLP_IP;
 			p->operation_mode |= RMNET_MODE_LLP_ETH;
 			spin_unlock_irqrestore(&p->lock, flags);
-			pr_debug("rmnet_ioctl(): "
-				"set Ethernet protocol mode\n");
+			DBG0("[%s] rmnet_ioctl(): "
+				"set Ethernet protocol mode\n",
+				dev->name);
 		}
 		break;
 
@@ -497,7 +516,9 @@ static int rmnet_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 			p->operation_mode &= ~RMNET_MODE_LLP_ETH;
 			p->operation_mode |= RMNET_MODE_LLP_IP;
 			spin_unlock_irqrestore(&p->lock, flags);
-			pr_debug("rmnet_ioctl(): set IP protocol mode\n");
+			DBG0("[%s] rmnet_ioctl(): "
+				"set IP protocol mode\n",
+				dev->name);
 		}
 		break;
 
@@ -511,14 +532,16 @@ static int rmnet_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 		spin_lock_irqsave(&p->lock, flags);
 		p->operation_mode |= RMNET_MODE_QOS;
 		spin_unlock_irqrestore(&p->lock, flags);
-		pr_debug("rmnet_ioctl(): set QMI QOS header enable\n");
+		DBG0("[%s] rmnet_ioctl(): set QMI QOS header enable\n",
+			dev->name);
 		break;
 
 	case RMNET_IOCTL_SET_QOS_DISABLE:   /* Set QoS header disabled */
 		spin_lock_irqsave(&p->lock, flags);
 		p->operation_mode &= ~RMNET_MODE_QOS;
 		spin_unlock_irqrestore(&p->lock, flags);
-		pr_debug("rmnet_ioctl(): set QMI QOS header disable\n");
+		DBG0("[%s] rmnet_ioctl(): set QMI QOS header disable\n",
+			dev->name);
 		break;
 
 	case RMNET_IOCTL_GET_QOS:           /* Get QoS header state    */
@@ -532,22 +555,24 @@ static int rmnet_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 
 	case RMNET_IOCTL_OPEN:              /* Open transport port     */
 		rc = __rmnet_open(dev);
-		pr_debug("rmnet_ioctl(): open transport port\n");
+		DBG0("[%s] rmnet_ioctl(): open transport port\n",
+			dev->name);
 		break;
 
 	case RMNET_IOCTL_CLOSE:             /* Close transport port    */
 		rc = __rmnet_close(dev);
-		pr_debug("rmnet_ioctl(): close transport port\n");
+		DBG0("[%s] rmnet_ioctl(): close transport port\n",
+			dev->name);
 		break;
 
 	default:
-		pr_err("error: rmnet_ioct called for unsupported cnd %d", cmd);
+		pr_err("[%s] error: rmnet_ioct called for unsupported cmd[%d]",
+			dev->name, cmd);
 		return -EINVAL;
 	}
 
-	pr_debug("%s: dev=%d name=%s cmd=0x%x opmode old=0x%08x new=0x%08x\n",
-		__func__, p->ch_id, dev->name, cmd, old_opmode,
-		p->operation_mode);
+	DBG2("[%s] %s: cmd=0x%x opmode old=0x%08x new=0x%08x\n",
+		dev->name, __func__, cmd, old_opmode, p->operation_mode);
 	return rc;
 }
 
@@ -575,7 +600,7 @@ static int __init rmnet_init(void)
 	struct rmnet_private *p;
 	unsigned n;
 
-	printk(KERN_INFO "%s\n", __func__);
+	pr_info("%s: SDIO devices[%d]\n", __func__, RMNET_DEVICE_COUNT);
 
 #ifdef CONFIG_MSM_RMNET_DEBUG
 	timeout_us = 0;
@@ -584,7 +609,7 @@ static int __init rmnet_init(void)
 #endif
 #endif
 
-	for (n = 0; n < 8; n++) {
+	for (n = 0; n < RMNET_DEVICE_COUNT; n++) {
 		dev = alloc_netdev(sizeof(struct rmnet_private),
 				   "rmnet_sdio%d", rmnet_setup);
 

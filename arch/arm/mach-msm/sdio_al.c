@@ -2365,6 +2365,10 @@ EXPORT_SYMBOL(sdio_open);
  */
 int sdio_close(struct sdio_channel *ch)
 {
+	if (!ch) {
+		pr_info(MODULE_NAME ":%s: NULL channel\n",  __func__);
+		return -ENODEV;
+	}
 	pr_debug(MODULE_NAME ":sdio_close is not supported\n");
 
 	return -EPERM;
@@ -2377,7 +2381,15 @@ EXPORT_SYMBOL(sdio_close);
  */
 int sdio_write_avail(struct sdio_channel *ch)
 {
-	BUG_ON(ch->signature != SDIO_AL_SIGNATURE);
+	if (!ch) {
+		pr_info(MODULE_NAME ":%s: NULL channel\n",  __func__);
+		return -ENODEV;
+	}
+	if (ch->signature != SDIO_AL_SIGNATURE) {
+		pr_info(MODULE_NAME ":%s: Invalid signature 0x%x\n",  __func__,
+			ch->signature);
+		return -ENODEV;
+	}
 
 	pr_debug(MODULE_NAME ":sdio_write_avail %s 0x%x\n",
 			 ch->name, ch->write_avail);
@@ -2392,7 +2404,15 @@ EXPORT_SYMBOL(sdio_write_avail);
  */
 int sdio_read_avail(struct sdio_channel *ch)
 {
-	BUG_ON(ch->signature != SDIO_AL_SIGNATURE);
+	if (!ch) {
+		pr_info(MODULE_NAME ":%s: NULL channel\n",  __func__);
+		return -ENODEV;
+	}
+	if (ch->signature != SDIO_AL_SIGNATURE) {
+		pr_info(MODULE_NAME ":%s: Invalid signature 0x%x\n",  __func__,
+			ch->signature);
+		return -ENODEV;
+	}
 
 	pr_debug(MODULE_NAME ":sdio_read_avail %s 0x%x\n",
 			 ch->name, ch->read_avail);
@@ -2412,11 +2432,33 @@ EXPORT_SYMBOL(sdio_read_avail);
 int sdio_read(struct sdio_channel *ch, void *data, int len)
 {
 	int ret = 0;
-	struct sdio_al_device *sdio_al_dev = ch->sdio_al_dev;
+	struct sdio_al_device *sdio_al_dev = NULL;
 
-	BUG_ON(sdio_al_dev == NULL);
+	if (!ch) {
+		pr_info(MODULE_NAME ":%s: NULL channel\n",  __func__);
+		return -ENODEV;
+	}
+	if (!data) {
+		pr_info(MODULE_NAME ":%s: NULL data\n",  __func__);
+		return -ENODEV;
+	}
 
-	BUG_ON(ch->signature != SDIO_AL_SIGNATURE);
+	sdio_al_dev = ch->sdio_al_dev;
+	if ((sdio_al_dev == NULL) || (sdio_al_dev->card == NULL)) {
+		pr_info(MODULE_NAME ":%s: NULL sdio_al_dev\n",  __func__);
+		return -ENODEV;
+	}
+	if (sdio_al_dev->card == NULL) {
+		pr_info(MODULE_NAME ":%s: NULL card\n",  __func__);
+		return -ENODEV;
+	}
+
+
+	if (ch->signature != SDIO_AL_SIGNATURE) {
+		pr_info(MODULE_NAME ":%s: Invalid signature 0x%x\n",  __func__,
+			ch->signature);
+		return -ENODEV;
+	}
 	/* lpm policy says we can't go to sleep when we have pending rx data,
 	   so either we had rx interrupt and woken up, or we never went to
 	   sleep */
@@ -2495,11 +2537,32 @@ EXPORT_SYMBOL(sdio_read);
 int sdio_write(struct sdio_channel *ch, const void *data, int len)
 {
 	int ret = 0;
-	struct sdio_al_device *sdio_al_dev = ch->sdio_al_dev;
+	struct sdio_al_device *sdio_al_dev = NULL;
 
-	BUG_ON(sdio_al_dev == NULL);
+	if (!ch) {
+		pr_info(MODULE_NAME ":%s: NULL channel\n",  __func__);
+		return -ENODEV;
+	}
+	if (!data) {
+		pr_info(MODULE_NAME ":%s: NULL data\n",  __func__);
+		return -ENODEV;
+	}
 
-	BUG_ON(ch->signature != SDIO_AL_SIGNATURE);
+	sdio_al_dev = ch->sdio_al_dev;
+	if (sdio_al_dev == NULL) {
+		pr_info(MODULE_NAME ":%s: NULL sdio_al_dev\n",  __func__);
+		return -ENODEV;
+	}
+	if (sdio_al_dev->card == NULL) {
+		pr_info(MODULE_NAME ":%s: NULL card\n",  __func__);
+		return -ENODEV;
+	}
+
+	if (ch->signature != SDIO_AL_SIGNATURE) {
+		pr_info(MODULE_NAME ":%s: Invalid signature 0x%x\n",  __func__,
+			ch->signature);
+		return -ENODEV;
+	}
 	WARN_ON(len > ch->write_avail);
 
 	if (sdio_al_dev->is_err) {
@@ -2577,11 +2640,29 @@ EXPORT_SYMBOL(sdio_write);
 int sdio_set_write_threshold(struct sdio_channel *ch, int threshold)
 {
 	int ret;
-	struct sdio_al_device *sdio_al_dev = ch->sdio_al_dev;
+	struct sdio_al_device *sdio_al_dev = NULL;
 
-	BUG_ON(sdio_al_dev == NULL);
+	if (!ch) {
+		pr_info(MODULE_NAME ":%s: NULL channel\n",  __func__);
+		return -ENODEV;
+	}
 
-	BUG_ON(ch->signature != SDIO_AL_SIGNATURE);
+	sdio_al_dev = ch->sdio_al_dev;
+	if (sdio_al_dev == NULL) {
+		pr_info(MODULE_NAME ":%s: NULL sdio_al_dev\n",  __func__);
+		return -ENODEV;
+	}
+	if (sdio_al_dev->card == NULL) {
+		pr_info(MODULE_NAME ":%s: NULL card\n",  __func__);
+		return -ENODEV;
+	}
+
+	if (ch->signature != SDIO_AL_SIGNATURE) {
+		pr_info(MODULE_NAME ":%s: Invalid signature 0x%x\n",  __func__,
+			ch->signature);
+		return -ENODEV;
+	}
+
 	if (sdio_al_dev->is_err) {
 		SDIO_AL_ERR(__func__);
 		return -ENODEV;
@@ -2614,11 +2695,27 @@ EXPORT_SYMBOL(sdio_set_write_threshold);
 int sdio_set_read_threshold(struct sdio_channel *ch, int threshold)
 {
 	int ret;
-	struct sdio_al_device *sdio_al_dev = ch->sdio_al_dev;
+	struct sdio_al_device *sdio_al_dev = NULL;
 
-	BUG_ON(sdio_al_dev == NULL);
+	if (!ch) {
+		pr_info(MODULE_NAME ":%s: NULL channel\n",  __func__);
+		return -ENODEV;
+	}
+	sdio_al_dev = ch->sdio_al_dev;
+	if (sdio_al_dev == NULL) {
+		pr_info(MODULE_NAME ":%s: NULL sdio_al_dev\n",  __func__);
+		return -ENODEV;
+	}
+	if (sdio_al_dev->card == NULL) {
+		pr_info(MODULE_NAME ":%s: NULL card\n",  __func__);
+		return -ENODEV;
+	}
 
-	BUG_ON(ch->signature != SDIO_AL_SIGNATURE);
+	if (ch->signature != SDIO_AL_SIGNATURE) {
+		pr_info(MODULE_NAME ":%s: Invalid signature 0x%x\n",  __func__,
+			ch->signature);
+		return -ENODEV;
+	}
 	if (sdio_al_dev->is_err) {
 		SDIO_AL_ERR(__func__);
 		return -ENODEV;

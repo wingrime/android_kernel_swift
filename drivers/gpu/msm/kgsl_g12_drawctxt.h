@@ -29,20 +29,12 @@
 #ifndef __GSL_DRAWCTXT_G12_H
 #define __GSL_DRAWCTXT_G12_H
 
-struct kgsl_device;
-struct kgsl_device_private;
-struct kgsl_context;
+#include "kgsl_sharedmem.h"
 
-#define KGSL_G12_PACKET_SIZE 15
-#define KGSL_G12_MARKER_SIZE 10
-#define KGSL_G12_CALL_CMD     0x1000
-#define KGSL_G12_MARKER_CMD   0x8000
-#define KGSL_G12_STREAM_END_CMD 0x9000
-#define KGSL_G12_STREAM_PACKET 0x7C000176
-#define KGSL_G12_STREAM_PACKET_CALL 0x7C000275
-#define KGSL_G12_PACKET_COUNT 8
-#define KGSL_G12_RB_SIZE (KGSL_G12_PACKET_SIZE*KGSL_G12_PACKET_COUNT \
-			  *sizeof(uint32_t))
+struct kgsl_device;
+
+#define GSL_HAL_NUMCMDBUFFERS       5
+#define GSL_HAL_CMDBUFFERSIZE       ((1024 + 13) * sizeof(unsigned int))
 
 #define ALIGN_IN_BYTES(dim, alignment) (((dim) + (alignment - 1)) & \
 		~(alignment - 1))
@@ -63,15 +55,31 @@ struct kgsl_context;
 				 sizeof(unsigned int)), 32) / \
 				 sizeof(unsigned int))
 
-#define KGSL_G12_INVALID_CONTEXT UINT_MAX
+struct kgsl_g12_hal_z1xxdrawctx_t {
+	unsigned int id;
+};
+
+struct kgsl_g12_z1xx {
+	unsigned int offs;
+	unsigned int curr;
+	unsigned int prevctx;
+
+	unsigned int            *cmdbuf[GSL_HAL_NUMCMDBUFFERS];
+	struct kgsl_memdesc      cmdbufdesc[GSL_HAL_NUMCMDBUFFERS];
+
+	unsigned int numcontext;
+};
+
+extern struct kgsl_g12_z1xx g_z1xx;
 
 int
-kgsl_g12_drawctxt_create(struct kgsl_device_private *dev_priv,
-			uint32_t unused,
-			struct kgsl_context *context);
+kgsl_g12_drawctxt_create(struct kgsl_device *device,
+			unsigned int type,
+			unsigned int *drawctxt_id,
+			unsigned int flags);
 
 int
 kgsl_g12_drawctxt_destroy(struct kgsl_device *device,
-			  struct kgsl_context *context);
+			unsigned int drawctxt_id);
 
 #endif  /* __GSL_DRAWCTXT_H */

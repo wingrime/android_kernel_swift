@@ -37,13 +37,12 @@ config WEBCAM_OV7692
 	  Omni Vision VGA YUV Sensor.
 config WEBCAM_OV9726
 	bool "Sensor OV9726 (VGA Bayer)"
-	depends on MSM_CAMERA && ARCH_MSM8X60
+	depends on MSM_CAMERA && (ARCH_MSM8X60 || ARCH_MSM7X30) && !MSM_CAMERA_V4L2
 	default n
 	---help---
 	  Omni Vision VGA Bayer Sensor.
 #	This Senosr is used as a webcam.
 #	This uses the CSI interface.
-#	Need to enable CSI1 clks for this sensor.
 config VX6953
 	bool "Sensor VX6953 (BAYER 5M)"
 	depends on MSM_CAMERA && ARCH_MSM7X30

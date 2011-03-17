@@ -833,6 +833,11 @@ static struct i2c_board_info msm_camera_boardinfo[] __initdata = {
 		I2C_BOARD_INFO("mt9d112", 0x78 >> 1),
 	},
 #endif
+#ifdef CONFIG_WEBCAM_OV9726
+	{
+		I2C_BOARD_INFO("ov9726", 0x10),
+	},
+#endif
 #ifdef CONFIG_S5K3E2FX
 	{
 		I2C_BOARD_INFO("s5k3e2fx", 0x20 >> 1),
@@ -1040,6 +1045,31 @@ static struct platform_device msm_camera_sensor_mt9d112 = {
 	.name      = "msm_camera_mt9d112",
 	.dev       = {
 		.platform_data = &msm_camera_sensor_mt9d112_data,
+	},
+};
+#endif
+
+#ifdef CONFIG_WEBCAM_OV9726
+static struct msm_camera_sensor_flash_data flash_ov9726 = {
+	.flash_type	= MSM_CAMERA_FLASH_LED,
+	.flash_src	= &msm_flash_src_pwm
+};
+static struct msm_camera_sensor_info msm_camera_sensor_ov9726_data = {
+	.sensor_name	= "ov9726",
+	.sensor_reset	= 0,
+	.sensor_pwd	= 85,
+	.vcm_pwd	= 1,
+	.vcm_enable	= 0,
+	.pdata		= &msm_camera_device_data,
+	.resource	= msm_camera_resources,
+	.num_resources	= ARRAY_SIZE(msm_camera_resources),
+	.flash_data	= &flash_ov9726,
+	.csi_if		= 1
+};
+struct platform_device msm_camera_sensor_ov9726 = {
+	.name	= "msm_camera_ov9726",
+	.dev	= {
+		.platform_data = &msm_camera_sensor_ov9726_data,
 	},
 };
 #endif
@@ -5456,6 +5486,9 @@ static struct platform_device *devices[] __initdata = {
 #endif
 #ifdef CONFIG_MT9D112
 	&msm_camera_sensor_mt9d112,
+#endif
+#ifdef CONFIG_WEBCAM_OV9726
+	&msm_camera_sensor_ov9726,
 #endif
 #ifdef CONFIG_S5K3E2FX
 	&msm_camera_sensor_s5k3e2fx,

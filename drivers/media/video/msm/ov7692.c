@@ -393,9 +393,11 @@ static int ov7692_probe_init_sensor(const struct msm_camera_sensor_info *data)
 	}
 
 	/* 3. Read sensor Model ID: */
-	if (ov7692_i2c_read(REG_OV7692_MODEL_ID_MSB, &model_id_msb, 1) < 0)
+	rc = ov7692_i2c_read(REG_OV7692_MODEL_ID_MSB, &model_id_msb, 1);
+	if (rc < 0)
 		goto init_probe_fail;
-	if (ov7692_i2c_read(REG_OV7692_MODEL_ID_LSB, &model_id_lsb, 1) < 0)
+	rc = ov7692_i2c_read(REG_OV7692_MODEL_ID_LSB, &model_id_lsb, 1);
+	if (rc < 0)
 		goto init_probe_fail;
 	model_id = (model_id_msb << 8) | ((model_id_lsb & 0x00FF)) ;
 	CDBG("ov7692 model_id = 0x%x, 0x%x, 0x%x\n",

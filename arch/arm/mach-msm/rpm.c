@@ -282,6 +282,8 @@ static void __init msm_rpm_populate_map(void)
 
 static inline void msm_rpm_write_barrier(void)
 {
+	mb();
+
 	/*
 	 * By the time the read from RPM memory returns, all previous
 	 * writes are guaranteed visible to RPM.
@@ -324,6 +326,7 @@ static int msm_rpm_process_ack_interrupt(void)
 
 		msm_rpm_write_contiguous_zeros(MSM_RPM_PAGE_CTRL,
 			MSM_RPM_CTRL_ACK_SEL_0, MSM_RPM_SEL_MASK_SIZE);
+		mb();
 		msm_rpm_write(MSM_RPM_PAGE_CTRL, MSM_RPM_CTRL_ACK_CTX_0, 0);
 
 		return 1;
@@ -343,6 +346,7 @@ static int msm_rpm_process_ack_interrupt(void)
 
 		msm_rpm_write_contiguous_zeros(MSM_RPM_PAGE_CTRL,
 			MSM_RPM_CTRL_ACK_SEL_0, MSM_RPM_SEL_MASK_SIZE);
+		mb();
 		msm_rpm_write(MSM_RPM_PAGE_CTRL, MSM_RPM_CTRL_ACK_CTX_0, 0);
 
 		if (msm_rpm_request->done)

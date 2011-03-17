@@ -34,7 +34,7 @@
 
 #include <linux/mfd/pmic8058.h>
 #include <linux/pmic8058-othc.h>
-#include <linux/m_adc.h>
+#include <linux/msm_adc.h>
 
 #define PM8058_OTHC_LOW_CURR_MASK	0xF0
 #define PM8058_OTHC_HIGH_CURR_MASK	0x0F

@@ -404,7 +404,6 @@ struct sdio_channel {
 
 	int is_valid;
 	int is_open;
-	int is_suspend;
 
 	struct sdio_func *func;
 
@@ -911,19 +910,6 @@ static int read_mailbox(struct sdio_al_device *sdio_al_dev, int from_isr)
 		if (tx_notify_bitmask & (1<<ch->num))
 			ch->notify(ch->priv,
 					   SDIO_EVENT_DATA_WRITE_AVAIL);
-	}
-
-	/* Enable/Disable of Interrupts */
-	for (i = 0; i < SDIO_AL_MAX_CHANNELS; i++) {   /* TODO - maya */
-		struct sdio_channel *ch = &sdio_al_dev->channel[i];
-		u32 pipe_thresh_intr_disabled = 0;
-
-		if ((!ch->is_valid) || (!ch->is_open))
-			continue;
-
-
-		pipe_thresh_intr_disabled = thresh_intr_mask &
-			(1<<ch->tx_pipe_index);
 	}
 
 	if (is_inactive_time_expired(sdio_al_dev)) {
@@ -2233,7 +2219,7 @@ static void sdio_al_tear_down(void)
 		}
 	}
 
-	sdio_al->pdata->config_mdm2ap_status(0); /* maya */
+	sdio_al->pdata->config_mdm2ap_status(0);
 }
 
 /**
@@ -2341,15 +2327,6 @@ int sdio_open(const char *name, struct sdio_channel **ret_ch, void *priv,
 
 	/* Note: Set caller returned context before interrupts are enabled */
 	*ret_ch = ch;
-
-	if (ch->is_suspend) {
-		pr_info(MODULE_NAME ":Resume channel %s.\n", name);
-		ch->is_suspend = false;
-		ch->is_open = true;
-		ask_reading_mailbox(sdio_al_dev);
-		sdio_release_host(sdio_al_dev->card->sdio_func[0]);
-		return 0;
-	}
 
 	ret = open_channel(ch);
 	sdio_release_host(sdio_al_dev->card->sdio_func[0]);
@@ -2643,44 +2620,6 @@ int sdio_set_read_threshold(struct sdio_channel *ch, int threshold)
 	return ret;
 }
 EXPORT_SYMBOL(sdio_set_read_threshold);
-
-
-/**
- *  Set the polling delay.
- *  Only values between 1 ms and 1 sec are permitted.
- *
- */
-int sdio_set_poll_time(struct sdio_channel *ch, int poll_delay_msec)
-{
-	int ret;
-	struct sdio_al_device *sdio_al_dev = ch->sdio_al_dev;
-
-	BUG_ON(sdio_al_dev == NULL);
-
-	BUG_ON(ch->signature != SDIO_AL_SIGNATURE);
-	if (sdio_al_dev->is_err) {
-		SDIO_AL_ERR(__func__);
-		return -ENODEV;
-	}
-
-	if (poll_delay_msec <= 0 || poll_delay_msec > INACTIVITY_TIME_MSEC)
-		return -EPERM;
-
-	sdio_claim_host(sdio_al_dev->card->sdio_func[0]);
-	ret = sdio_al_wake_up(sdio_al_dev, 1);
-	sdio_release_host(sdio_al_dev->card->sdio_func[0]);
-	if (ret)
-		return ret;
-
-	ch->poll_delay_msec = poll_delay_msec;
-
-	/* The new delay will be updated at the next time
-	   that the timer expires */
-	sdio_al_dev->poll_delay_msec = get_min_poll_time_msec(sdio_al_dev);
-
-	return sdio_al_dev->poll_delay_msec;
-}
-EXPORT_SYMBOL(sdio_set_poll_time);
 
 static int __devinit msm_sdio_al_probe(struct platform_device *pdev)
 {
@@ -3498,7 +3437,7 @@ static void __exit sdio_al_exit(void)
 	sdio_al_debugfs_cleanup();
 #endif
 
-	platform_driver_unregister(&msm_sdio_al_driver); /* maya */
+	platform_driver_unregister(&msm_sdio_al_driver);
 
 	pr_debug(MODULE_NAME ":sdio_al_exit complete\n");
 }

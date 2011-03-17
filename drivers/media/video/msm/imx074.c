@@ -129,8 +129,9 @@
 #define	Q8						0x100
 #define	Q10						0x400
 #define	IMX074_AF_I2C_SLAVE_ID				0x72
-#define	IMX074_STEPS_NEAR_TO_CLOSEST_INF		42
-#define	IMX074_TOTAL_STEPS_NEAR_TO_FAR			42
+#define	IMX074_STEPS_NEAR_TO_CLOSEST_INF		52
+#define	IMX074_TOTAL_STEPS_NEAR_TO_FAR			52
+static uint32_t imx074_l_region_code_per_step = 2;
 
 struct imx074_work_t {
 	struct work_struct work;
@@ -488,7 +489,6 @@ static int32_t imx074_move_focus(int direction,
 {
 	int32_t step_direction, dest_step_position, bit_mask;
 	int32_t rc = 0;
-	uint32_t imx074_l_region_code_per_step = 3;
 
 	if (num_steps == 0)
 		return rc;
@@ -511,6 +511,7 @@ static int32_t imx074_move_focus(int direction,
 		dest_step_position = IMX074_TOTAL_STEPS_NEAR_TO_FAR;
 	rc = imx074_i2c_write_b_af(IMX074_AF_I2C_SLAVE_ID, 0x00,
 		((num_steps * imx074_l_region_code_per_step) | bit_mask));
+	CDBG("%s: Index: %d\n", __func__, dest_step_position);
 	imx074_ctrl->curr_step_pos = dest_step_position;
 	return rc;
 }
@@ -1190,10 +1191,14 @@ int imx074_sensor_config(void __user *argp)
 			imx074_set_default_focus(
 			cdata.cfg.focus.steps);
 			break;
+	case CFG_GET_AF_MAX_STEPS:
+		cdata.max_steps = IMX074_STEPS_NEAR_TO_CLOSEST_INF;
+		if (copy_to_user((void *)argp,
+			&cdata,
+			sizeof(struct sensor_cfg_data)))
+			rc = -EFAULT;
+			break;
 	case CFG_SET_EFFECT:
-		rc = imx074_set_default_focus(
-		cdata.cfg.effect);
-		break;
 	default:
 		rc = -EFAULT;
 		break;

@@ -38,7 +38,7 @@ void __diag_smd_qdsp_send_req(void);
 void diag_usb_legacy_notifier(void *, unsigned, struct diag_request *);
 int diag_device_write(void *, int, struct diag_request *);
 int mask_request_validate(unsigned char mask_buf[]);
-
+int chk_config_get_id(void);
 /* State for diag forwarding */
 #ifdef CONFIG_DIAG_OVER_USB
 int diagfwd_connect(void);

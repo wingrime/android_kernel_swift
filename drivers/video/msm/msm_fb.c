@@ -312,10 +312,6 @@ static int msm_fb_probe(struct platform_device *pdev)
 
 	mfd = (struct msm_fb_data_type *)platform_get_drvdata(pdev);
 
-	err = pm_runtime_set_active(&pdev->dev);
-	if (err < 0)
-		printk(KERN_ERR "pm_runtime: fail to set active.\n");
-
 	if (!mfd)
 		return -ENODEV;
 
@@ -334,7 +330,10 @@ static int msm_fb_probe(struct platform_device *pdev)
 	rc = msm_fb_register(mfd);
 	if (rc)
 		return rc;
-
+	err = pm_runtime_set_active(mfd->fbi->dev);
+	if (err < 0)
+		printk(KERN_ERR "pm_runtime: fail to set active.\n");
+	pm_runtime_enable(mfd->fbi->dev);
 #ifdef CONFIG_FB_BACKLIGHT
 	msm_fb_config_backlight(mfd);
 #else
@@ -346,8 +345,6 @@ static int msm_fb_probe(struct platform_device *pdev)
 			lcd_backlight_registered = 1;
 	}
 #endif
-
-	pm_runtime_enable(&pdev->dev);
 
 	pdev_list[pdev_list_cnt++] = pdev;
 	msm_fb_create_sysfs(pdev);
@@ -364,7 +361,7 @@ static int msm_fb_remove(struct platform_device *pdev)
 
 	msm_fb_remove_sysfs(pdev);
 
-	pm_runtime_disable(&pdev->dev);
+	pm_runtime_disable(mfd->fbi->dev);
 
 	if (!mfd)
 		return -ENODEV;

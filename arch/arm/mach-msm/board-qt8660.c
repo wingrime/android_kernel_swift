@@ -32,7 +32,7 @@
 #include <linux/pwm.h>
 #include <linux/pmic8058-pwm.h>
 #include <linux/pmic8058-xoadc.h>
-#include <linux/m_adc.h>
+#include <linux/msm_adc.h>
 #include <linux/m_adcproc.h>
 #include <linux/mfd/marimba.h>
 #include <linux/i2c.h>
@@ -2669,11 +2669,18 @@ static struct othc_hsed_config hsed_config_1 = {
 	.othc_num_accessories = ARRAY_SIZE(othc_accessories),
 };
 
+static struct othc_regulator_config othc_reg = {
+	.regulator = "8058_l5",
+	.max_uV = 2850000,
+	.min_uV = 2850000,
+};
+
 /* MIC_BIAS0 is configured as normal MIC BIAS */
 static struct pmic8058_othc_config_pdata othc_config_pdata_0 = {
 	.micbias_select = OTHC_MICBIAS_0,
 	.micbias_capability = OTHC_MICBIAS,
 	.micbias_enable = OTHC_SIGNAL_OFF,
+	.micbias_regulator = &othc_reg,
 };
 
 /* MIC_BIAS1 is configured as HSED_BIAS for OTHC */
@@ -2681,6 +2688,7 @@ static struct pmic8058_othc_config_pdata othc_config_pdata_1 = {
 	.micbias_select = OTHC_MICBIAS_1,
 	.micbias_capability = OTHC_MICBIAS_HSED,
 	.micbias_enable = OTHC_SIGNAL_PWM_TCXO,
+	.micbias_regulator = &othc_reg,
 	.hsed_config = &hsed_config_1,
 	.hsed_name = "8660_handset",
 };
@@ -2690,6 +2698,7 @@ static struct pmic8058_othc_config_pdata othc_config_pdata_2 = {
 	.micbias_select = OTHC_MICBIAS_2,
 	.micbias_capability = OTHC_MICBIAS,
 	.micbias_enable = OTHC_SIGNAL_OFF,
+	.micbias_regulator = &othc_reg,
 };
 
 static struct resource resources_othc_0[] = {

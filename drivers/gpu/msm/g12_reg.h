@@ -70,8 +70,6 @@
 #define ADDR_MH_INTERRUPT_STATUS         0x0A43
 #define ADDR_MH_AXI_ERROR                0x0A45
 #define ADDR_MH_AXI_HALT_CONTROL         0x0A50
-#define ADDR_MH_CLNT_INTF_CTRL_CONFIG1   0x0A54
-#define ADDR_MH_CLNT_INTF_CTRL_CONFIG2   0x0A55
 #define ADDR_MH_MMU_CONFIG               0x0040
 #define ADDR_MH_MMU_INVALIDATE           0x0045
 #define ADDR_MH_MMU_MPU_BASE             0x0046
@@ -80,7 +78,6 @@
 #define ADDR_MH_MMU_TRAN_ERROR           0x0044
 #define ADDR_MH_MMU_VA_RANGE             0x0041
 #define ADDR_VGC_MH_READ_ADDR            0x0510
-#define ADDR_VGC_MH_DATA_ADDR            0x0518
 #define ADDR_MH_MMU_PAGE_FAULT           0x0043
 #define ADDR_VGC_COMMANDSTREAM           0x0000
 #define ADDR_VGC_IRQENABLE               0x0438
@@ -92,6 +89,5 @@
 #define ADDR_VGV3_MODE                   0x0071
 #define ADDR_VGV3_NEXTADDR               0x0075
 #define ADDR_VGV3_NEXTCMD                0x0076
-#define ADDR_VGV3_WRITEADDR              0x0072
 
 #endif /* _G12_REG_H */

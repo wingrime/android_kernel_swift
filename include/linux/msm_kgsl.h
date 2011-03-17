@@ -1,42 +1,36 @@
-/* Copyright (c) 2002,2007-2011, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2002,2007-2010, Code Aurora Forum. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are
- * met:
+ * modification, are permitted provided that the following conditions are met:
  *     * Redistributions of source code must retain the above copyright
  *       notice, this list of conditions and the following disclaimer.
- *     * Redistributions in binary form must reproduce the above
- *       copyright notice, this list of conditions and the following
- *       disclaimer in the documentation and/or other materials provided
- *       with the distribution.
- *     * Neither the name of Code Aurora Forum, Inc. nor the names of its
- *       contributors may be used to endorse or promote products derived
- *       from this software without specific prior written permission.
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *     * Neither the name of Code Aurora nor
+ *       the names of its contributors may be used to endorse or promote
+ *       products derived from this software without specific prior written
+ *       permission.
  *
- * THIS SOFTWARE IS PROVIDED "AS IS" AND ANY EXPRESS OR IMPLIED
- * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
- * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS
- * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR
- * BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
- * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
- * OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
- * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+ * NON-INFRINGEMENT ARE DISCLAIMED.  IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+ * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+ * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+ * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
+ * OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+ * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  */
 #ifndef _MSM_KGSL_H
 #define _MSM_KGSL_H
 
 /*context flags */
-#define KGSL_CONTEXT_SAVE_GMEM	1
+#define KGSL_CONTEXT_SAVE_GMEM		1
 #define KGSL_CONTEXT_NO_GMEM_ALLOC	2
-#define KGSL_CONTEXT_SUBMIT_IB_LIST	4
-#define KGSL_CONTEXT_CTX_SWITCH	8
-
-/* Memory allocayion flags */
-#define KGSL_MEMFLAGS_GPUREADONLY	0x01000000
 
 /* generic flag values */
 #define KGSL_FLAGS_NORMALMODE  0x00000000
@@ -48,22 +42,13 @@
 #define KGSL_FLAGS_RESERVED0   0x00000020
 #define KGSL_FLAGS_RESERVED1   0x00000040
 #define KGSL_FLAGS_RESERVED2   0x00000080
-#define KGSL_FLAGS_SOFT_RESET  0x00000100
-
-#define KGSL_MAX_PWRLEVELS 5
 
 /* device id */
 enum kgsl_deviceid {
-	KGSL_DEVICE_YAMATO	= 0x00000000,
-	KGSL_DEVICE_2D0		= 0x00000001,
-	KGSL_DEVICE_2D1		= 0x00000002,
-	KGSL_DEVICE_MAX		= 0x00000003
-};
-
-enum kgsl_user_mem_type {
-	KGSL_USER_MEM_TYPE_PMEM		= 0x00000000,
-	KGSL_USER_MEM_TYPE_ASHMEM	= 0x00000001,
-	KGSL_USER_MEM_TYPE_ADDR		= 0x00000002
+	KGSL_DEVICE_ANY		= 0x00000000,
+	KGSL_DEVICE_YAMATO	= 0x00000001,
+	KGSL_DEVICE_G12		= 0x00000002,
+	KGSL_DEVICE_MAX		= 0x00000002
 };
 
 struct kgsl_devinfo {
@@ -90,12 +75,6 @@ struct kgsl_devmemstore {
 	unsigned int sbz;
 	volatile unsigned int eoptimestamp;
 	unsigned int sbz2;
-	volatile unsigned int ts_cmp_enable;
-	unsigned int sbz3;
-	volatile unsigned int ref_wait_ts;
-	unsigned int sbz4;
-	unsigned int current_context;
-	unsigned int sbz5;
 };
 
 #define KGSL_DEVICE_MEMSTORE_OFFSET(field) \
@@ -116,8 +95,7 @@ enum kgsl_property_type {
 	KGSL_PROP_DEVICE_POWER    = 0x00000003,
 	KGSL_PROP_SHMEM           = 0x00000004,
 	KGSL_PROP_SHMEM_APERTURES = 0x00000005,
-	KGSL_PROP_MMU_ENABLE 	  = 0x00000006,
-	KGSL_PROP_INTERRUPT_WAITS = 0x00000007,
+	KGSL_PROP_MMU_ENABLE 	  = 0x00000006
 };
 
 struct kgsl_shadowprop {
@@ -126,60 +104,14 @@ struct kgsl_shadowprop {
 	unsigned int flags; /* contains KGSL_FLAGS_ values */
 };
 
-struct kgsl_pwrlevel {
-	unsigned int gpu_freq;
-	unsigned int bus_freq;
-};
-
-#ifdef __KERNEL__
-#include <mach/msm_bus.h>
-
-struct kgsl_grp_clk_name {
-	const char *clk;
-	const char *pclk;
-};
-
-struct kgsl_device_pwr_data {
-	struct kgsl_pwrlevel pwrlevel[KGSL_MAX_PWRLEVELS];
-	int init_level;
-	int num_levels;
-	int (*set_grp_async)(void);
-	unsigned int idle_timeout;
-	unsigned int nap_allowed;
-};
-
-struct kgsl_clk_data {
-	struct kgsl_grp_clk_name name;
-	struct msm_bus_scale_pdata *bus_scale_table;
-};
-
-struct kgsl_core_platform_data {
-	unsigned int pt_va_base;
-	unsigned int pt_va_size;
-};
-
-struct kgsl_device_platform_data {
-	struct kgsl_device_pwr_data pwr_data;
-	struct kgsl_clk_data clk;
-	/* imem_clk_name is for 3d only, not used in 2d devices */
-	struct kgsl_grp_clk_name imem_clk_name;
-};
-
 struct kgsl_platform_data {
-	struct kgsl_core_platform_data *core;
-	struct kgsl_device_platform_data *dev_3d0;
-	struct kgsl_device_platform_data *dev_2d0;
-	struct kgsl_device_platform_data *dev_2d1;
-};
-
-#endif
-
-/* structure holds list of ibs */
-struct kgsl_ibdesc {
-	unsigned int gpuaddr;
-	void *hostptr;
-	unsigned int sizedwords;
-	unsigned int ctrl;
+	unsigned int max_axi_freq;
+	unsigned int max_grp2d_freq;
+	unsigned int min_grp2d_freq;
+	int (*set_grp2d_async)(void);
+	unsigned int max_grp3d_freq;
+	unsigned int min_grp3d_freq;
+	int (*set_grp3d_async)(void);
 };
 
 /* ioctls */
@@ -196,6 +128,7 @@ struct kgsl_ibdesc {
    struct kgsl_memstore into userspace.
 */
 struct kgsl_device_getproperty {
+	unsigned int device_id;
 	unsigned int type;
 	void  *value;
 	unsigned int sizebytes;
@@ -210,6 +143,7 @@ struct kgsl_device_getproperty {
    GPU register space.
  */
 struct kgsl_device_regread {
+	unsigned int device_id;
 	unsigned int offsetwords;
 	unsigned int value; /* output param */
 };
@@ -222,6 +156,7 @@ struct kgsl_device_regread {
  * timeout is in milliseconds.
  */
 struct kgsl_device_waittimestamp {
+	unsigned int device_id;
 	unsigned int timestamp;
 	unsigned int timeout;
 };
@@ -240,9 +175,10 @@ struct kgsl_device_waittimestamp {
  * the GPU.
  */
 struct kgsl_ringbuffer_issueibcmds {
+	unsigned int device_id;
 	unsigned int drawctxt_id;
-	unsigned int ibdesc_addr;
-	unsigned int numibs;
+	unsigned int ibaddr;
+	unsigned int sizedwords;
 	unsigned int timestamp; /*output param */
 	unsigned int flags;
 };
@@ -254,6 +190,7 @@ struct kgsl_ringbuffer_issueibcmds {
  * type should be a value from enum kgsl_timestamp_type
  */
 struct kgsl_cmdstream_readtimestamp {
+	unsigned int device_id;
 	unsigned int type;
 	unsigned int timestamp; /*output param */
 };
@@ -267,6 +204,7 @@ struct kgsl_cmdstream_readtimestamp {
  * type should be a value from enum kgsl_timestamp_type
  */
 struct kgsl_cmdstream_freememontimestamp {
+	unsigned int device_id;
 	unsigned int gpuaddr;
 	unsigned int type;
 	unsigned int timestamp;
@@ -279,6 +217,7 @@ struct kgsl_cmdstream_freememontimestamp {
  * The flags field may contain a mask KGSL_CONTEXT_*  values
  */
 struct kgsl_drawctxt_create {
+	unsigned int device_id;
 	unsigned int flags;
 	unsigned int drawctxt_id; /*output param */
 };
@@ -288,27 +227,12 @@ struct kgsl_drawctxt_create {
 
 /* destroy a draw context */
 struct kgsl_drawctxt_destroy {
+	unsigned int device_id;
 	unsigned int drawctxt_id;
 };
 
 #define IOCTL_KGSL_DRAWCTXT_DESTROY \
 	_IOW(KGSL_IOC_TYPE, 0x14, struct kgsl_drawctxt_destroy)
-
-/* add a block of pmem, fb, ashmem or user allocated address
- * into the GPU address space */
-struct kgsl_map_user_mem {
-	int fd;
-	unsigned int gpuaddr;   /*output param */
-	unsigned int len;
-	unsigned int offset;
-	unsigned int hostptr;   /*input param */
-	enum kgsl_user_mem_type memtype;
-	unsigned int reserved;	/* May be required to add
-				params for another mem type */
-};
-
-#define IOCTL_KGSL_MAP_USER_MEM \
-	_IOWR(KGSL_IOC_TYPE, 0x15, struct kgsl_map_user_mem)
 
 /* add a block of pmem or fb into the GPU address space */
 struct kgsl_sharedmem_from_pmem {
@@ -363,7 +287,9 @@ struct kgsl_bind_gmem_shadow {
 struct kgsl_sharedmem_from_vmalloc {
 	unsigned int gpuaddr;	/*output param */
 	unsigned int hostptr;
-	unsigned int flags;
+	/* If set from user space then will attempt to
+	 * allocate even if low watermark is crossed */
+	int force_no_low_watermark;
 };
 
 #define IOCTL_KGSL_SHAREDMEM_FROM_VMALLOC \
@@ -373,6 +299,7 @@ struct kgsl_sharedmem_from_vmalloc {
 	_IOW(KGSL_IOC_TYPE, 0x24, struct kgsl_sharedmem_free)
 
 struct kgsl_drawctxt_set_bin_base_offset {
+	unsigned int device_id;
 	unsigned int drawctxt_id;
 	unsigned int offset;
 };
@@ -391,6 +318,7 @@ enum kgsl_cmdwindow_type {
 
 /* write to the command window */
 struct kgsl_cmdwindow_write {
+	unsigned int device_id;
 	enum kgsl_cmdwindow_type target;
 	unsigned int addr;
 	unsigned int data;
@@ -399,12 +327,4 @@ struct kgsl_cmdwindow_write {
 #define IOCTL_KGSL_CMDWINDOW_WRITE \
 	_IOW(KGSL_IOC_TYPE, 0x2e, struct kgsl_cmdwindow_write)
 
-#ifdef __KERNEL__
-#ifdef CONFIG_MSM_KGSL_DRM
-int kgsl_gem_obj_addr(int drm_fd, int handle, unsigned long *start,
-			unsigned long *len);
-#else
-#define kgsl_gem_obj_addr(...) 0
-#endif
-#endif
 #endif /* _MSM_KGSL_H */

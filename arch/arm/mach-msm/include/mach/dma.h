@@ -53,6 +53,9 @@ unsigned int msm_dmov_build_crci_mask(int n, ...);
 #if defined(CONFIG_ARCH_MSM7X30)
 #define DMOV_SD_SIZE 0x400
 #define DMOV_SD_AARM 2
+#elif defined(CONFIG_ARCH_MSM8960)
+#define DMOV_SD_SIZE 0x800
+#define DMOV_SD_AARM 0
 #elif defined(CONFIG_MSM_ADM3)
 #define DMOV_SD_SIZE 0x800
 #define DMOV_SD_MASTER 1
@@ -133,7 +136,7 @@ unsigned int msm_dmov_build_crci_mask(int n, ...);
  * Format of CRCI numbers: crci number + (muxsel << 4)
  */
 
-#ifdef CONFIG_ARCH_MSM8X60
+#if defined(CONFIG_ARCH_MSM8X60)
 #define DMOV_GP_CHAN           15
 
 #define DMOV_NAND_CHAN         17
@@ -179,6 +182,30 @@ unsigned int msm_dmov_build_crci_mask(int n, ...);
 
 #define DMOV_HSUART2_RX_CHAN   8
 #define DMOV_HSUART2_RX_CRCI   14
+
+#elif defined(CONFIG_ARCH_MSM8960)
+#define DMOV_GP_CHAN           13
+
+#define DMOV_CE_IN_CRCI        4
+
+#define DMOV_CE_OUT_CRCI       5
+
+/* SDC doesn't use ADM on 8960. Need these to compile */
+#define DMOV_SDC1_CHAN         13
+#define DMOV_SDC1_CRCI         0
+
+#define DMOV_SDC2_CHAN         13
+#define DMOV_SDC2_CRCI         0
+
+#define DMOV_SDC3_CHAN         13
+#define DMOV_SDC3_CRCI         0
+
+#define DMOV_SDC4_CHAN         13
+#define DMOV_SDC4_CRCI         0
+
+#define DMOV_SDC5_CHAN         13
+#define DMOV_SDC5_CRCI         0
+
 #else
 #define DMOV_GP_CHAN          4
 

@@ -325,6 +325,21 @@ struct platform_device msm_device_smd = {
 	.id		= -1,
 };
 
+struct resource msm_dmov_resource[] = {
+	{
+		.start = ADM_0_SCSS_0_IRQ,
+		.end = (resource_size_t)MSM_DMOV_BASE,
+		.flags = IORESOURCE_IRQ,
+	},
+};
+
+struct platform_device msm_device_dmov = {
+	.name	= "msm_dmov",
+	.id	= -1,
+	.resource = msm_dmov_resource,
+	.num_resources = ARRAY_SIZE(msm_dmov_resource),
+};
+
 static struct platform_device *msm_sdcc_devices[] __initdata = {
 	&msm_device_sdc1,
 	&msm_device_sdc2,

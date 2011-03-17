@@ -180,6 +180,7 @@ static struct msm_i2c_platform_data msm8960_i2c_qup_gsbi4_pdata = {
 };
 
 static struct platform_device *sim_devices[] __initdata = {
+	&msm_device_dmov,
 	&msm_device_smd,
 	&msm8960_device_uart_gsbi2,
 	&msm_device_otg,
@@ -191,6 +192,7 @@ static struct platform_device *sim_devices[] __initdata = {
 };
 
 static struct platform_device *rumi3_devices[] __initdata = {
+	&msm_device_dmov,
 	&msm_device_smd,
 	&msm8960_device_uart_gsbi5,
 	&msm8960_device_qup_i2c_gsbi4,

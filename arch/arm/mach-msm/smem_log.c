@@ -1,4 +1,4 @@
-/* Copyright (c) 2008-2010, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2008-2011, Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -97,6 +97,8 @@ struct smem_log_item {
 static remote_spinlock_t remote_spinlock;
 static remote_spinlock_t remote_spinlock_static;
 static uint32_t smem_log_enable;
+static int smem_log_initialized;
+
 module_param_named(log_enable, smem_log_enable, int,
 		   S_IRUGO | S_IWUSR | S_IWGRP);
 
@@ -1919,6 +1921,7 @@ static int smem_log_initialize(void)
 	}
 
 	smem_log_enable = 1;
+	smem_log_initialized = 1;
 	smem_log_debugfs_init();
 	return ret;
 }
@@ -1929,7 +1932,8 @@ static int modem_notifier(struct notifier_block *this,
 {
 	switch (code) {
 	case MODEM_NOTIFIER_SMSM_INIT:
-		smem_log_initialize();
+		if (!smem_log_initialized)
+			smem_log_initialize();
 		break;
 	default:
 		break;

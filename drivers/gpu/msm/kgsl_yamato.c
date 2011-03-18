@@ -112,6 +112,12 @@ static struct kgsl_yamato_device yamato_device = {
 				.axi_error = REG_MH_AXI_ERROR,
 			},
 		},
+		.pwrctrl = {
+			.pwr_rail = PWR_RAIL_GRP_CLK,
+			.regulator_name = "fs_gfx3d",
+			.irq_name = "kgsl_yamato_irq",
+			.src_clk_name = "grp_src_clk",
+		},
 		.mutex = __MUTEX_INITIALIZER(yamato_device.dev.mutex),
 		.state = KGSL_STATE_INIT,
 		.active_cnt = 0,
@@ -479,145 +485,6 @@ kgsl_yamato_getchipid(struct kgsl_device *device)
 	return chipid;
 }
 
-static int __init
-kgsl_yamato_init_pwrctrl(struct kgsl_device *device,
-			 struct platform_device *pdev)
-{
-	int i, result = 0;
-	struct clk *clk, *grp_clk;
-	struct kgsl_platform_data *pdata = pdev->dev.platform_data;
-	struct kgsl_device_platform_data *pdata_dev = pdata->dev_3d0;
-	struct kgsl_device_pwr_data *pdata_pwr = &pdata_dev->pwr_data;
-
-	/*acquire clocks */
-	BUG_ON(device->pwrctrl.grp_clk != NULL);
-	if (pdata_dev->clk.name.pclk) {
-		clk = clk_get(&pdev->dev, pdata_dev->clk.name.pclk);
-		if (IS_ERR(clk)) {
-			result = PTR_ERR(clk);
-			KGSL_PWR_ERR(device, "clk_get(%s) failed: %d\n",
-				pdata_dev->clk.name.pclk, result);
-			goto done;
-		}
-		device->pwrctrl.grp_pclk = clk;
-	}
-
-	clk = clk_get(&pdev->dev, pdata_dev->clk.name.clk);
-	if (IS_ERR(clk)) {
-		result = PTR_ERR(clk);
-		KGSL_PWR_ERR(device, "clk_get(%s) failed: %d\n",
-				pdata_dev->clk.name.clk, result);
-		goto done;
-	}
-	device->pwrctrl.grp_clk = grp_clk = clk;
-
-	clk = clk_get(&pdev->dev, "grp_src_clk");
-	if (IS_ERR(clk))
-		clk = grp_clk; /* Fallback to slave */
-	device->pwrctrl.grp_src_clk = clk;
-
-	/* put the AXI bus into asynchronous mode with the graphics cores */
-	if (pdata_pwr->set_grp_async != NULL)
-		pdata_pwr->set_grp_async();
-
-	if (pdata_pwr->num_levels > KGSL_MAX_PWRLEVELS) {
-		KGSL_PWR_ERR(device, "invalid power level count: %d\n",
-			pdata_pwr->num_levels);
-		result = -EINVAL;
-		goto done;
-	}
-	device->pwrctrl.num_pwrlevels = pdata_pwr->num_levels;
-	device->pwrctrl.active_pwrlevel = pdata_pwr->init_level;
-	for (i = 0; i < pdata_pwr->num_levels; i++) {
-		device->pwrctrl.pwrlevels[i].gpu_freq =
-			(pdata_pwr->pwrlevel[i].gpu_freq > 0) ?
-			clk_round_rate(clk, pdata_pwr->pwrlevel[i].
-				gpu_freq) : 0;
-		device->pwrctrl.pwrlevels[i].bus_freq =
-			pdata_pwr->pwrlevel[i].bus_freq;
-	}
-	/* Do not set_rate for targets in sync with AXI */
-	if (pdata_pwr->pwrlevel[0].gpu_freq > 0)
-		clk_set_rate(clk, device->pwrctrl.
-			pwrlevels[KGSL_DEFAULT_PWRLEVEL].gpu_freq);
-
-	if (pdata_dev->imem_clk_name.clk != NULL) {
-		clk = clk_get(&pdev->dev, pdata_dev->imem_clk_name.clk);
-		if (IS_ERR(clk)) {
-			result = PTR_ERR(clk);
-			KGSL_PWR_ERR(device, "clk_get(%s) failed: %d\n",
-				 pdata_dev->imem_clk_name.clk, result);
-			goto done;
-		}
-		device->pwrctrl.imem_clk = clk;
-	}
-
-	if (pdata_dev->imem_clk_name.pclk != NULL) {
-		clk = clk_get(&pdev->dev, pdata_dev->imem_clk_name.pclk);
-		if (IS_ERR(clk)) {
-			result = PTR_ERR(clk);
-
-			KGSL_PWR_ERR(device, "clk_get(%s) failed: %d\n",
-				 pdata_dev->imem_clk_name.pclk, result);
-			goto done;
-		}
-		device->pwrctrl.imem_pclk = clk;
-	}
-
-	device->pwrctrl.gpu_reg = regulator_get(NULL, "fs_gfx3d");
-	if (IS_ERR(device->pwrctrl.gpu_reg))
-		device->pwrctrl.gpu_reg = NULL;
-
-	device->pwrctrl.power_flags = KGSL_PWRFLAGS_CLK_OFF |
-		KGSL_PWRFLAGS_AXI_OFF | KGSL_PWRFLAGS_POWER_OFF |
-		KGSL_PWRFLAGS_IRQ_OFF;
-	device->pwrctrl.nap_allowed = pdata_pwr->nap_allowed;
-	device->pwrctrl.ebi1_clk = clk_get(NULL, "ebi1_kgsl_clk");
-	if (IS_ERR(device->pwrctrl.ebi1_clk))
-		device->pwrctrl.ebi1_clk = NULL;
-	else
-		clk_set_rate(device->pwrctrl.ebi1_clk,
-			device->pwrctrl.
-				pwrlevels[device->pwrctrl.active_pwrlevel].
-					 bus_freq);
-	if (pdata_dev->clk.bus_scale_table != NULL) {
-		device->pwrctrl.pcl =
-		msm_bus_scale_register_client(pdata_dev->clk.bus_scale_table);
-		if (!device->pwrctrl.pcl) {
-			KGSL_PWR_ERR(device,
-				     "msm_bus_scale_register_client failed: "
-				     "id %d table %p", device->id,
-				     pdata_dev->clk.bus_scale_table);
-			result = -EINVAL;
-			goto done;
-		}
-	}
-
-	device->pwrctrl.pwr_rail = PWR_RAIL_GRP_CLK;
-	device->pwrctrl.interval_timeout = pdata_pwr->idle_timeout;
-
-	if (internal_pwr_rail_mode(device->pwrctrl.pwr_rail,
-						PWR_RAIL_CTL_MANUAL)) {
-		KGSL_PWR_ERR(device, "internal_pwr_rail_mode failed\n");
-		result = -EINVAL;
-		goto done;
-	}
-
-	/*acquire yamato interrupt */
-	device->pwrctrl.interrupt_num =
-	platform_get_irq_byname(pdev, "kgsl_yamato_irq");
-
-	if (device->pwrctrl.interrupt_num <= 0) {
-		KGSL_PWR_ERR(device, "platform_get_irq_byname failed: %d\n",
-			device->pwrctrl.interrupt_num);
-		result = -EINVAL;
-		goto done;
-	}
-
-done:
-	return result;
-}
-
 int __init
 kgsl_yamato_init(struct platform_device *pdev)
 {
@@ -626,9 +493,10 @@ kgsl_yamato_init(struct platform_device *pdev)
 	struct kgsl_memregion *regspace = &device->regspace;
 	struct resource *res = NULL;
 	struct kgsl_platform_data *pdata = pdev->dev.platform_data;
+	struct kgsl_device_platform_data *pdata_dev = pdata->dev_3d0;
 	struct kgsl_core_platform_data *pdata_core = pdata->core;
 
-	status = kgsl_yamato_init_pwrctrl(device, pdev);
+	status = kgsl_pwrctrl_init(device, pdev, pdata_dev);
 
 	if (status)
 		return status;

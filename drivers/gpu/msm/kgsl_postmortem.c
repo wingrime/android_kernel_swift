@@ -476,7 +476,8 @@ static int kgsl_dump_yamato(struct kgsl_device *device)
 	KGSL_LOG_DUMP(device, "POWER: INTERVAL TIMEOUT = %08X ",
 		pwr->interval_timeout);
 
-	KGSL_LOG_DUMP(device, "GRP_CLK = %lu ", kgsl_get_clkrate(pwr->grp_clk));
+	KGSL_LOG_DUMP(device, "GRP_CLK = %lu ",
+				  kgsl_get_clkrate(pwr->grp_clks[0]));
 
 	KGSL_LOG_DUMP(device, "BUS CLK = %lu ",
 		kgsl_get_clkrate(pwr->ebi1_clk));

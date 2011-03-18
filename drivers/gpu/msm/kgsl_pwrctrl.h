@@ -50,17 +50,16 @@
 #define KGSL_PWRFLAGS_IRQ_OFF		0x00000080
 
 #define KGSL_DEFAULT_PWRLEVEL 1
+#define KGSL_MAX_CLKS 5
+
+struct platform_device;
 
 struct kgsl_pwrctrl {
 	int interrupt_num;
 	int have_irq;
 	unsigned int pwr_rail;
 	struct clk *ebi1_clk;
-	struct clk *grp_clk;
-	struct clk *grp_pclk;
-	struct clk *grp_src_clk;
-	struct clk *imem_clk;
-	struct clk *imem_pclk;
+	struct clk *grp_clks[KGSL_MAX_CLKS];
 	unsigned int power_flags;
 	struct kgsl_pwrlevel pwrlevels[KGSL_MAX_PWRLEVELS];
 	unsigned int active_pwrlevel;
@@ -71,12 +70,18 @@ struct kgsl_pwrctrl {
 	uint32_t pcl;
 	unsigned int nap_allowed;
 	struct kgsl_yamato_context *suspended_ctxt;
+	const char *regulator_name;
+	const char *irq_name;
+	const char *src_clk_name;
 };
 
 void kgsl_pwrctrl_clk(struct kgsl_device *device, unsigned int pwrflag);
 void kgsl_pwrctrl_axi(struct kgsl_device *device, unsigned int pwrflag);
 void kgsl_pwrctrl_pwrrail(struct kgsl_device *device, unsigned int pwrflag);
 void kgsl_pwrctrl_irq(struct kgsl_device *device, unsigned int pwrflag);
+int kgsl_pwrctrl_init(struct kgsl_device *device,
+			struct platform_device *pdev,
+			struct kgsl_device_platform_data *pdata_dev);
 void kgsl_pwrctrl_close(struct kgsl_device *device);
 void kgsl_timer(unsigned long data);
 void kgsl_idle_check(struct work_struct *work);

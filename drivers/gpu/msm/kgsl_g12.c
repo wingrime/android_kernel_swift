@@ -120,13 +120,16 @@ static struct kgsl_g12_device device_2d0 = {
 				.axi_error = ADDR_MH_AXI_ERROR,
 			},
 		},
+		.pwrctrl = {
+			.pwr_rail = PWR_RAIL_GRP_2D_CLK,
+			.regulator_name = "fs_gfx2d0",
+			.irq_name = "kgsl_2d0_irq",
+		},
 		.mutex = __MUTEX_INITIALIZER(device_2d0.dev.mutex),
 		.state = KGSL_STATE_INIT,
 		.active_cnt = 0,
 	},
 	.iomemname = "kgsl_2d0_reg_memory",
-	.irqname = "kgsl_2d0_irq",
-	.regulator = "fs_gfx2d0",
 };
 
 static struct kgsl_g12_device device_2d1 = {
@@ -161,13 +164,16 @@ static struct kgsl_g12_device device_2d1 = {
 				.axi_error = ADDR_MH_AXI_ERROR,
 			},
 		},
+		.pwrctrl = {
+			.pwr_rail = PWR_RAIL_GRP_2D_CLK,
+			.regulator_name = "fs_gfx2d1",
+			.irq_name = "kgsl_2d1_irq",
+		},
 		.mutex = __MUTEX_INITIALIZER(device_2d1.dev.mutex),
 		.state = KGSL_STATE_INIT,
 		.active_cnt = 0,
 	},
 	.iomemname = "kgsl_2d1_reg_memory",
-	.irqname = "kgsl_2d1_irq",
-	.regulator = "fs_gfx2d1",
 };
 
 irqreturn_t kgsl_g12_isr(int irq, void *data)
@@ -298,129 +304,6 @@ int kgsl_g12_setstate(struct kgsl_device *device, uint32_t flags)
 	return 0;
 }
 
-static int __init
-kgsl_g12_init_pwrctrl(struct kgsl_device *device,
-		      struct platform_device *pdev)
-{
-	int i, result = 0;
-	const char *pclk_name;
-	struct clk *clk, *pclk;
-	struct kgsl_platform_data *pdata = pdev->dev.platform_data;
-	struct kgsl_device_platform_data *pdata_dev = NULL;
-	struct kgsl_device_pwr_data *pdata_pwr = NULL;
-	struct kgsl_g12_device *g12_device = KGSL_G12_DEVICE(device);
-	struct msm_bus_scale_pdata *bus_table = NULL;
-
-	if (device->id == KGSL_DEVICE_2D0)
-		pdata_dev = pdata->dev_2d0;
-	else
-		pdata_dev = pdata->dev_2d1;
-
-	pdata_pwr = &pdata_dev->pwr_data;
-
-	clk = clk_get(&pdev->dev, pdata_dev->clk.name.clk);
-	pclk = clk_get(&pdev->dev, pdata_dev->clk.name.pclk);
-	pclk_name = pdata_dev->clk.name.pclk;
-	bus_table = pdata_dev->clk.bus_scale_table;
-
-	/* error check resources */
-	if (IS_ERR(clk)) {
-		clk = NULL;
-		result = PTR_ERR(clk);
-		KGSL_PWR_ERR(device, "clk_get(%s) failed: %d\n",
-			pdata_dev->clk.name.clk, result);
-		goto done;
-	}
-
-	if (pclk_name && IS_ERR(pclk)) {
-		pclk = NULL;
-		result = PTR_ERR(pclk);
-		KGSL_PWR_ERR(device, "clk_get(%s): failed %d\n",
-			pclk_name, result);
-		goto done;
-	}
-
-	device->pwrctrl.gpu_reg = regulator_get(NULL, g12_device->regulator);
-
-	if (IS_ERR(device->pwrctrl.gpu_reg))
-		device->pwrctrl.gpu_reg = NULL;
-
-	device->pwrctrl.interrupt_num =
-		platform_get_irq_byname(pdev, g12_device->irqname);
-
-	if (device->pwrctrl.interrupt_num <= 0) {
-		KGSL_PWR_ERR(device, "platform_get_irq_byname failed: %d\n",
-			device->pwrctrl.interrupt_num);
-		result = -EINVAL;
-		goto done;
-	}
-
-	/* save resources to pwrctrl struct */
-	if (pdata_pwr->set_grp_async != NULL)
-		pdata_pwr->set_grp_async();
-
-	if (pdata_pwr->num_levels > KGSL_MAX_PWRLEVELS) {
-		KGSL_PWR_ERR(device, "invalid power level count: %d\n",
-			pdata_pwr->num_levels);
-		result = -EINVAL;
-		goto done;
-	}
-	device->pwrctrl.num_pwrlevels = pdata_pwr->num_levels;
-	device->pwrctrl.active_pwrlevel = pdata_pwr->init_level;
-	for (i = 0; i < pdata_pwr->num_levels; i++) {
-		device->pwrctrl.pwrlevels[i].gpu_freq =
-			(pdata_pwr->pwrlevel[i].gpu_freq > 0) ?
-			clk_round_rate(clk,
-			pdata_pwr->pwrlevel[i].gpu_freq) : 0;
-		device->pwrctrl.pwrlevels[i].bus_freq =
-			pdata_pwr->pwrlevel[i].bus_freq;
-	}
-	/* Do not set_rate for cores in sync with AXI. */
-	if (pdata_pwr->pwrlevel[0].gpu_freq > 0)
-		clk_set_rate(clk, device->pwrctrl.
-			pwrlevels[KGSL_DEFAULT_PWRLEVEL]. gpu_freq);
-
-	device->pwrctrl.power_flags = KGSL_PWRFLAGS_CLK_OFF |
-		KGSL_PWRFLAGS_AXI_OFF | KGSL_PWRFLAGS_POWER_OFF |
-		KGSL_PWRFLAGS_IRQ_OFF;
-	device->pwrctrl.nap_allowed = pdata_pwr->nap_allowed;
-	device->pwrctrl.grp_clk = clk;
-	device->pwrctrl.grp_src_clk = clk;
-	device->pwrctrl.grp_pclk = pclk;
-	device->pwrctrl.pwr_rail = PWR_RAIL_GRP_2D_CLK;
-	device->pwrctrl.interval_timeout = pdata_pwr->idle_timeout;
-
-	if (internal_pwr_rail_mode(device->pwrctrl.pwr_rail,
-						PWR_RAIL_CTL_MANUAL)) {
-		KGSL_PWR_ERR(device, "internal_pwr_rail_mode failed\n");
-		result = -EINVAL;
-		goto done;
-	}
-
-	clk = clk_get(NULL, "ebi1_kgsl_clk");
-	if (IS_ERR(clk))
-		clk = NULL;
-	else
-		clk_set_rate(clk,
-			device->pwrctrl.
-				pwrlevels[device->pwrctrl.active_pwrlevel].
-					 bus_freq);
-	device->pwrctrl.ebi1_clk = clk;
-
-	if (bus_table) {
-		device->pwrctrl.pcl = msm_bus_scale_register_client(bus_table);
-		if (!device->pwrctrl.pcl) {
-			KGSL_PWR_ERR(device,
-				"msm_bus_scale_register_client failed: "
-				"id %d table %p", device->id, bus_table);
-			result = -EINVAL;
-			goto done;
-		}
-	}
-done:
-	return result;
-}
-
 int __init
 _kgsl_g12_init(struct kgsl_device *device, struct platform_device *pdev)
 {
@@ -429,8 +312,13 @@ _kgsl_g12_init(struct kgsl_device *device, struct platform_device *pdev)
 	struct kgsl_g12_device *g12_device = KGSL_G12_DEVICE(device);
 	struct resource *res;
 	struct kgsl_platform_data *pdata = pdev->dev.platform_data;
+	struct kgsl_device_platform_data *pdata_dev;
 
-	kgsl_g12_init_pwrctrl(device, pdev);
+	if (device->id == KGSL_DEVICE_2D0)
+		pdata_dev = pdata->dev_2d0;
+	else
+		pdata_dev = pdata->dev_2d1;
+	kgsl_pwrctrl_init(device, pdev, pdata_dev);
 
 	/* initilization of timestamp wait */
 	init_waitqueue_head(&(g12_device->wait_timestamp_wq));

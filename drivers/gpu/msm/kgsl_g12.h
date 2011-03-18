@@ -39,8 +39,6 @@ struct kgsl_g12_ringbuffer {
 struct kgsl_g12_device {
 	struct kgsl_device dev;    /* Must be first field in this struct */
 	const char *iomemname;
-	const char *irqname;
-	const char *regulator;
 	int current_timestamp;
 	int timestamp;
 	wait_queue_head_t wait_timestamp_wq;

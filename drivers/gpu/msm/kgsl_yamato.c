@@ -891,7 +891,6 @@ static int kgsl_yamato_start(struct kgsl_device *device, unsigned int init_ram)
 		goto error_irq_off;
 
 	mod_timer(&device->idle_timer, jiffies + FIRST_TIMEOUT);
-	status = KGSL_SUCCESS;
 #ifdef CONFIG_KGSL_PER_PROCESS_PAGE_TABLE
 	pr_info("kgsl: initialized dev=%d mmu=%s "
 		"per_process_pagetable=on\n",
@@ -1242,7 +1241,7 @@ static unsigned int kgsl_yamato_isidle(struct kgsl_device *device)
 /* Caller must hold the driver mutex. */
 static int kgsl_yamato_resume_context(struct kgsl_device *device)
 {
-	int status = KGSL_SUCCESS;
+	int status = 0;
 	struct kgsl_yamato_device *yamato_device = KGSL_YAMATO_DEVICE(device);
 
 	if (device->pwrctrl.suspended_ctxt != NULL) {
@@ -1259,7 +1258,7 @@ static int kgsl_yamato_resume_context(struct kgsl_device *device)
 /* Caller must hold the device mutex. */
 static int kgsl_yamato_suspend_context(struct kgsl_device *device)
 {
-	int status = KGSL_SUCCESS;
+	int status = 0;
 	struct kgsl_yamato_device *yamato_device = KGSL_YAMATO_DEVICE(device);
 
 	/* save ctxt ptr and switch to NULL ctxt */
@@ -1460,10 +1459,10 @@ static long kgsl_yamato_ioctl(struct kgsl_device_private *dev_priv,
 
 }
 
-int kgsl_yamato_getfunctable(struct kgsl_functable *ftbl)
+void kgsl_yamato_getfunctable(struct kgsl_functable *ftbl)
 {
 	if (ftbl == NULL)
-		return KGSL_FAILURE;
+		return;
 	ftbl->device_regread = kgsl_yamato_regread;
 	ftbl->device_regwrite = kgsl_yamato_regwrite;
 	ftbl->device_setstate = kgsl_yamato_setstate;
@@ -1482,6 +1481,4 @@ int kgsl_yamato_getfunctable(struct kgsl_functable *ftbl)
 	ftbl->device_ioctl = kgsl_yamato_ioctl;
 	ftbl->device_setup_pt = kgsl_yamato_setup_pt;
 	ftbl->device_cleanup_pt = kgsl_yamato_cleanup_pt;
-
-	return KGSL_SUCCESS;
 }

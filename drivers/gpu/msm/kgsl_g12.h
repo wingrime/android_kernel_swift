@@ -61,7 +61,7 @@ int __init kgsl_g12_config(struct kgsl_devconfig *,
 int __init kgsl_g12_init(struct platform_device *pdev);
 int kgsl_g12_close(void);
 
-int kgsl_g12_getfunctable(struct kgsl_functable *ftbl);
+void kgsl_g12_getfunctable(struct kgsl_functable *ftbl);
 
 
 #endif /* _KGSL_G12_H */

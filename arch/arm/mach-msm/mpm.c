@@ -38,9 +38,10 @@ enum {
 	MSM_MPM_DEBUG_NON_DETECTABLE_IRQ = BIT(0),
 	MSM_MPM_DEBUG_PENDING_IRQ = BIT(1),
 	MSM_MPM_DEBUG_WRITE = BIT(2),
+	MSM_MPM_DEBUG_NON_DETECTABLE_IRQ_IDLE = BIT(3),
 };
 
-static int msm_mpm_debug_mask;
+static int msm_mpm_debug_mask = 1;
 module_param_named(
 	debug_mask, msm_mpm_debug_mask, int, S_IRUGO | S_IWUSR | S_IWGRP
 );
@@ -455,10 +456,20 @@ int msm_mpm_set_pin_type(enum msm_mpm_pin pin, unsigned int flow_type)
 
 bool msm_mpm_irqs_detectable(bool from_idle)
 {
-	unsigned long *apps_irq_bitmap = from_idle ?
-			msm_mpm_enabled_apps_irqs : msm_mpm_wake_apps_irqs;
+	unsigned long *apps_irq_bitmap;
+	int debug_mask;
 
-	if (MSM_MPM_DEBUG_NON_DETECTABLE_IRQ & msm_mpm_debug_mask) {
+	if (from_idle) {
+		apps_irq_bitmap = msm_mpm_enabled_apps_irqs;
+		debug_mask = msm_mpm_debug_mask &
+					MSM_MPM_DEBUG_NON_DETECTABLE_IRQ_IDLE;
+	} else {
+		apps_irq_bitmap = msm_mpm_wake_apps_irqs;
+		debug_mask = msm_mpm_debug_mask &
+					MSM_MPM_DEBUG_NON_DETECTABLE_IRQ;
+	}
+
+	if (debug_mask) {
 		static char buf[DIV_ROUND_UP(MSM_MPM_NR_APPS_IRQS, 32)*9+1];
 
 		bitmap_scnprintf(buf, sizeof(buf), apps_irq_bitmap,
@@ -536,6 +547,7 @@ static int __init msm_mpm_early_init(void)
 
 	return 0;
 }
+core_initcall(msm_mpm_early_init);
 
 static int __init msm_mpm_init(void)
 {
@@ -569,6 +581,4 @@ init_free_bail:
 init_bail:
 	return rc;
 }
-
-core_initcall(msm_mpm_early_init);
 device_initcall(msm_mpm_init);

@@ -507,7 +507,7 @@ _kgsl_g12_init(struct kgsl_device *device, struct platform_device *pdev)
 		goto error_close_cmdstream;
 
 	status = kgsl_sharedmem_alloc_coherent(&device->memstore,
-						sizeof(device->memstore));
+					sizeof(struct kgsl_devmemstore));
 	if (status != 0)
 		goto error_close_mmu;
 

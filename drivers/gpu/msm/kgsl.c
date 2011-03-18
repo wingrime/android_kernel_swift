@@ -105,16 +105,66 @@ kgsl_destroy_context(struct kgsl_device_private *dev_priv,
 	idr_remove(&dev_priv->device->context_idr, id);
 }
 
-static void kgsl_runpending(struct kgsl_device *device)
+/* to be called when a process is destroyed, this walks the memqueue and
+ * frees any entryies that belong to the dying process
+ */
+static void kgsl_memqueue_cleanup(struct kgsl_device *device,
+				     struct kgsl_process_private *private)
 {
-	kgsl_cmdstream_memqueue_drain(device);
+	struct kgsl_mem_entry *entry, *entry_tmp;
+
+	BUG_ON(!mutex_is_locked(&device->mutex));
+
+	list_for_each_entry_safe(entry, entry_tmp, &device->memqueue, list) {
+		if (entry->priv == private) {
+			list_del(&entry->list);
+			kgsl_destroy_mem_entry(entry);
+		}
+	}
 }
 
-static void kgsl_runpending_unlocked(struct kgsl_device *device)
+static void kgsl_memqueue_freememontimestamp(struct kgsl_device *device,
+				  struct kgsl_mem_entry *entry,
+				  uint32_t timestamp,
+				  enum kgsl_timestamp_type type)
+{
+	BUG_ON(!mutex_is_locked(&device->mutex));
+
+	entry->free_timestamp = timestamp;
+
+	list_add_tail(&entry->list, &device->memqueue);
+}
+
+static void kgsl_memqueue_drain(struct kgsl_device *device)
+{
+	struct kgsl_mem_entry *entry, *entry_tmp;
+	uint32_t ts_processed;
+
+	BUG_ON(!mutex_is_locked(&device->mutex));
+
+	/* get current EOP timestamp */
+	ts_processed = device->ftbl.device_cmdstream_readtimestamp(
+					device,
+					KGSL_TIMESTAMP_RETIRED);
+
+	list_for_each_entry_safe(entry, entry_tmp, &device->memqueue, list) {
+		KGSL_MEM_INFO(device,
+			"ts_processed %d ts_free %d gpuaddr %x)\n",
+			ts_processed, entry->free_timestamp,
+			entry->memdesc.gpuaddr);
+		if (!timestamp_cmp(ts_processed, entry->free_timestamp))
+			break;
+
+		list_del(&entry->list);
+		kgsl_destroy_mem_entry(entry);
+	}
+}
+
+static void kgsl_memqueue_drain_unlocked(struct kgsl_device *device)
 {
 	mutex_lock(&device->mutex);
 	kgsl_check_suspended(device);
-	kgsl_runpending(device);
+	kgsl_memqueue_drain(device);
 	mutex_unlock(&device->mutex);
 }
 
@@ -524,7 +574,7 @@ static int kgsl_release(struct inode *inodep, struct file *filep)
 	/* clean up any to-be-freed entries that belong to this
 	 * process and this device
 	 */
-	kgsl_cmdstream_memqueue_cleanup(device, private);
+	kgsl_memqueue_cleanup(device, private);
 
 	mutex_unlock(&device->mutex);
 	kfree(dev_priv);
@@ -787,7 +837,7 @@ static long kgsl_ioctl_device_waittimestamp(struct kgsl_device_private
 	/* order reads to the buffer written to by the GPU */
 	rmb();
 
-	kgsl_runpending(dev_priv->device);
+	kgsl_memqueue_drain(dev_priv->device);
 
 	/* Fire off any pending suspend operations that are in flight */
 
@@ -972,9 +1022,9 @@ static long kgsl_ioctl_cmdstream_freememontimestamp(struct kgsl_device_private
 		if (entry->memdesc.priv & KGSL_MEMFLAGS_VMALLOC_MEM)
 			entry->memdesc.priv &= ~KGSL_MEMFLAGS_CACHE_MASK;
 #endif
-		kgsl_cmdstream_freememontimestamp(dev_priv->device, entry,
+		kgsl_memqueue_freememontimestamp(dev_priv->device, entry,
 					param->timestamp, param->type);
-		kgsl_runpending(dev_priv->device);
+		kgsl_memqueue_drain(dev_priv->device);
 	} else {
 		KGSL_DRV_ERR(dev_priv->device,
 			"invalid gpuaddr %08x\n", param->gpuaddr);
@@ -1122,7 +1172,7 @@ kgsl_ioctl_sharedmem_from_vmalloc(struct kgsl_device_private *dev_priv,
 		return -ENODEV;
 
 	/* Make sure all pending freed memory is collected */
-	kgsl_runpending_unlocked(dev_priv->device);
+	kgsl_memqueue_drain_unlocked(dev_priv->device);
 
 	if (!param->hostptr) {
 		KGSL_CORE_ERR("invalid hostptr %x\n", param->hostptr);
@@ -1276,7 +1326,7 @@ static long kgsl_ioctl_map_user_mem(struct kgsl_device_private *dev_priv,
 	struct file *file_ptr = NULL;
 	uint64_t total_offset;
 
-	kgsl_runpending_unlocked(dev_priv->device);
+	kgsl_memqueue_drain_unlocked(dev_priv->device);
 
 	switch (param->memtype) {
 	case KGSL_USER_MEM_TYPE_PMEM:

@@ -216,4 +216,10 @@ static inline struct kgsl_device *kgsl_device_from_dev(struct device *dev)
 	return NULL;
 }
 
+static inline bool timestamp_cmp(unsigned int new, unsigned int old)
+{
+	int ts_diff = new - old;
+	return (ts_diff >= 0) || (ts_diff < -20000);
+}
+
 #endif /* _GSL_DRIVER_H */

@@ -61,32 +61,10 @@
 
 struct kgsl_mem_entry;
 
-int kgsl_cmdstream_init(struct kgsl_device *device);
-
 int kgsl_cmdstream_close(struct kgsl_device *device);
-
-void kgsl_cmdstream_memqueue_drain(struct kgsl_device *device);
 
 uint32_t
 kgsl_cmdstream_readtimestamp(struct kgsl_device *device,
 			     enum kgsl_timestamp_type type);
-
-void kgsl_cmdstream_memqueue_cleanup(struct kgsl_device *device,
-				     struct kgsl_process_private *private);
-
-void
-kgsl_cmdstream_freememontimestamp(struct kgsl_device *device,
-				  struct kgsl_mem_entry *entry,
-				  uint32_t timestamp,
-				  enum kgsl_timestamp_type type);
-
-void kgsl_cmdstream_memqueue_cleanup(struct kgsl_device *device,
-				     struct kgsl_process_private *private);
-
-static inline bool timestamp_cmp(unsigned int new, unsigned int old)
-{
-	int ts_diff = new - old;
-	return (ts_diff >= 0) || (ts_diff < -20000);
-}
 
 #endif /* __KGSL_CMDSTREAM_H */

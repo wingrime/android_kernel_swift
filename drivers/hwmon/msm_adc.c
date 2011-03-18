@@ -30,6 +30,7 @@
 #include <linux/msm_adc.h>
 #include <linux/pmic8058-xoadc.h>
 #include <linux/slab.h>
+#include <linux/semaphore.h>
 
 #include <mach/dal.h>
 
@@ -57,6 +58,22 @@ enum dal_error {
 enum dal_result_status {
 	DAL_RESULT_STATUS_INVALID,
 	DAL_RESULT_STATUS_VALID
+};
+
+struct dal_conv_state {
+	struct dal_conv_slot		context[MSM_ADC_DEV_MAX_INFLIGHT];
+	struct list_head		slots;
+	struct mutex			list_lock;
+	struct semaphore		slot_count;
+};
+
+struct adc_dev {
+	char				*name;
+	uint32_t			nchans;
+	struct dal_conv_state		conv;
+	struct dal_translation		transl;
+	struct sensor_device_attribute	*sens_attr;
+	char				**fnames;
 };
 
 struct msm_adc_drv {
@@ -1385,10 +1402,12 @@ static int msm_adc_probe(struct platform_device *pdev)
 	msm_adc_drv = msm_adc;
 	msm_adc->pdev = pdev;
 
-	rc = msm_adc_init_hwmon(pdev, msm_adc);
-	if (rc) {
-		dev_err(&pdev->dev, "msm_adc_dev_init failed\n");
-		goto err_cleanup;
+	if (pdata->target_hw == MSM_8x60) {
+		rc = msm_adc_init_hwmon(pdev, msm_adc);
+		if (rc) {
+			dev_err(&pdev->dev, "msm_adc_dev_init failed\n");
+			goto err_cleanup;
+		}
 	}
 
 	msm_adc->hwmon = hwmon_device_register(&pdev->dev);
@@ -1415,8 +1434,13 @@ static int msm_adc_probe(struct platform_device *pdev)
 	if (!msm_adc->wq)
 		goto err_cleanup;
 
-	if (pdata->num_adc > 0)
-		platform_driver_register(&msm_adc_rpcrouter_remote_driver);
+	if (pdata->num_adc > 0) {
+		if (pdata->target_hw == MSM_8x60)
+			platform_driver_register(
+				&msm_adc_rpcrouter_remote_driver);
+		else
+			msm_rpc_adc_init(pdev);
+	}
 
 	pr_info("msm_adc successfully registered\n");
 

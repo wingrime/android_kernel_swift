@@ -28,8 +28,16 @@
 #endif
 
 ENTRY(msm_arch_idle)
+#ifdef CONFIG_MSM_JTAG_V7
+	stmfd	sp!, {lr}
+	bl	msm_save_jtag_debug
+#endif
 	wfi
-	bx      lr
+#ifdef CONFIG_MSM_JTAG_V7
+	bl	msm_restore_jtag_debug
+	ldmfd	sp!, {lr}
+#endif
+	bx	lr
 
 ENTRY(msm_pm_collapse)
 #if defined(CONFIG_MSM_FIQ_SUPPORT)
@@ -86,7 +94,9 @@ ENTRY(msm_pm_collapse)
 #if defined(CONFIG_MSM_FIQ_SUPPORT)
 	cpsie   f
 #endif
-
+#ifdef CONFIG_MSM_JTAG_V7
+	bl	msm_restore_jtag_debug
+#endif
 	ldr     r0, =saved_state        /* restore registers */
 #if defined(CONFIG_NR_CPUS) && (CONFIG_NR_CPUS >= 2)
 	mrc	p15, 0, r1, c0, c0, 5	/* MPIDR */

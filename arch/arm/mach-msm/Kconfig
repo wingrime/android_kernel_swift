@@ -1296,6 +1296,13 @@ config MSM_DLOAD_MODE
 		make the kernel reboot on a kernel panic - that must be
 		enabled via another mechanism.
 
+config MSM_ETM
+	tristate "Enable MSM ETM and ETB"
+	depends on ARCH_MSM8X60
+	select MSM_JTAG_V7
+	help
+		This enables embedded trace collection on Qualcomm v7 CPUs.
+
 config MSM_SLEEP_STATS
 	bool "Enable exporting of MSM sleep stats to userspace"
 	depends on CPU_IDLE

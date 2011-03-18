@@ -119,6 +119,7 @@ struct kgsl_mmu_reg {
 	uint32_t interrupt_mask;
 	uint32_t interrupt_status;
 	uint32_t interrupt_clear;
+	uint32_t axi_error;
 };
 
 struct kgsl_mmu {

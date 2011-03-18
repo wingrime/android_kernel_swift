@@ -108,7 +108,8 @@ static struct kgsl_yamato_device yamato_device = {
 				.invalidate = REG_MH_MMU_INVALIDATE,
 				.interrupt_mask = REG_MH_INTERRUPT_MASK,
 				.interrupt_status = REG_MH_INTERRUPT_STATUS,
-				.interrupt_clear = REG_MH_INTERRUPT_CLEAR
+				.interrupt_clear = REG_MH_INTERRUPT_CLEAR,
+				.axi_error = REG_MH_AXI_ERROR,
 			},
 		},
 		.mutex = __MUTEX_INITIALIZER(yamato_device.dev.mutex),

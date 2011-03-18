@@ -1269,6 +1269,22 @@ static int vfe31_start(void)
 static void vfe31_update(void)
 {
 	unsigned long flags;
+	CDBG("vfe31_update\n");
+
+	if (vfe31_ctrl->update_gamma) {
+		if (!msm_io_r(vfe31_ctrl->vfebase + V31_GAMMA_CFG_OFF))
+			msm_io_w(7, vfe31_ctrl->vfebase+V31_GAMMA_CFG_OFF);
+		else
+			msm_io_w(0, vfe31_ctrl->vfebase+V31_GAMMA_CFG_OFF);
+		vfe31_ctrl->update_gamma = false;
+	}
+	if (vfe31_ctrl->update_luma) {
+		if (!msm_io_r(vfe31_ctrl->vfebase + V31_LUMA_CFG_OFF))
+			msm_io_w(1, vfe31_ctrl->vfebase + V31_LUMA_CFG_OFF);
+		else
+			msm_io_w(0, vfe31_ctrl->vfebase + V31_LUMA_CFG_OFF);
+		vfe31_ctrl->update_luma = false;
+	}
 	spin_lock_irqsave(&vfe31_ctrl->update_ack_lock, flags);
 	vfe31_ctrl->update_ack_pending = TRUE;
 	spin_unlock_irqrestore(&vfe31_ctrl->update_ack_lock, flags);
@@ -1709,7 +1725,29 @@ static int vfe31_proc_general(struct msm_vfe31_cmd *cmd)
 		}
 		break;
 
-	case V31_LA_CFG:
+	case V31_LA_CFG:{
+		cmdp = kmalloc(cmd->length, GFP_ATOMIC);
+		if (!cmdp) {
+			rc = -ENOMEM;
+			goto proc_general_done;
+		}
+		if (copy_from_user(cmdp,
+			(void __user *)(cmd->value),
+			cmd->length)) {
+
+			rc = -EFAULT;
+			goto proc_general_done;
+		}
+		/* Select Bank 0*/
+		*cmdp = 0;
+		msm_io_memcpy(vfe31_ctrl->vfebase + vfe31_cmd[cmd->id].offset,
+				cmdp, (vfe31_cmd[cmd->id].length));
+		cmdp += 1;
+		vfe31_write_la_cfg(LUMA_ADAPT_LUT_RAM_BANK0 , cmdp);
+		cmdp -= 1;
+		}
+		break;
+
 	case V31_LA_UPDATE: {
 		cmdp = kmalloc(cmd->length, GFP_ATOMIC);
 		if (!cmdp) {
@@ -1723,15 +1761,13 @@ static int vfe31_proc_general(struct msm_vfe31_cmd *cmd)
 			rc = -EFAULT;
 			goto proc_general_done;
 		}
-		msm_io_memcpy(vfe31_ctrl->vfebase + vfe31_cmd[cmd->id].offset,
-				cmdp, (vfe31_cmd[cmd->id].length));
-
-		old_val = *cmdp;
+		old_val = msm_io_r(vfe31_ctrl->vfebase + V31_LUMA_CFG_OFF);
 		cmdp += 1;
-		if (old_val == 0x0)
+		if (old_val != 0x0)
 			vfe31_write_la_cfg(LUMA_ADAPT_LUT_RAM_BANK0 , cmdp);
 		else
 			vfe31_write_la_cfg(LUMA_ADAPT_LUT_RAM_BANK1 , cmdp);
+		vfe31_ctrl->update_luma = true;
 		cmdp -= 1;
 		}
 		break;
@@ -1770,6 +1806,8 @@ static int vfe31_proc_general(struct msm_vfe31_cmd *cmd)
 			rc = -EFAULT;
 			goto proc_general_done;
 		}
+		/* Select Bank 0*/
+		*cmdp = 0;
 		msm_io_memcpy(vfe31_ctrl->vfebase + V31_RGB_G_OFF,
 				cmdp, 4);
 		cmdp += 1;
@@ -1791,12 +1829,10 @@ static int vfe31_proc_general(struct msm_vfe31_cmd *cmd)
 			rc = -EFAULT;
 			goto proc_general_done;
 		}
-
-		msm_io_memcpy(vfe31_ctrl->vfebase + V31_RGB_G_OFF, cmdp, 4);
-		old_val = *cmdp;
+		old_val = msm_io_r(vfe31_ctrl->vfebase + V31_GAMMA_CFG_OFF);
 		cmdp += 1;
 
-		if (old_val) {
+		if (!old_val) {
 			vfe31_write_gamma_cfg(RGBLUT_RAM_CH0_BANK1 , cmdp);
 			vfe31_write_gamma_cfg(RGBLUT_RAM_CH1_BANK1 , cmdp);
 			vfe31_write_gamma_cfg(RGBLUT_RAM_CH2_BANK1 , cmdp);
@@ -1804,7 +1840,8 @@ static int vfe31_proc_general(struct msm_vfe31_cmd *cmd)
 			vfe31_write_gamma_cfg(RGBLUT_RAM_CH0_BANK0 , cmdp);
 			vfe31_write_gamma_cfg(RGBLUT_RAM_CH1_BANK0 , cmdp);
 			vfe31_write_gamma_cfg(RGBLUT_RAM_CH2_BANK0 , cmdp);
-		}
+			}
+		vfe31_ctrl->update_gamma = true;
 		cmdp -= 1;
 		}
 		break;
@@ -3454,6 +3491,9 @@ static int vfe31_resource_init(struct msm_vfe_callback *presp,
 	vfe31_ctrl->syncdata = sdata;
 	vfe31_ctrl->vfemem = vfemem;
 	vfe31_ctrl->vfeio  = vfeio;
+	vfe31_ctrl->update_gamma = false;
+	vfe31_ctrl->update_luma = false;
+
 	return 0;
 
 cmd_init_failed3:

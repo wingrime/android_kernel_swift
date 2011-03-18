@@ -315,6 +315,10 @@ enum  VFE_STATE {
 #define V31_DEMOSAIC_2_OFF        0x0000029C
 #define V31_DEMOSAIC_2_LEN        8
 
+/* gamma VFE_LUT_BANK_SEL*/
+#define V31_GAMMA_CFG_OFF         0x000003BC
+#define V31_LUMA_CFG_OFF          0x000003C0
+
 #define V31_OUT_CLAMP_OFF         0x00000524
 #define V31_OUT_CLAMP_LEN         8
 
@@ -1020,6 +1024,8 @@ struct vfe31_ctrl_type {
 	int8_t req_stop_video_rec;
 	int8_t output0_available;
 	int8_t output1_available;
+	int8_t update_gamma;
+	int8_t update_luma;
 	spinlock_t  tasklet_lock;
 	struct list_head tasklet_q;
 	int vfeirq;

@@ -1772,6 +1772,10 @@ static uint32 mdp4_overlay_get_perf_level(uint32 width, uint32 height,
 		return OVERLAY_PERF_LEVEL1;
 	}
 
+	if (ctrl->ov_pipe[OVERLAY_PIPE_VG1].ref_cnt &&
+		ctrl->ov_pipe[OVERLAY_PIPE_VG2].ref_cnt)
+		return OVERLAY_PERF_LEVEL1;
+
 	if (width*height <= OVERLAY_VGA_SIZE)
 		return OVERLAY_PERF_LEVEL4;
 	else if (width*height <= OVERLAY_720P_TILE_SIZE)
@@ -1924,7 +1928,9 @@ int mdp4_overlay_unset(struct fb_info *info, int ndx)
 
 	mdp4_overlay_pipe_free(pipe);
 
-	mdp4_del_res_rel = 1;
+	if (!(ctrl->ov_pipe[OVERLAY_PIPE_VG1].ref_cnt +
+		ctrl->ov_pipe[OVERLAY_PIPE_VG2].ref_cnt))
+		mdp4_del_res_rel = 1;
 
 	mutex_unlock(&mfd->dma->ov_mutex);
 

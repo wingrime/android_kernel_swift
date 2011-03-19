@@ -274,9 +274,11 @@ void kgsl_mh_intrcallback(struct kgsl_device *device)
 	kgsl_regread(device, device->mmu.reg.interrupt_status, &status);
 
 	if (status & MH_INTERRUPT_MASK__AXI_READ_ERROR) {
-		KGSL_MEM_CRIT(device, "axi read error interrupt\n");
+		kgsl_regread(device, device->mmu.reg.axi_error, &reg);
+		KGSL_MEM_CRIT(device, "axi read error interrupt: %08x\n", reg);
 	} else if (status & MH_INTERRUPT_MASK__AXI_WRITE_ERROR) {
-		KGSL_MEM_CRIT(device, "axi write error interrupt\n");
+		kgsl_regread(device, device->mmu.reg.axi_error, &reg);
+		KGSL_MEM_CRIT(device, "axi write error interrupt: %08x\n", reg);
 	} else if (status & MH_INTERRUPT_MASK__MMU_PAGE_FAULT) {
 		kgsl_regread(device, device->mmu.reg.page_fault, &reg);
 		KGSL_MEM_CRIT(device, "mmu page fault interrupt: %08x\n", reg);

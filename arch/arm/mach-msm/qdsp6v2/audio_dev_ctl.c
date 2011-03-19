@@ -27,6 +27,7 @@
 #include <mach/qdsp6v2/audio_dev_ctl.h>
 #include <mach/debug_mm.h>
 #include <mach/qdsp6v2/apr_audio.h>
+#include <mach/qdsp6v2/q6afe.h>
 #include "q6adm.h"
 
 #ifndef MAX
@@ -128,16 +129,19 @@ EXPORT_SYMBOL(msm_reset_all_device);
 int msm_set_copp_id(int session_id, int copp_id)
 {
 	int rc = 0;
+	int index;
 
 	if (session_id < 1 || session_id > 8)
 		return -EINVAL;
-	if (copp_id < 0 || copp_id > AFE_MAX_PORTS)
+	if (afe_validate_port(copp_id) < 0)
 		return -EINVAL;
-	pr_debug("%s: session[%d] copp_id[%d]\n", __func__, session_id,
-						copp_id);
+
+	index = afe_get_port_index(copp_id);
+	pr_debug("%s: session[%d] copp_id[%d] index[%d]\n", __func__,
+			session_id, copp_id, index);
 	mutex_lock(&routing_info.copp_list_mutex);
-	if (routing_info.copp_list[session_id][copp_id] == DEVICE_IGNORE)
-		routing_info.copp_list[session_id][copp_id] = copp_id;
+	if (routing_info.copp_list[session_id][index] == DEVICE_IGNORE)
+		routing_info.copp_list[session_id][index] = copp_id;
 	mutex_unlock(&routing_info.copp_list_mutex);
 
 	return rc;
@@ -147,13 +151,15 @@ EXPORT_SYMBOL(msm_set_copp_id);
 int msm_clear_copp_id(int session_id, int copp_id)
 {
 	int rc = 0;
+	int index = afe_get_port_index(copp_id);
+
 	if (session_id < 1 || session_id > 8)
 		return -EINVAL;
-	pr_debug("%s: session[%d] copp_id[%d]\n", __func__, session_id,
-						copp_id);
+	pr_debug("%s: session[%d] copp_id[%d] index[%d]\n", __func__,
+			session_id, copp_id, index);
 	mutex_lock(&routing_info.copp_list_mutex);
-	if (routing_info.copp_list[session_id][copp_id] == copp_id)
-		routing_info.copp_list[session_id][copp_id] = DEVICE_IGNORE;
+	if (routing_info.copp_list[session_id][index] == copp_id)
+		routing_info.copp_list[session_id][index] = DEVICE_IGNORE;
 	mutex_unlock(&routing_info.copp_list_mutex);
 
 	return rc;
@@ -322,10 +328,18 @@ int msm_snddev_set_dec(int popp_id, int copp_id, int set,
 
 	mutex_lock(&routing_info.adm_mutex);
 	if (set) {
-		rc = adm_open(copp_id, popp_id, PLAYBACK, rate, mode,
+		rc = adm_open(copp_id, PLAYBACK, rate, mode,
 			DEFAULT_COPP_TOPOLOGY);
 		if (rc < 0) {
 			pr_err("%s: adm open fail rc[%d]\n", __func__, rc);
+			rc = -EINVAL;
+			goto fail_cmd;
+		}
+
+		rc = adm_matrix_map(popp_id, PLAYBACK, 1, &copp_id);
+		if (rc < 0) {
+			pr_err("%s: matrix map failed rc[%d]\n", __func__, rc);
+			adm_close(copp_id);
 			rc = -EINVAL;
 			goto fail_cmd;
 		}
@@ -448,10 +462,17 @@ int msm_snddev_set_enc(int popp_id, int copp_id, int set,
 			rate = 16000;
 		}
 		mutex_unlock(&adm_tx_topology_tbl.lock);
-		rc = adm_open(copp_id, popp_id, LIVE_RECORDING, rate, mode,
-			topology);
+		rc = adm_open(copp_id, LIVE_RECORDING, rate, mode, topology);
 		if (rc < 0) {
 			pr_err("%s: adm open fail rc[%d]\n", __func__, rc);
+			rc = -EINVAL;
+			goto fail_cmd;
+		}
+
+		rc = adm_matrix_map(popp_id, LIVE_RECORDING, 1, &copp_id);
+		if (rc < 0) {
+			pr_err("%s: matrix map failed rc[%d]\n", __func__, rc);
+			adm_close(copp_id);
 			rc = -EINVAL;
 			goto fail_cmd;
 		}

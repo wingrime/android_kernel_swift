@@ -36,6 +36,8 @@
 #define CDBG(fmt, args...) do { } while (0)
 #endif
 
+#define PAD_TO_2K(a, b) ((!b) ? a : (((a)+2047) & ~2047))
+
 #define MSM_CAMERA_MSG 0
 #define MSM_CAMERA_EVT 1
 #define NUM_WB_EXP_NEUTRAL_REGION_LINES 4
@@ -85,19 +87,25 @@ enum vfe_resp_msg {
 };
 
 enum vpe_resp_msg {
-	VPE_EVENT,
 	VPE_MSG_GENERAL,
-	VPE_MSG_SNAPSHOT,
-	VPE_MSG_OUTPUT_P,   /* preview (continuous mode ) */
-	VPE_MSG_OUTPUT_T,   /* thumbnail (snapshot mode )*/
-	VPE_MSG_OUTPUT_S,   /* main image (snapshot mode )*/
 	VPE_MSG_OUTPUT_V,   /* video   (continuous mode ) */
+	VPE_MSG_OUTPUT_ST_L,
+	VPE_MSG_OUTPUT_ST_R,
 };
 
 enum msm_camera_type {
 	BACK_CAMERA_2D,
 	FRONT_CAMERA_2D,
 	BACK_CAMERA_3D,
+};
+
+enum msm_stereo_state {
+	STEREO_VIDEO_IDLE,
+	STEREO_VIDEO_ACTIVE,
+	STEREO_SNAP_IDLE,
+	STEREO_SNAP_STARTED,
+	STEREO_SNAP_BUFFER1_PROCESSING,
+	STEREO_SNAP_BUFFER2_PROCESSING,
 };
 
 struct msm_vpe_phy_info {
@@ -144,7 +152,7 @@ struct msm_vpe_buf_info {
 
 struct msm_vfe_resp {
 	enum vfe_resp_msg type;
-	struct msm_vfe_evt_msg evt_msg;
+	struct msm_cam_evt_msg evt_msg;
 	struct msm_vfe_phy_info phy;
 	struct msm_vpe_buf_info vpe_bf;
 	void    *extdata;
@@ -153,7 +161,7 @@ struct msm_vfe_resp {
 
 struct msm_vpe_resp {
 	enum vpe_resp_msg type;
-	struct msm_vpe_evt_msg evt_msg;
+	struct msm_cam_evt_msg evt_msg;
 	struct msm_vpe_phy_info phy;
 	void    *extdata;
 	int32_t extlen;
@@ -189,8 +197,11 @@ struct msm_camvpe_fn {
 	int (*vpe_reg)(struct msm_vpe_callback *);
 	int (*vpe_cfg_update) (void *);
 	void (*send_frame_to_vpe) (uint32_t y_phy, uint32_t cbcr_phy,
-							struct timespec *ts);
+		struct timespec *ts, int output_id);
 	int (*vpe_config)(struct msm_vpe_cfg_cmd *, void *);
+	void (*vpe_cfg_offset)(int frame_pack, uint32_t pyaddr,
+		uint32_t pcbcraddr, struct timespec *ts, int output_id,
+		int32_t x, int32_t y, int32_t frameid, struct msm_st_crop);
 	int *dis;
 };
 
@@ -200,6 +211,8 @@ struct msm_sensor_ctrl {
 	int (*s_config)(void __user *);
 	enum msm_camera_type s_camera_type;
 	uint32_t s_mount_angle;
+	enum msm_st_frame_packing s_video_packing;
+	enum msm_st_frame_packing s_snap_packing;
 };
 struct msm_strobe_flash_ctrl {
 	int (*strobe_flash_init)
@@ -291,6 +304,13 @@ struct msm_sync {
 	struct list_head list;
 	uint8_t liveshot_enabled;
 	struct msm_cam_v4l2_device *pcam_sync;
+
+	uint8_t stereocam_enabled;
+	struct msm_queue_cmd *pp_stereocam;
+	struct msm_queue_cmd *pp_stereocam2;
+	struct msm_queue_cmd *pp_stereosnap;
+	enum msm_stereo_state stereo_state;
+
 	spinlock_t pmem_frame_spinlock;
 	spinlock_t pmem_stats_spinlock;
 	spinlock_t abort_pict_lock;

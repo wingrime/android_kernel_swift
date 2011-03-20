@@ -34,3 +34,4 @@ obj-$(CONFIG_WEBCAM_OV9726) += ov9726.o ov9726_reg.o
 obj-$(CONFIG_WEBCAM_OV7692) += ov7692.o
 obj-$(CONFIG_MT9D112) += mt9d112.o mt9d112_reg.o
 obj-$(CONFIG_MSM_GEMINI) += msm_gemini_dev.o msm_gemini_sync.o msm_gemini_core.o msm_gemini_hw.o msm_gemini_platform.o
+obj-$(CONFIG_ISX005) += isx005.o isx005_reg.o

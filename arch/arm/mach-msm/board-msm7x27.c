@@ -1128,15 +1128,23 @@ static struct i2c_board_info i2c_devices[] = {
 		I2C_BOARD_INFO("vb6801", 0x20),
 	},
 #endif
+/*ISX005 Camera */
+#ifdef CONFIG_ISX005
+  	{
+		I2C_BOARD_INFO("isx005", 0x1A),
+	},
+#endif /*CONFIG_ISX005*/
+	
+	
 };
 
 #ifdef CONFIG_MSM_CAMERA
 static uint32_t camera_off_gpio_table[] = {
 	/* parallel CAMERA interfaces */
-	GPIO_CFG(0,  0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), /* DAT0 */
-	GPIO_CFG(1,  0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), /* DAT1 */
-	GPIO_CFG(2,  0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), /* DAT2 */
-	GPIO_CFG(3,  0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), /* DAT3 */
+//	GPIO_CFG(0,  0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), /* DAT0 */
+//	GPIO_CFG(1,  0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), /* DAT1 */
+//	GPIO_CFG(2,  0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), /* DAT2 */
+//	GPIO_CFG(3,  0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), /* DAT3 */
 	GPIO_CFG(4,  0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), /* DAT4 */
 	GPIO_CFG(5,  0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), /* DAT5 */
 	GPIO_CFG(6,  0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), /* DAT6 */
@@ -1153,10 +1161,10 @@ static uint32_t camera_off_gpio_table[] = {
 
 static uint32_t camera_on_gpio_table[] = {
 	/* parallel CAMERA interfaces */
-	GPIO_CFG(0,  1, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), /* DAT0 */
-	GPIO_CFG(1,  1, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), /* DAT1 */
-	GPIO_CFG(2,  1, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), /* DAT2 */
-	GPIO_CFG(3,  1, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), /* DAT3 */
+	//GPIO_CFG(0,  1, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), /* DAT0 */
+	//GPIO_CFG(1,  1, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), /* DAT1 */
+//	GPIO_CFG(2,  1, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), /* DAT2 */
+//	GPIO_CFG(3,  1, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), /* DAT3 */
 	GPIO_CFG(4,  1, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), /* DAT4 */
 	GPIO_CFG(5,  1, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), /* DAT5 */
 	GPIO_CFG(6,  1, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), /* DAT6 */
@@ -1291,12 +1299,12 @@ int pmic_set_flash_led_current(enum pmic8058_leds id, unsigned mA)
 
 static struct msm_camera_sensor_flash_src msm_flash_src = {
 	.flash_sr_type = MSM_CAMERA_FLASH_SRC_PMIC,
-	._fsrc.pmic_src.num_of_src = 1,
-	._fsrc.pmic_src.low_current  = 30,
-	._fsrc.pmic_src.high_current = 100,
-	._fsrc.pmic_src.led_src_1 = 0,
-	._fsrc.pmic_src.led_src_2 = 0,
-	._fsrc.pmic_src.pmic_set_current = pmic_set_flash_led_current,
+//	._fsrc.pmic_src.num_of_src = 1,
+//	._fsrc.pmic_src.low_current  = 30,
+//	._fsrc.pmic_src.high_current = 100,
+//	._fsrc.pmic_src.led_src_1 = 0,
+//	._fsrc.pmic_src.led_src_2 = 0,
+//	._fsrc.pmic_src.pmic_set_current = pmic_set_flash_led_current,
 };
 
 #ifdef CONFIG_MT9D112
@@ -1500,13 +1508,38 @@ static struct platform_device ram_console_device = {
    .num_resources = ARRAY_SIZE(ram_console_resource),
    .resource = ram_console_resource,
 };
-
+/*Keyboard LEDS*/
 static struct platform_device swift_keyled_device = {
 	.name = "swift-keyled",
 };
- static struct platform_device swift_atcmd = {
+
+static struct platform_device swift_atcmd = {
      .name = "alohag_atcmd",
 };
+/*ISX005 Camera*/
+#ifdef CONFIG_ISX005
+static struct msm_camera_sensor_flash_data flash_isx005 = {
+	.flash_type = MSM_CAMERA_FLASH_NONE,
+	.flash_src  = &msm_flash_src
+};
+
+static struct msm_camera_sensor_info msm_camera_sensor_isx005_data = {
+	.sensor_name    = "isx005",
+	.sensor_reset   = 0,
+	.sensor_pwd     = 1,
+//	.vcm_pwd        = 0,
+	.pdata          = &msm_camera_device_data,
+	.flash_data     = &flash_isx005
+};
+
+static struct platform_device msm_camera_sensor_isx005 = {
+	.name      = "msm_camera_isx005",
+	.dev       = {
+		.platform_data = &msm_camera_sensor_isx005_data,
+	},
+};
+#endif /*CONFIG_ISX005*/
+
 static struct platform_device *devices[] __initdata = {
 	&msm_device_uart3,
 	&msm_device_smd,
@@ -1574,9 +1607,13 @@ static struct platform_device *devices[] __initdata = {
 	&msm_bluesleep_device,
 #ifdef CONFIG_ARCH_MSM7X27
 	&msm_device_kgsl,
+	/*ISX005 Camera*/
+#ifdef CONFIG_ISX005
+	&msm_camera_sensor_isx005,
+#endif /*CONFIG_ISX005*/	
 #endif
 #if defined(CONFIG_TSIF) || defined(CONFIG_TSIF_MODULE)
-//	&msm_device_tsif,
+	&msm_device_tsif,
 #endif
 	&hs_device,
 	&msm_batt_device,
@@ -1924,7 +1961,7 @@ msm_i2c_gpio_config(int iface, int config_type)
 }
 
 static struct msm_i2c_platform_data msm_i2c_pdata = {
-	.clk_freq = 100000,
+	.clk_freq = 400000,
 	.rmutex  = 0,
 	.pri_clk = 60,
 	.pri_dat = 61,
@@ -1971,6 +2008,27 @@ static void usb_mpp_init(void)
 	}
 }
 
+static void swift_init_pmic(void) 
+{
+	static struct vreg *vreg_aux2;
+	int rc = 0;
+
+	vreg_aux2 = vreg_get(NULL, "gp5");
+	if (IS_ERR(vreg_aux2)) {
+		printk(KERN_ERR "%s: vreg get failed (%ld)\n",
+				__func__, PTR_ERR(vreg_aux2));
+		return;
+	}
+
+	rc = vreg_set_level(vreg_aux2, 0);
+	if (!rc)
+		rc = vreg_enable(vreg_mmc);
+	if (rc)
+		printk(KERN_ERR "%s: return val: %d \n",
+				__func__, rc);
+
+	return;
+}
 static void msm7x27_wlan_init(void)
 {
 	int rc = 0;
@@ -2071,9 +2129,10 @@ static void __init msm7x2x_init(void)
 #ifdef CONFIG_MSM_CAMERA
 	config_camera_off_gpios(); /* might not be necessary */
 #endif
+	printk(KERN_INFO "Init swift i2c...\n");
 	msm_device_i2c_init();
 	i2c_register_board_info(0, i2c_devices, ARRAY_SIZE(i2c_devices));
-
+	printk(KERN_INFO "Init swift keypad...\n");
 #ifdef CONFIG_SURF_FFA_GPIO_KEYPAD
 	if (machine_is_msm7x25_ffa() || machine_is_msm7x27_ffa())
 		platform_device_register(&keypad_device_7k_ffa);
@@ -2085,8 +2144,10 @@ static void __init msm7x2x_init(void)
 	//lcdc_gordon_gpio_init();
 	msm_fb_add_devices();
 #ifdef CONFIG_USB_EHCI_MSM
+	printk(KERN_INFO "Init swift host...\n");
 	msm7x2x_init_host();
 #endif
+	printk(KERN_INFO "Init swift  mmc...\n");
 	msm7x2x_init_mmc();
 	bt_power_init();
 
@@ -2096,6 +2157,7 @@ static void __init msm7x2x_init(void)
 	else
 		msm_pm_set_platform_data(msm7x25_pm_data,
 					ARRAY_SIZE(msm7x25_pm_data));
+
 	msm7x27_wlan_init();	
 	swift_init_timed_vibrator();
 	
@@ -2240,7 +2302,7 @@ MACHINE_START(MSM7X27_SURF, "QCT MSM7x27 SURF")
 	.timer		= &msm_timer,
 MACHINE_END
 
-MACHINE_START(MSM7X27_SWIFT, "QCT MSM7x27 SWIFT")
+MACHINE_START(MSM7X27_SWIFT, "MSM7x27 Swift (Optimus)")
 #ifdef CONFIG_MSM_DEBUG_UART
 	.phys_io        = MSM_DEBUG_UART_PHYS,
 	.io_pg_offst    = ((MSM_DEBUG_UART_BASE) >> 18) & 0xfffc,

@@ -2630,13 +2630,6 @@ sub process {
 			ERROR("Use of $1 is deprecated: see Documentation/spinlocks.txt\n" . $herecurr);
 		}
 
-# readl & writel are unsafe, use the _relaxed variants
-		if ($line =~ /\b((?:read|write)l)\b/) {
-			ERROR("Use of $1 is deprecated: use $1_relaxed\n\t" .
-			      "with appropriate memory barriers instead.\n" .
-			      $herecurr);
-		}
-
 # warn about #if 0
 		if ($line =~ /^.\s*\#\s*if\s+0\b/) {
 			WARN("if this code is redundant consider removing it\n"

@@ -140,6 +140,7 @@ struct othc_hsed_config {
 	struct othc_accessory_info *accessories;
 	int othc_num_accessories;
 	int video_out_gpio;
+	int ir_gpio;
 };
 
 struct pmic8058_othc_config_pdata {

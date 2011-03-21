@@ -64,7 +64,7 @@ struct bt_security {
 
 #define BT_DEFER_SETUP	7
 
-#define BT_AMP_POLICY          8
+#define BT_AMP_POLICY          9
 
 /* Require BR/EDR (default policy)
  *   AMP controllers cannot be used

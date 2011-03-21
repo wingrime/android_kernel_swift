@@ -144,11 +144,6 @@ struct kgsl_mem_entry {
 	struct kgsl_process_private *priv;
 };
 
-enum kgsl_status {
-	KGSL_SUCCESS = 0,
-	KGSL_FAILURE = 1
-};
-
 #ifdef CONFIG_MSM_KGSL_MMU_PAGE_FAULT
 #define MMU_CONFIG 2
 #else

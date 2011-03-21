@@ -711,7 +711,7 @@ static int kgsl_g12_getproperty(struct kgsl_device *device,
 
 int kgsl_g12_idle(struct kgsl_device *device, unsigned int timeout)
 {
-	int status = KGSL_SUCCESS;
+	int status = 0;
 	struct kgsl_g12_device *g12_device = KGSL_G12_DEVICE(device);
 
 	if (g12_device->current_timestamp > g12_device->timestamp)
@@ -741,7 +741,7 @@ static int kgsl_g12_resume_context(struct kgsl_device *device)
 {
 	/* Context is in the pre-amble, automatically restored. */
 
-	return KGSL_SUCCESS;
+	return 0;
 }
 
 static int kgsl_g12_suspend_context(struct kgsl_device *device)
@@ -750,7 +750,7 @@ static int kgsl_g12_suspend_context(struct kgsl_device *device)
 
 	g12_device->ringbuffer.prevctx = KGSL_G12_INVALID_CONTEXT;
 
-	return KGSL_SUCCESS;
+	return 0;
 }
 
 int kgsl_g12_regread(struct kgsl_device *device, unsigned int offsetwords,
@@ -891,11 +891,11 @@ static long kgsl_g12_ioctl(struct kgsl_device_private *dev_priv,
 
 }
 
-int kgsl_g12_getfunctable(struct kgsl_functable *ftbl)
+void kgsl_g12_getfunctable(struct kgsl_functable *ftbl)
 {
 
 	if (ftbl == NULL)
-		return KGSL_FAILURE;
+		return;
 	ftbl->device_regread = kgsl_g12_regread;
 	ftbl->device_regwrite = kgsl_g12_regwrite;
 	ftbl->device_setstate = kgsl_g12_setstate;
@@ -914,6 +914,4 @@ int kgsl_g12_getfunctable(struct kgsl_functable *ftbl)
 	ftbl->device_ioctl = kgsl_g12_ioctl;
 	ftbl->device_setup_pt = kgsl_g12_setup_pt;
 	ftbl->device_cleanup_pt = kgsl_g12_cleanup_pt;
-
-	return KGSL_SUCCESS;
 }

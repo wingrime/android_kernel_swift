@@ -55,6 +55,6 @@ int kgsl_yamato_regread(struct kgsl_device *device, unsigned int offsetwords,
 				unsigned int *value);
 int kgsl_yamato_regwrite(struct kgsl_device *device, unsigned int offsetwords,
 				unsigned int value);
-int kgsl_yamato_getfunctable(struct kgsl_functable *ftbl);
+void kgsl_yamato_getfunctable(struct kgsl_functable *ftbl);
 
 #endif /*_KGSL_YAMATO_H */

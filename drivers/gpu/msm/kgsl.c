@@ -105,23 +105,17 @@ kgsl_destroy_context(struct kgsl_device_private *dev_priv,
 	idr_remove(&dev_priv->device->context_idr, id);
 }
 
-static int kgsl_runpending(struct kgsl_device *device)
+static void kgsl_runpending(struct kgsl_device *device)
 {
 	kgsl_cmdstream_memqueue_drain(device);
-
-	return KGSL_SUCCESS;
 }
 
-static int kgsl_runpending_unlocked(struct kgsl_device *device)
+static void kgsl_runpending_unlocked(struct kgsl_device *device)
 {
-	int ret;
-
 	mutex_lock(&device->mutex);
 	kgsl_check_suspended(device);
-	ret = kgsl_runpending(device);
+	kgsl_runpending(device);
 	mutex_unlock(&device->mutex);
-
-	return ret;
 }
 
 static void kgsl_check_idle_locked(struct kgsl_device *device)
@@ -129,7 +123,7 @@ static void kgsl_check_idle_locked(struct kgsl_device *device)
 	if (device->pwrctrl.nap_allowed == true &&
 	    device->state & KGSL_STATE_ACTIVE) {
 		device->requested_state = KGSL_STATE_NAP;
-		if (kgsl_pwrctrl_sleep(device) == KGSL_FAILURE)
+		if (kgsl_pwrctrl_sleep(device) != 0)
 			mod_timer(&device->idle_timer,
 				  jiffies +
 				  device->pwrctrl.interval_timeout);
@@ -346,7 +340,7 @@ static int kgsl_suspend(struct platform_device *dev, pm_message_t state)
 			KGSL_PWR_ERR(device, "suspend fail, device %d\n",
 					device->id);
 			mutex_unlock(&device->mutex);
-			return KGSL_FAILURE;
+			return -EINVAL;
 		}
 		device->requested_state = KGSL_STATE_NONE;
 		device->pwrctrl.nap_allowed = nap_allowed_saved;
@@ -354,13 +348,13 @@ static int kgsl_suspend(struct platform_device *dev, pm_message_t state)
 		mutex_unlock(&device->mutex);
 		KGSL_PWR_WARN(device, "suspend end\n");
 	}
-	return KGSL_SUCCESS;
+	return 0;
 }
 
 /*Resume function*/
 static int kgsl_resume(struct platform_device *dev)
 {
-	int i, status = KGSL_SUCCESS;
+	int i, status = -EINVAL;
 	struct kgsl_device *device;
 
 	for (i = 0; i < KGSL_DEVICE_MAX; i++) {
@@ -374,7 +368,7 @@ static int kgsl_resume(struct platform_device *dev)
 		if (device->state == KGSL_STATE_SUSPEND) {
 			device->requested_state = KGSL_STATE_ACTIVE;
 			status = device->ftbl.device_start(device, 0);
-			if (status == KGSL_SUCCESS) {
+			if (status == 0) {
 				device->state = KGSL_STATE_ACTIVE;
 				KGSL_PWR_WARN(device,
 					"state -> ACTIVE, device %d\n",
@@ -1673,15 +1667,13 @@ static int kgsl_pm_suspend(struct device *dev)
 {
 	pm_message_t arg = {0};
 	dev_dbg(dev, "pm: suspending...\n");
-	kgsl_suspend(NULL, arg);
-	return 0;
+	return kgsl_suspend(NULL, arg);
 }
 
 static int kgsl_pm_resume(struct device *dev)
 {
 	dev_dbg(dev, "pm: resuming...\n");
-	kgsl_resume(NULL);
-	return 0;
+	return kgsl_resume(NULL);
 }
 
 static int kgsl_runtime_suspend(struct device *dev)

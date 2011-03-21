@@ -1917,7 +1917,7 @@ static struct msm_camera_sensor_flash_data flash_ov7692 = {
 };
 static struct msm_camera_sensor_info msm_camera_sensor_ov7692_data = {
 	.sensor_name	= "ov7692",
-	.sensor_reset	= 106,
+	.sensor_reset	= GPIO_WEB_CAMIF_RESET_N,
 	.sensor_pwd	= 85,
 	.vcm_pwd	= 1,
 	.vcm_enable	= 0,

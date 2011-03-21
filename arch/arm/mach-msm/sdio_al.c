@@ -540,6 +540,22 @@ struct sdio_al_device {
 	int flashless_boot_on;
 };
 
+/*
+ * On the kernel command line specify
+ * sdio_al.debug_lpm_on=1 to enable the LPM debug messages
+ * By default the LPM debug messages are turned off
+ */
+static int debug_lpm_on;
+module_param(debug_lpm_on, int, 0);
+
+/*
+ * On the kernel command line specify
+ * sdio_al.debug_data_on=1 to enable the DATA debug messages
+ * By default the DATA debug messages are turned off
+ */
+static int debug_data_on;
+module_param(debug_data_on, int, 0);
+
 /** The driver context */
 static struct sdio_al *sdio_al;
 
@@ -570,7 +586,6 @@ static void sdio_al_print_info(void);
 			func);					\
 		sdio_al_print_info();				\
 	} while (0)
-
 
 #ifdef CONFIG_DEBUG_FS
 static int debug_info_open(struct inode *inode, struct file *file)
@@ -3507,8 +3522,8 @@ static int __init sdio_al_init(void)
 
 	sdio_al->unittest_mode = false;
 
-	sdio_al->debug.debug_lpm_on = 0;
-	sdio_al->debug.debug_data_on = 0;
+	sdio_al->debug.debug_lpm_on = debug_lpm_on;
+	sdio_al->debug.debug_data_on = debug_data_on;
 
 #ifdef CONFIG_DEBUG_FS
 	sdio_al_debugfs_init();

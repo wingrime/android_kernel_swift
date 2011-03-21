@@ -293,6 +293,10 @@ static u32 ddl_decoder_seq_done_callback(struct ddl_context *ddl_context,
 		}
 		ddl_calculate_stride(&decoder->frame_size,
 			!decoder->progressive_only);
+		decoder->frame_size.scan_lines =
+		DDL_ALIGN(decoder->frame_size.height, DDL_TILE_ALIGN_HEIGHT);
+		decoder->frame_size.stride =
+		DDL_ALIGN(decoder->frame_size.width, DDL_TILE_ALIGN_WIDTH);
 		parse_hdr_crop_data(ddl, &seq_hdr_info);
 		if (decoder->codec.codec == VCD_CODEC_H264 &&
 			seq_hdr_info.level > VIDC_1080P_H264_LEVEL4) {

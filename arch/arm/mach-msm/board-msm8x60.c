@@ -3372,7 +3372,7 @@ static struct sx150x_platform_data sx150x_data[] __initdata = {
 	[SX150X_CORE] = {
 		.gpio_base         = GPIO_CORE_EXPANDER_BASE,
 		.oscio_is_gpo      = false,
-		.io_pullup_ena     = 0x0408,
+		.io_pullup_ena     = 0x0c08,
 		.io_pulldn_ena     = 0x4060,
 		.io_open_drain_ena = 0x000c,
 		.io_polarity       = 0,
@@ -4767,6 +4767,7 @@ static struct othc_hsed_config hsed_config_1 = {
 	.switch_debounce_ms = 1500,
 	.othc_support_n_switch = false,
 	.switch_config = &switch_config,
+	.ir_gpio = -1,
 	/* Accessory info */
 	.accessories_support = true,
 	.accessories = othc_accessories,
@@ -4855,6 +4856,10 @@ static void __init msm8x60_init_pm8058_othc(void)
 		hsed_config_1.accessories_adc_channel = CHANNEL_ADC_HDSET,
 		hsed_config_1.othc_support_n_switch = true;
 	}
+
+	/* IR GPIO is absent on FLUID */
+	if (machine_is_msm8x60_fluid())
+		hsed_config_1.ir_gpio = -1;
 
 	for (i = 0; i < ARRAY_SIZE(othc_accessories); i++) {
 		if (machine_is_msm8x60_fluid()) {

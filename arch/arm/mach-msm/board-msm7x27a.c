@@ -28,6 +28,7 @@
 #include <linux/mtd/nand.h>
 #include <linux/mtd/partitions.h>
 #include <asm/mach/mmc.h>
+#include <mach/socinfo.h>
 
 #define MSM_EBI2_PHYS 0xa0d00000
 
@@ -177,6 +178,10 @@ static void __init msm7x2x_init_irq(void)
 
 static void __init msm7x2x_init(void)
 {
+	if (socinfo_init() < 0)
+		printk(KERN_ERR "%s: socinfo_init() failed!\n",
+		       __func__);
+
 	if (machine_is_msm7x27a_rumi3()) {
 		msm7x27a_init_ebi2();
 		msm_device_i2c_init();

@@ -2825,9 +2825,12 @@ static u32 free_acdb_cache_node(union auddev_evt_data *evt)
 {
 	u32 session_id;
 	if ((evt->audcal_info.dev_type & TX_DEVICE) == 2) {
+		/*Second argument to find_first_bit should be maximum number
+		of bits interested
+		*/
 		session_id = find_first_bit(
 				(unsigned long *)&(evt->audcal_info.sessions),
-				sizeof(evt->audcal_info.sessions));
+				sizeof(evt->audcal_info.sessions) * 8);
 		MM_DBG("freeing node %d for tx device", session_id);
 		acdb_cache_tx[session_id].
 			node_status = ACDB_VALUES_NOT_FILLED;

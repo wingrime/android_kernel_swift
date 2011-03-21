@@ -197,6 +197,7 @@ static struct platform_device *rumi3_devices[] __initdata = {
 	&msm_device_dmov,
 	&msm_device_smd,
 	&msm8960_device_uart_gsbi5,
+	&msm_device_kgsl_8960,
 	&msm8960_device_qup_i2c_gsbi4,
 	&msm_device_wcnss_wlan,
 };

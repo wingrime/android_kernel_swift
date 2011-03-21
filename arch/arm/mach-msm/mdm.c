@@ -45,6 +45,8 @@ static void (*power_on_charm)(void);
 static void (*power_down_charm)(void);
 
 static int charm_debug_on;
+static int charm_status_irq;
+static int charm_errfatal_irq;
 
 #define CHARM_DBG(...)	do { if (charm_debug_on) \
 					pr_info(__VA_ARGS__); \
@@ -61,7 +63,10 @@ static void __soc_restart(void)
 static int charm_panic_prep(struct notifier_block *this,
 				unsigned long event, void *ptr)
 {
-	CHARM_DBG("%s: setting AP2MDM_ERRFATAL high\n", __func__);
+	CHARM_DBG("%s: setting AP2MDM_ERRFATAL high for a non graceful reset\n",
+			 __func__);
+	disable_irq_nosync(charm_errfatal_irq);
+	disable_irq_nosync(charm_status_irq);
 	gpio_set_value(AP2MDM_ERRFATAL, 1);
 	return NOTIFY_DONE;
 }
@@ -171,7 +176,7 @@ static irqreturn_t charm_errfatal(int irq, void *dev_id)
 	if (successful_boot) {
 		pr_info("%s: scheduling work now\n", __func__);
 		schedule_work(&charm_fatal_work);
-		disable_irq_nosync(MSM_GPIO_TO_INT(MDM2AP_ERRFATAL));
+		disable_irq_nosync(charm_errfatal_irq);
 	}
 	return IRQ_HANDLED;
 }
@@ -183,7 +188,7 @@ static irqreturn_t charm_status_change(int irq, void *dev_id)
 	if (successful_boot) {
 		pr_info("%s: scheduling work now\n", __func__);
 		schedule_work(&charm_status_work);
-		disable_irq_nosync(MSM_GPIO_TO_INT(MDM2AP_STATUS));
+		disable_irq_nosync(charm_status_irq);
 	}
 	return IRQ_HANDLED;
 }
@@ -254,7 +259,9 @@ static int __init charm_modem_probe(struct platform_device *pdev)
 		pr_err("%s: MDM2AP_ERRFATAL IRQ#%d request failed with error=%d\
 			. No IRQ will be generated on errfatal.",
 			__func__, irq, ret);
+		goto errfatal_err;
 	}
+	charm_errfatal_irq = irq;
 
 errfatal_err:
 
@@ -273,7 +280,9 @@ errfatal_err:
 		pr_err("%s: MDM2AP_STATUS IRQ#%d request failed with error=%d\
 			. No IRQ will be generated on status change.",
 			__func__, irq, ret);
+		goto status_err;
 	}
+	charm_status_irq = irq;
 
 status_err:
 	pr_info("%s: Registering charm modem\n", __func__);

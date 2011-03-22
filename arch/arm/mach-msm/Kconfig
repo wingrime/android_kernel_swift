@@ -26,7 +26,7 @@ config ARCH_MSM7X27
 	select CPU_V6 if MSM_SOC_REV_NONE
 	select CPU_V7 if MSM_SOC_REV_A
 	select MSM_REMOTE_SPINLOCK_SWP if MSM_SOC_REV_NONE
-	select MSM_GPIOMUX if !MSM_SOC_REV_A
+	select MSM_GPIOMUX
 
 config ARCH_MSM7X30
 	bool "MSM7x30"
@@ -195,6 +195,22 @@ config MACH_MSM7X27A_RUMI3
         bool "MSM7x27A RUMI3"
         help
           Support for the Qualcomm MSM7x27A RUMI3 Emulation Platform.
+
+config MACH_MSM7X27A_SURF
+        depends on ARCH_MSM7X27A
+        depends on !MSM_STACKED_MEMORY
+        default y
+        bool "MSM7x27A SURF"
+        help
+          Support for the Qualcomm MSM7x27A SURF.
+
+config MACH_MSM7X27A_FFA
+        depends on ARCH_MSM7X27A
+        depends on !MSM_STACKED_MEMORY
+        default y
+        bool "MSM7x27A FFA"
+        help
+          Support for the Qualcomm MSM7x27A FFA.
 
 config MACH_MSM7X30_SURF
        depends on ARCH_MSM7X30

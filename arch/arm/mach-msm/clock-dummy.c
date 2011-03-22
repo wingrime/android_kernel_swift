@@ -79,7 +79,7 @@ struct clk_ops clk_ops_dummy = {
 	.round_rate = dummy_clk_round_rate,
 };
 
-#if defined(CONFIG_ARCH_MSM8960) || defined(CONFIG_ARCH_MSM7X27A)
+#if defined(CONFIG_ARCH_MSM8960)
 struct clk_ops clk_ops_remote = {
 };
 #endif

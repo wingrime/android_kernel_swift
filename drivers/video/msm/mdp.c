@@ -396,6 +396,7 @@ void mdp_disable_irq(uint32 term)
 
 void mdp_disable_irq_nosync(uint32 term)
 {
+	spin_lock(&mdp_lock);
 	if (!(mdp_irq_mask & term)) {
 		printk(KERN_ERR "MDP IRQ term-0x%x is not set\n", term);
 	} else {
@@ -405,6 +406,7 @@ void mdp_disable_irq_nosync(uint32 term)
 			disable_irq_nosync(INT_MDP);
 		}
 	}
+	spin_unlock(&mdp_lock);
 }
 
 void mdp_pipe_kickoff(uint32 term, struct msm_fb_data_type *mfd)

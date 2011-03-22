@@ -27,7 +27,6 @@
 #include <mach/msm_hsusb.h>
 
 #include "clock.h"
-#include "clock-dummy.h"
 #include "devices.h"
 
 /* Address of GSBI blocks */

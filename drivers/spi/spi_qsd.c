@@ -1450,8 +1450,7 @@ static void msm_spi_workq(struct work_struct *work)
 		remote_mutex_lock(&dd->r_lock);
 
 	clk_enable(dd->clk);
-	if (dd->pclk)
-		clk_enable(dd->pclk);
+	clk_enable(dd->pclk);
 	msm_spi_enable_irqs(dd);
 
 	if (!msm_spi_is_valid_state(dd)) {
@@ -1479,8 +1478,7 @@ static void msm_spi_workq(struct work_struct *work)
 
 	msm_spi_disable_irqs(dd);
 	clk_disable(dd->clk);
-	if (dd->pclk)
-		clk_disable(dd->pclk);
+	clk_disable(dd->pclk);
 
 	if (dd->use_rlock)
 		remote_mutex_unlock(&dd->r_lock);
@@ -1649,8 +1647,7 @@ static int msm_spi_setup(struct spi_device *spi)
 		remote_mutex_lock(&dd->r_lock);
 
 	clk_enable(dd->clk);
-	if (dd->pclk)
-		clk_enable(dd->pclk);
+	clk_enable(dd->pclk);
 
 	spi_ioc = readl_relaxed(dd->base + SPI_IO_CONTROL);
 	mask = SPI_IO_C_CS_N_POLARITY_0 << spi->chip_select;
@@ -1677,8 +1674,7 @@ static int msm_spi_setup(struct spi_device *spi)
 	writel_relaxed(spi_config, dd->base + SPI_CONFIG);
 
 	clk_disable(dd->clk);
-	if (dd->pclk)
-		clk_disable(dd->pclk);
+	clk_disable(dd->pclk);
 
 	if (dd->use_rlock)
 		remote_mutex_unlock(&dd->r_lock);
@@ -2119,25 +2115,18 @@ skip_dma_resources:
 	locked = 1;
 
 	dd->dev = &pdev->dev;
-	if (!pdata || !pdata->clk_name) {
-		rc = -ENXIO;
-		goto err_probe_clk_undefined;
-	}
-	dd->clk = clk_get(&pdev->dev, pdata->clk_name);
+	dd->clk = clk_get(&pdev->dev, "spi_clk");
 	if (IS_ERR(dd->clk)) {
-		dev_err(&pdev->dev, "%s: unable to get %s\n", __func__,
-			pdata->clk_name);
+		dev_err(&pdev->dev, "%s: unable to get spi_clk\n", __func__);
 		rc = PTR_ERR(dd->clk);
 		goto err_probe_clk_get;
 	}
-	if (pdata && pdata->pclk_name) {
-		dd->pclk = clk_get(&pdev->dev, pdata->pclk_name);
-		if (IS_ERR(dd->pclk)) {
-			dev_err(&pdev->dev, "%s: unable to get %s\n", __func__,
-				pdata->pclk_name);
-			rc = PTR_ERR(dd->clk);
-			goto err_probe_pclk_get;
-		}
+
+	dd->pclk = clk_get(&pdev->dev, "spi_pclk");
+	if (IS_ERR(dd->pclk)) {
+		dev_err(&pdev->dev, "%s: unable to get spi_pclk\n", __func__);
+		rc = PTR_ERR(dd->pclk);
+		goto err_probe_pclk_get;
 	}
 	msm_spi_init_gsbi(dd);
 	if (pdata && pdata->max_clock_speed)
@@ -2145,21 +2134,19 @@ skip_dma_resources:
 
 	rc = clk_enable(dd->clk);
 	if (rc) {
-		dev_err(&pdev->dev, "%s: unable to enable %s\n",
-			__func__, pdata->clk_name);
+		dev_err(&pdev->dev, "%s: unable to enable spi_clk\n",
+			__func__);
 		goto err_probe_clk_enable;
 	}
 	clk_enabled = 1;
 
-	if (dd->pclk) {
-		rc = clk_enable(dd->pclk);
-		if (rc) {
-			dev_err(&pdev->dev, "%s: unable to enable %s\n",
-			__func__, pdata->pclk_name);
-			goto err_probe_pclk_enable;
-		}
-		pclk_enabled = 1;
+	rc = clk_enable(dd->pclk);
+	if (rc) {
+		dev_err(&pdev->dev, "%s: unable to enable spi_pclk\n",
+		__func__);
+		goto err_probe_pclk_enable;
 	}
+	pclk_enabled = 1;
 
 	msm_spi_calculate_fifo_size(dd);
 	if (dd->use_dma) {
@@ -2183,8 +2170,7 @@ skip_dma_resources:
 		goto err_probe_state;
 
 	clk_disable(dd->clk);
-	if (dd->pclk)
-		clk_disable(dd->pclk);
+	clk_disable(dd->pclk);
 	clk_enabled = 0;
 	pclk_enabled = 0;
 
@@ -2231,12 +2217,10 @@ err_probe_pclk_enable:
 	if (clk_enabled)
 		clk_disable(dd->clk);
 err_probe_clk_enable:
-	if (dd->pclk)
-		clk_put(dd->pclk);
+	clk_put(dd->pclk);
 err_probe_pclk_get:
 	clk_put(dd->clk);
 err_probe_clk_get:
-err_probe_clk_undefined:
 	if (locked) {
 		if (dd->use_rlock)
 			remote_mutex_unlock(&dd->r_lock);
@@ -2327,8 +2311,7 @@ static int __devexit msm_spi_remove(struct platform_device *pdev)
 	release_mem_region(dd->mem_phys_addr, dd->mem_size);
 	msm_spi_release_gsbi(dd);
 	clk_put(dd->clk);
-	if (dd->pclk)
-		clk_put(dd->pclk);
+	clk_put(dd->pclk);
 	destroy_workqueue(dd->workqueue);
 	platform_set_drvdata(pdev, 0);
 	spi_unregister_master(master);

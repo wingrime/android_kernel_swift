@@ -359,6 +359,8 @@ static int32_t imx074_set_fps(struct fps_cfg	*fps)
 {
 	uint16_t total_lines_per_frame;
 	int32_t rc = 0;
+	imx074_ctrl->fps_divider = fps->fps_div;
+	imx074_ctrl->pict_fps_divider = fps->pict_fps_div;
 	total_lines_per_frame = (uint16_t)(((IMX074_QTR_SIZE_HEIGHT +
 		IMX074_VER_QTR_BLK_LINES) * imx074_ctrl->fps_divider) / 0x400);
 	if (imx074_i2c_write_b_sensor(REG_FRAME_LENGTH_LINES_HI,
@@ -380,13 +382,17 @@ static int32_t imx074_write_exp_gain(uint16_t gain, uint32_t line)
 	int32_t rc = -1;
 
 	CDBG("imx074_write_exp_gain : gain = %d line = %d", gain, line);
-	if (imx074_ctrl->curr_res  == QTR_SIZE)
+	if (imx074_ctrl->curr_res  == QTR_SIZE) {
 		frame_length_lines = IMX074_QTR_SIZE_HEIGHT +
 			IMX074_VER_QTR_BLK_LINES;
-	else
+		frame_length_lines = frame_length_lines *
+			imx074_ctrl->fps_divider / 0x400;
+	} else {
 		frame_length_lines = IMX074_FULL_SIZE_HEIGHT +
 			IMX074_VER_FULL_BLK_LINES;
-
+		frame_length_lines = frame_length_lines *
+			imx074_ctrl->pict_fps_divider / 0x400;
+	}
 	if (line > (frame_length_lines - IMX074_OFFSET))
 		frame_length_lines = line + IMX074_OFFSET;
 

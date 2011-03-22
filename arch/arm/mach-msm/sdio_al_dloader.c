@@ -189,7 +189,7 @@ static const struct tty_operations sdio_dloader_tty_ops = {
 };
 
 /* GLOBAL VARIABLES */
-struct sdio_downloader sdio_dld;
+struct sdio_downloader *sdio_dld;
 struct sdio_dld_global_info sdio_dld_info;
 
 static DEFINE_SPINLOCK(lock1);
@@ -330,8 +330,9 @@ static void update_standard_fields(int index)
 
 static void update_gd(int code)
 {
-	struct sdioc_reg_chunk *reg_str = &sdio_dld.sdio_dloader_data.sdioc_reg;
-	struct sdio_data *outgoing = &sdio_dld.sdio_dloader_data.outgoing_data;
+	struct sdioc_reg_chunk *reg_str =
+					&sdio_dld->sdio_dloader_data.sdioc_reg;
+	struct sdio_data *outgoing = &sdio_dld->sdio_dloader_data.outgoing_data;
 	int index = curr_index%ARR_SIZE;
 
 	gd.curr_i = curr_index;
@@ -537,40 +538,40 @@ int sdio_dld_set_op_mode(enum sdio_dld_op_mode op_mode)
 	    return -EINVAL;
 	}
 
-	if (atomic_read(&sdio_dld.change_op_mode) == 0) {
-		atomic_set(&sdio_dld.change_op_mode, 1);
-		sdio_dld.op_mode = op_mode;
-		atomic_set(&sdio_dld.change_op_mode, 0);
+	if (atomic_read(&sdio_dld->change_op_mode) == 0) {
+		atomic_set(&sdio_dld->change_op_mode, 1);
+		sdio_dld->op_mode = op_mode;
+		atomic_set(&sdio_dld->change_op_mode, 0);
 	} else {
 		return -EAGAIN;
 	}
 
-	switch (sdio_dld.op_mode) {
+	switch (sdio_dld->op_mode) {
 	case SDIO_DLD_NORMAL_MODE:
-		memcpy(sdio_dld.op_mode_name,
+		memcpy(sdio_dld->op_mode_name,
 		       SDIO_DLD_NORMAL_MODE_NAME, TEST_NAME_MAX_SIZE);
 		break;
 	case SDIO_DLD_BOOT_TEST_MODE:
-		memcpy(sdio_dld.op_mode_name,
+		memcpy(sdio_dld->op_mode_name,
 		       SDIO_DLD_BOOT_TEST_MODE_NAME, TEST_NAME_MAX_SIZE);
 		break;
 	case SDIO_DLD_AMSS_TEST_MODE:
-		memcpy(sdio_dld.op_mode_name,
+		memcpy(sdio_dld->op_mode_name,
 		       SDIO_DLD_AMSS_TEST_MODE_NAME, TEST_NAME_MAX_SIZE);
 		break;
 	default:
 		pr_err(MODULE_NAME ": %s - Invalid Op_Mode = %d. Settings "
 		       "Op_Mode to default - NORMAL_MODE\n",
-		       __func__, sdio_dld.op_mode);
-		memcpy(sdio_dld.op_mode_name,
+		       __func__, sdio_dld->op_mode);
+		memcpy(sdio_dld->op_mode_name,
 		       SDIO_DLD_NORMAL_MODE_NAME, TEST_NAME_MAX_SIZE);
 		result = -EINVAL;
 		break;
 	}
 
-	if (sdio_dld.op_mode_name != NULL) {
+	if (sdio_dld->op_mode_name != NULL) {
 		pr_info(MODULE_NAME ": %s - FLASHLESS BOOT - Op_Mode is set to "
-			"%s\n", __func__, sdio_dld.op_mode_name);
+			"%s\n", __func__, sdio_dld->op_mode_name);
 	} else {
 		pr_info(MODULE_NAME ": %s - FLASHLESS BOOT - op_mode_name is "
 			"NULL\n", __func__);
@@ -588,7 +589,7 @@ int sdio_dld_set_op_mode(enum sdio_dld_op_mode op_mode)
   */
 static enum sdio_dld_op_mode sdio_dld_get_op_mode(void)
 {
-	return sdio_dld.op_mode;
+	return sdio_dld->op_mode;
 }
 
 /**
@@ -600,10 +601,10 @@ static enum sdio_dld_op_mode sdio_dld_get_op_mode(void)
   */
 static int sdio_dld_allocate_local_buffers(void)
 {
-	struct sdioc_reg_chunk *reg_str = &sdio_dld.sdio_dloader_data.
+	struct sdioc_reg_chunk *reg_str = &sdio_dld->sdio_dloader_data.
 		sdioc_reg;
-	struct sdio_data *outgoing = &sdio_dld.sdio_dloader_data.outgoing_data;
-	struct sdio_data *incoming = &sdio_dld.sdio_dloader_data.incoming_data;
+	struct sdio_data *outgoing = &sdio_dld->sdio_dloader_data.outgoing_data;
+	struct sdio_data *incoming = &sdio_dld->sdio_dloader_data.incoming_data;
 
 	incoming->data =
 		kzalloc(reg_str->dl_buff_size.reg_val, GFP_KERNEL);
@@ -644,8 +645,8 @@ static int sdio_dld_allocate_local_buffers(void)
   */
 static void sdio_dld_dealloc_local_buffers(void)
 {
-	kfree((void *)sdio_dld.sdio_dloader_data.incoming_data.data);
-	kfree((void *)sdio_dld.sdio_dloader_data.outgoing_data.data);
+	kfree((void *)sdio_dld->sdio_dloader_data.incoming_data.data);
+	kfree((void *)sdio_dld->sdio_dloader_data.outgoing_data.data);
 }
 
 /**
@@ -660,7 +661,7 @@ static void sdio_dld_dealloc_local_buffers(void)
 static int mailbox_to_seq_chunk_read_cfg(struct sdio_func *str_func)
 {
 	struct sdioc_reg_sequential_chunk_cfg seq_chunk;
-	struct sdioc_reg_chunk *reg = &sdio_dld.sdio_dloader_data.sdioc_reg;
+	struct sdioc_reg_chunk *reg = &sdio_dld->sdio_dloader_data.sdioc_reg;
 	int status = 0;
 
 	if (!str_func) {
@@ -704,10 +705,10 @@ static int mailbox_to_seq_chunk_read_cfg(struct sdio_func *str_func)
 static int mailbox_to_seq_chunk_read_ptrs(struct sdio_func *str_func)
 {
 	struct sdioc_reg_sequential_chunk_ptrs seq_chunk;
-	struct sdioc_reg_chunk *reg = &sdio_dld.sdio_dloader_data.sdioc_reg;
+	struct sdioc_reg_chunk *reg = &sdio_dld->sdio_dloader_data.sdioc_reg;
 	int status = 0;
 
-	struct sdio_data *outgoing = &sdio_dld.sdio_dloader_data.outgoing_data;
+	struct sdio_data *outgoing = &sdio_dld->sdio_dloader_data.outgoing_data;
 	static int counter = 1;
 	static int offset_write_p;
 	static int offset_read_p;
@@ -869,19 +870,19 @@ static int sdio_dld_allocate_buffers(struct sdio_func *str_func)
   */
 static int sdio_dld_create_thread(void)
 {
-	sdio_dld.dld_main_thread.task_name = SDIO_DL_MAIN_THREAD_NAME;
+	sdio_dld->dld_main_thread.task_name = SDIO_DL_MAIN_THREAD_NAME;
 
-	sdio_dld.dld_main_thread.dld_task =
+	sdio_dld->dld_main_thread.dld_task =
 		kthread_create(sdio_dld_main_task,
-			       (void *)(sdio_dld.card),
-			       sdio_dld.dld_main_thread.task_name);
+			       (void *)(sdio_dld->card),
+			       sdio_dld->dld_main_thread.task_name);
 
-	if (IS_ERR(sdio_dld.dld_main_thread.dld_task)) {
+	if (IS_ERR(sdio_dld->dld_main_thread.dld_task)) {
 		pr_err(MODULE_NAME ": %s - kthread_create() failed\n",
 			__func__);
 		return -ENOMEM;
 	}
-	wake_up_process(sdio_dld.dld_main_thread.dld_task);
+	wake_up_process(sdio_dld->dld_main_thread.dld_task);
 	return 0;
 }
 
@@ -893,10 +894,10 @@ static int sdio_dld_create_thread(void)
   */
 static void start_timer(void)
 {
-	if (sdio_dld.poll_ms) {
-		sdio_dld.timer.expires = jiffies +
-			msecs_to_jiffies(sdio_dld.poll_ms);
-		add_timer(&sdio_dld.timer);
+	if (sdio_dld->poll_ms) {
+		sdio_dld->timer.expires = jiffies +
+			msecs_to_jiffies(sdio_dld->poll_ms);
+		add_timer(&sdio_dld->timer);
 	}
 }
 
@@ -914,14 +915,14 @@ static void sdio_dld_timer_handler(unsigned long data)
 {
 	pr_debug(MODULE_NAME " Timer Expired\n");
 	spin_lock_irqsave(&lock2, lock_flags2);
-	if (sdio_dld.main_loop_event.wake_up_signal == 0) {
-		sdio_dld.main_loop_event.wake_up_signal = 1;
-		wake_up(&sdio_dld.main_loop_event.wait_event);
+	if (sdio_dld->main_loop_event.wake_up_signal == 0) {
+		sdio_dld->main_loop_event.wake_up_signal = 1;
+		wake_up(&sdio_dld->main_loop_event.wait_event);
 	}
 	spin_unlock_irqrestore(&lock2, lock_flags2);
 
-	sdio_dld.write_callback_event.wake_up_signal = 1;
-	wake_up(&sdio_dld.write_callback_event.wait_event);
+	sdio_dld->write_callback_event.wake_up_signal = 1;
+	wake_up(&sdio_dld->write_callback_event.wait_event);
 
 	start_timer();
 }
@@ -941,8 +942,8 @@ static int sdio_dld_open(struct tty_struct *tty, struct file *file)
 {
 	int status = 0;
 	int func_in_array =
-		REAL_FUNC_TO_FUNC_IN_ARRAY(sdio_dld.sdioc_boot_func);
-	struct sdio_func *str_func = sdio_dld.card->sdio_func[func_in_array];
+		REAL_FUNC_TO_FUNC_IN_ARRAY(sdio_dld->sdioc_boot_func);
+	struct sdio_func *str_func = sdio_dld->card->sdio_func[func_in_array];
 
 	pr_info(MODULE_NAME ": %s, TTY DEVICE FOR FLASHLESS BOOT OPENED\n",
 	       __func__);
@@ -960,8 +961,8 @@ static int sdio_dld_open(struct tty_struct *tty, struct file *file)
 		return -EINVAL;
 	}
 
-	atomic_set(&sdio_dld.dld_main_thread.please_close, 0);
-	sdio_dld.dld_main_thread.exit_wait.wake_up_signal = 0;
+	atomic_set(&sdio_dld->dld_main_thread.please_close, 0);
+	sdio_dld->dld_main_thread.exit_wait.wake_up_signal = 0;
 
 	status = sdio_dld_allocate_buffers(str_func);
 	if (status) {
@@ -981,19 +982,19 @@ static int sdio_dld_open(struct tty_struct *tty, struct file *file)
 	}
 
 	/* init waiting event of the write callback */
-	init_waitqueue_head(&sdio_dld.write_callback_event.wait_event);
+	init_waitqueue_head(&sdio_dld->write_callback_event.wait_event);
 
 	/* init waiting event of the main loop */
-	init_waitqueue_head(&sdio_dld.main_loop_event.wait_event);
+	init_waitqueue_head(&sdio_dld->main_loop_event.wait_event);
 
 	/* configure and init the timer */
-	sdio_dld.poll_ms = TIMER_DURATION;
-	init_timer(&sdio_dld.timer);
-	sdio_dld.timer.data = (unsigned long) &sdio_dld;
-	sdio_dld.timer.function = sdio_dld_timer_handler;
-	sdio_dld.timer.expires = jiffies +
-		msecs_to_jiffies(sdio_dld.poll_ms);
-	add_timer(&sdio_dld.timer);
+	sdio_dld->poll_ms = TIMER_DURATION;
+	init_timer(&sdio_dld->timer);
+	sdio_dld->timer.data = (unsigned long) &sdio_dld;
+	sdio_dld->timer.function = sdio_dld_timer_handler;
+	sdio_dld->timer.expires = jiffies +
+		msecs_to_jiffies(sdio_dld->poll_ms);
+	add_timer(&sdio_dld->timer);
 
 	return 0;
 }
@@ -1012,27 +1013,27 @@ static int sdio_dld_open(struct tty_struct *tty, struct file *file)
 static void sdio_dld_close(struct tty_struct *tty, struct file *file)
 {
 	int status = 0;
-	struct sdioc_reg_chunk *reg = &sdio_dld.sdio_dloader_data.sdioc_reg;
+	struct sdioc_reg_chunk *reg = &sdio_dld->sdio_dloader_data.sdioc_reg;
 
 	/* informing the SDIOC that it can exit boot phase */
-	sdio_dld.sdio_dloader_data.sdioc_reg.good_to_exit_ptr.reg_val =
+	sdio_dld->sdio_dloader_data.sdioc_reg.good_to_exit_ptr.reg_val =
 		SDIOC_EXIT_CODE;
 
-	atomic_set(&sdio_dld.dld_main_thread.please_close, 1);
+	atomic_set(&sdio_dld->dld_main_thread.please_close, 1);
 
 	pr_debug(MODULE_NAME ": %s - CLOSING - WAITING...", __func__);
 
-	wait_event(sdio_dld.dld_main_thread.exit_wait.wait_event,
-		   sdio_dld.dld_main_thread.exit_wait.wake_up_signal);
+	wait_event(sdio_dld->dld_main_thread.exit_wait.wait_event,
+		   sdio_dld->dld_main_thread.exit_wait.wake_up_signal);
 	pr_debug(MODULE_NAME ": %s - CLOSING - WOKE UP...", __func__);
 
-	del_timer_sync(&sdio_dld.timer);
+	del_timer_sync(&sdio_dld->timer);
 
 	sdio_dld_dealloc_local_buffers();
 
-	tty_unregister_device(sdio_dld.tty_drv, 0);
+	tty_unregister_device(sdio_dld->tty_drv, 0);
 
-	status = tty_unregister_driver(sdio_dld.tty_drv);
+	status = tty_unregister_driver(sdio_dld->tty_drv);
 
 	if (status) {
 		pr_err(MODULE_NAME ": %s - tty_unregister_driver() failed\n",
@@ -1077,7 +1078,7 @@ static void sdio_dld_close(struct tty_struct *tty, struct file *file)
 	pr_debug(MODULE_NAME ": %s, FLASHLESS BOOT - HOST OUTGOING BUFFER=%d "
 		 "KB",
 		 __func__,
-		 sdio_dld.sdio_dloader_data.
+		 sdio_dld->sdio_dloader_data.
 		 outgoing_data.buffer_size/BYTES_IN_KB);
 
 	pr_debug(MODULE_NAME ": %s, FLASHLESS BOOT - CLIENT DL BUFFER "
@@ -1096,7 +1097,7 @@ static void sdio_dld_close(struct tty_struct *tty, struct file *file)
 	gd.global_bytes_sent = sdio_dld_info.global_bytes_write_toio;
 	gd.global_bytes_received = 0;
 	gd.throughput_Mbs = sdio_dld_info.throughput;
-	gd.host_outgoing_buffer_size_KB = sdio_dld.sdio_dloader_data.
+	gd.host_outgoing_buffer_size_KB = sdio_dld->sdio_dloader_data.
 		outgoing_data.buffer_size/BYTES_IN_KB;
 	gd.client_up_buffer_size_KB = reg->ul_buff_size.reg_val/BYTES_IN_KB;
 	gd.client_dl_buffer_size_KB = reg->dl_buff_size.reg_val/BYTES_IN_KB;
@@ -1106,8 +1107,12 @@ static void sdio_dld_close(struct tty_struct *tty, struct file *file)
 	gd.global_bytes_pushed = sdio_dld_info.global_bytes_push_tty;
 #endif
 
-	if (sdio_dld.done_callback)
-		sdio_dld.done_callback();
+	if (sdio_dld->done_callback)
+		sdio_dld->done_callback();
+
+	pr_info(MODULE_NAME ": %s - Freeing sdio_dld data structure, and "
+		" returning...", __func__);
+	kfree(sdio_dld);
 }
 
 /**
@@ -1277,7 +1282,7 @@ static int sdioc_bytes_free_in_buffer(int write_ptr,
 static int sdio_dld_write_callback(struct tty_struct *tty,
 				   const unsigned char *buf, int count)
 {
-	struct sdio_data *outgoing = &sdio_dld.sdio_dloader_data.outgoing_data;
+	struct sdio_data *outgoing = &sdio_dld->sdio_dloader_data.outgoing_data;
 	int dst_free_bytes = 0;
 	int dummy = 0;
 	int status = 0;
@@ -1365,9 +1370,9 @@ static int sdio_dld_write_callback(struct tty_struct *tty,
 			sdio_dld_info.global_bytes_write_tty += bytes_written;
 
 			spin_lock_irqsave(&lock2, lock_flags2);
-			if (sdio_dld.main_loop_event.wake_up_signal == 0) {
-				sdio_dld.main_loop_event.wake_up_signal = 1;
-				wake_up(&sdio_dld.main_loop_event.wait_event);
+			if (sdio_dld->main_loop_event.wake_up_signal == 0) {
+				sdio_dld->main_loop_event.wake_up_signal = 1;
+				wake_up(&sdio_dld->main_loop_event.wait_event);
 			}
 			spin_unlock_irqrestore(&lock2, lock_flags2);
 
@@ -1407,7 +1412,7 @@ static int sdio_dld_write_callback(struct tty_struct *tty,
 				 write_retry);
 
 			spin_lock_irqsave(&lock1, lock_flags1);
-			sdio_dld.write_callback_event.wake_up_signal = 0;
+			sdio_dld->write_callback_event.wake_up_signal = 0;
 			spin_unlock_irqrestore(&lock1, lock_flags1);
 
 			pr_debug(MODULE_NAME ": %s - WRITE CALLBACK - "
@@ -1415,8 +1420,8 @@ static int sdio_dld_write_callback(struct tty_struct *tty,
 #ifdef DLOADER_DBG
 			update_gd(SDIO_DLD_DEBUGFS_CASE_8_CODE);
 #endif
-			wait_event(sdio_dld.write_callback_event.wait_event,
-				   sdio_dld.write_callback_event.
+			wait_event(sdio_dld->write_callback_event.wait_event,
+				   sdio_dld->write_callback_event.
 				   wake_up_signal);
 #ifdef DLOADER_DBG
 			update_gd(SDIO_DLD_DEBUGFS_CASE_9_CODE);
@@ -1471,7 +1476,7 @@ static int sdio_memcpy_fromio_wrapper(struct sdio_func *str_func,
 {
 	int status = 0;
 	struct sdioc_reg_chunk *reg_str =
-		&sdio_dld.sdio_dloader_data.sdioc_reg;
+		&sdio_dld->sdio_dloader_data.sdioc_reg;
 
 	if (!str_func) {
 		pr_err(MODULE_NAME ": %s - param ""str_func"" is NULL.\n",
@@ -1550,8 +1555,8 @@ static int sdio_memcpy_toio_wrapper(struct sdio_func *str_func,
 {
 	int status = 0;
 	struct sdioc_reg_chunk *reg_str =
-		&sdio_dld.sdio_dloader_data.sdioc_reg;
-	struct sdio_data *outgoing = &sdio_dld.sdio_dloader_data.outgoing_data;
+		&sdio_dld->sdio_dloader_data.sdioc_reg;
+	struct sdio_data *outgoing = &sdio_dld->sdio_dloader_data.outgoing_data;
 
 	if (!str_func) {
 		pr_err(MODULE_NAME ": %s - param ""str_func"" is NULL.\n",
@@ -1640,7 +1645,7 @@ static int sdio_dld_read(unsigned int client_rd_ptr,
 			 int *bytes_read)
 {
 	int status = 0;
-	struct sdio_data *incoming = &sdio_dld.sdio_dloader_data.incoming_data;
+	struct sdio_data *incoming = &sdio_dld->sdio_dloader_data.incoming_data;
 
 	if (!reg_str) {
 		pr_err(MODULE_NAME ": %s - param ""reg_str"" is NULL.\n",
@@ -1761,14 +1766,14 @@ static int sdio_dld_read(unsigned int client_rd_ptr,
 static int sdio_dld_main_task(void *card)
 {
 	int status = 0;
-	struct tty_struct *tty = sdio_dld.tty_str;
+	struct tty_struct *tty = sdio_dld->tty_str;
 	struct sdioc_reg_chunk *reg_str =
-		&sdio_dld.sdio_dloader_data.sdioc_reg;
-	int func = sdio_dld.sdioc_boot_func;
+		&sdio_dld->sdio_dloader_data.sdioc_reg;
+	int func = sdio_dld->sdioc_boot_func;
 	struct sdio_func *str_func = NULL;
-	struct sdio_data *outgoing = &sdio_dld.sdio_dloader_data.outgoing_data;
-	struct sdio_data *incoming = &sdio_dld.sdio_dloader_data.incoming_data;
-	struct sdio_dld_task *task = &sdio_dld.dld_main_thread;
+	struct sdio_data *outgoing = &sdio_dld->sdio_dloader_data.outgoing_data;
+	struct sdio_data *incoming = &sdio_dld->sdio_dloader_data.incoming_data;
+	struct sdio_dld_task *task = &sdio_dld->dld_main_thread;
 	int retries = 0;
 
 	msleep(SLEEP_MS);
@@ -1905,7 +1910,7 @@ static int sdio_dld_main_task(void *card)
 				break;
 
 			spin_lock_irqsave(&lock2, lock_flags2);
-			sdio_dld.main_loop_event.wake_up_signal = 0;
+			sdio_dld->main_loop_event.wake_up_signal = 0;
 			spin_unlock_irqrestore(&lock2, lock_flags2);
 
 			pr_debug(MODULE_NAME ": %s - MAIN LOOP - WAITING...\n",
@@ -1913,8 +1918,8 @@ static int sdio_dld_main_task(void *card)
 #ifdef DLOADER_DBG
 			update_gd(SDIO_DLD_DEBUGFS_CASE_6_CODE);
 #endif
-			wait_event(sdio_dld.main_loop_event.wait_event,
-				   sdio_dld.main_loop_event.wake_up_signal);
+			wait_event(sdio_dld->main_loop_event.wait_event,
+				   sdio_dld->main_loop_event.wake_up_signal);
 #ifdef DLOADER_DBG
 			update_gd(SDIO_DLD_DEBUGFS_CASE_7_CODE);
 #endif
@@ -2076,11 +2081,11 @@ static int sdio_dld_main_task(void *card)
 				sdio_release_host(str_func);
 
 				spin_lock_irqsave(&lock1, lock_flags1);
-				if (sdio_dld.write_callback_event.
+				if (sdio_dld->write_callback_event.
 				    wake_up_signal == 0) {
-					sdio_dld.write_callback_event.
+					sdio_dld->write_callback_event.
 						wake_up_signal = 1;
-					wake_up(&sdio_dld.
+					wake_up(&sdio_dld->
 						write_callback_event.
 						wait_event);
 				}
@@ -2135,29 +2140,29 @@ static int sdio_dld_init_global(struct mmc_card *card,
 		return -EINVAL;
 	}
 
-	sdio_dld.done_callback = done;
-	sdio_dld.card = card;
-	init_waitqueue_head(&sdio_dld.dld_main_thread.exit_wait.wait_event);
-	sdio_dld.write_callback_event.wake_up_signal = 1;
-	sdio_dld.main_loop_event.wake_up_signal = 1;
+	sdio_dld->done_callback = done;
+	sdio_dld->card = card;
+	init_waitqueue_head(&sdio_dld->dld_main_thread.exit_wait.wait_event);
+	sdio_dld->write_callback_event.wake_up_signal = 1;
+	sdio_dld->main_loop_event.wake_up_signal = 1;
 
-	sdio_dld.sdio_dloader_data.sdioc_reg.dl_buff_size.reg_offset =
+	sdio_dld->sdio_dloader_data.sdioc_reg.dl_buff_size.reg_offset =
 		SDIOC_DL_BUFF_SIZE_OFFSET;
-	sdio_dld.sdio_dloader_data.sdioc_reg.dl_rd_ptr.reg_offset =
+	sdio_dld->sdio_dloader_data.sdioc_reg.dl_rd_ptr.reg_offset =
 		SDIOC_DL_RD_PTR;
-	sdio_dld.sdio_dloader_data.sdioc_reg.dl_wr_ptr.reg_offset =
+	sdio_dld->sdio_dloader_data.sdioc_reg.dl_wr_ptr.reg_offset =
 		SDIOC_DL_WR_PTR;
-	sdio_dld.sdio_dloader_data.sdioc_reg.ul_buff_size.reg_offset =
+	sdio_dld->sdio_dloader_data.sdioc_reg.ul_buff_size.reg_offset =
 		SDIOC_UP_BUFF_SIZE_OFFSET;
-	sdio_dld.sdio_dloader_data.sdioc_reg.up_rd_ptr.reg_offset =
+	sdio_dld->sdio_dloader_data.sdioc_reg.up_rd_ptr.reg_offset =
 		SDIOC_UL_RD_PTR;
-	sdio_dld.sdio_dloader_data.sdioc_reg.up_wr_ptr.reg_offset =
+	sdio_dld->sdio_dloader_data.sdioc_reg.up_wr_ptr.reg_offset =
 		SDIOC_UL_WR_PTR;
-	sdio_dld.sdio_dloader_data.sdioc_reg.good_to_exit_ptr.reg_offset =
+	sdio_dld->sdio_dloader_data.sdioc_reg.good_to_exit_ptr.reg_offset =
 		SDIOC_EXIT_PTR;
-	sdio_dld.sdio_dloader_data.sdioc_reg.dl_buff_address.reg_offset =
+	sdio_dld->sdio_dloader_data.sdioc_reg.dl_buff_address.reg_offset =
 		SDIOC_DL_BUFF_ADDRESS;
-	sdio_dld.sdio_dloader_data.sdioc_reg.up_buff_address.reg_offset =
+	sdio_dld->sdio_dloader_data.sdioc_reg.up_buff_address.reg_offset =
 		SDIOC_UP_BUFF_ADDRESS;
 
 	if (sdio_dld_get_op_mode() == SDIO_DLD_NO_MODE)
@@ -2212,6 +2217,13 @@ int sdio_downloader_setup(struct mmc_card *card,
 		return -EINVAL;
 	}
 
+	sdio_dld = kzalloc(sizeof(struct sdio_downloader), GFP_KERNEL);
+	if (!sdio_dld) {
+		pr_err(MODULE_NAME ": %s - couldn't allocate sdio_dld data "
+		       "structure.", __func__);
+		return -ENOMEM;
+	}
+
 #ifdef DLOADER_DBG
 	bootloader_debugfs_init();
 #endif /* DLOADER_DBG */
@@ -2222,14 +2234,16 @@ int sdio_downloader_setup(struct mmc_card *card,
 		pr_err(MODULE_NAME ": %s - Failure in Function "
 		       "sdio_dld_init_global(). status=%d\n",
 		       __func__, status);
+		kfree(sdio_dld);
 		return status;
 	}
 
-	sdio_dld.tty_drv = alloc_tty_driver(num_of_devices);
+	sdio_dld->tty_drv = alloc_tty_driver(num_of_devices);
 
-	if (!sdio_dld.tty_drv) {
-		pr_err(MODULE_NAME ": %s - param ""sdio_dld.tty_drv"" is "
+	if (!sdio_dld->tty_drv) {
+		pr_err(MODULE_NAME ": %s - param ""sdio_dld->tty_drv"" is "
 				   "NULL.\n", __func__);
+		kfree(sdio_dld);
 		return -EINVAL;
 	}
 
@@ -2298,76 +2312,73 @@ int sdio_downloader_setup(struct mmc_card *card,
 
 	/* according to op_mode, a different tty device is created */
 	if (sdio_dld_get_op_mode() == SDIO_DLD_BOOT_TEST_MODE)
-		sdio_dld.tty_drv->name = TTY_SDIO_DEV_TEST;
+		sdio_dld->tty_drv->name = TTY_SDIO_DEV_TEST;
 	else
-	    sdio_dld.tty_drv->name = TTY_SDIO_DEV;
+	    sdio_dld->tty_drv->name = TTY_SDIO_DEV;
 
-	sdio_dld.tty_drv->owner = THIS_MODULE;
-	sdio_dld.tty_drv->driver_name = "SDIO_Dloader";
+	sdio_dld->tty_drv->owner = THIS_MODULE;
+	sdio_dld->tty_drv->driver_name = "SDIO_Dloader";
 
 	/* uses dynamically assigned dev_t values */
-	sdio_dld.tty_drv->type = TTY_DRIVER_TYPE_SERIAL;
-	sdio_dld.tty_drv->subtype = SERIAL_TYPE_NORMAL;
-	sdio_dld.tty_drv->flags = TTY_DRIVER_REAL_RAW | TTY_DRIVER_DYNAMIC_DEV
+	sdio_dld->tty_drv->type = TTY_DRIVER_TYPE_SERIAL;
+	sdio_dld->tty_drv->subtype = SERIAL_TYPE_NORMAL;
+	sdio_dld->tty_drv->flags = TTY_DRIVER_REAL_RAW | TTY_DRIVER_DYNAMIC_DEV
 				| TTY_DRIVER_RESET_TERMIOS;
 
 	/* initializing the tty driver */
-	sdio_dld.tty_drv->init_termios = tty_std_termios;
-	sdio_dld.tty_drv->init_termios.c_cflag =
+	sdio_dld->tty_drv->init_termios = tty_std_termios;
+	sdio_dld->tty_drv->init_termios.c_cflag =
 		B4800 | CS8 | CREAD | HUPCL | CLOCAL;
-	sdio_dld.tty_drv->init_termios.c_ispeed = INPUT_SPEED;
-	sdio_dld.tty_drv->init_termios.c_ospeed = OUTPUT_SPEED;
+	sdio_dld->tty_drv->init_termios.c_ispeed = INPUT_SPEED;
+	sdio_dld->tty_drv->init_termios.c_ospeed = OUTPUT_SPEED;
 
-	tty_set_operations(sdio_dld.tty_drv, &sdio_dloader_tty_ops);
+	tty_set_operations(sdio_dld->tty_drv, &sdio_dloader_tty_ops);
 
-	status = tty_register_driver(sdio_dld.tty_drv);
+	status = tty_register_driver(sdio_dld->tty_drv);
 	if (status) {
-		put_tty_driver(sdio_dld.tty_drv);
+		put_tty_driver(sdio_dld->tty_drv);
 		pr_err(MODULE_NAME ": %s - tty_register_driver() failed\n",
 			__func__);
 
-		sdio_dld.tty_drv = NULL;
+		sdio_dld->tty_drv = NULL;
+		kfree(sdio_dld);
 		return status;
 	}
 
 	for (i = 0; i < num_of_devices ; i++) {
 		struct device *tty_dev;
 
-		tty_dev = tty_register_device(sdio_dld.tty_drv, i, NULL);
+		tty_dev = tty_register_device(sdio_dld->tty_drv, i, NULL);
 		if (IS_ERR(tty_dev)) {
 			pr_err(MODULE_NAME ": %s - tty_register_device() "
 				"failed\n", __func__);
-			tty_unregister_driver(sdio_dld.tty_drv);
+			tty_unregister_driver(sdio_dld->tty_drv);
+			kfree(sdio_dld);
 			return PTR_ERR(tty_dev);
 		}
 	}
 
-	sdio_dld.tty_str = tty_init_dev(sdio_dld.tty_drv, 0, 1);
-	if (!sdio_dld.tty_str) {
-		pr_err(MODULE_NAME ": %s - param ""sdio_dld.tty_str"" is "
+	sdio_dld->tty_str = tty_init_dev(sdio_dld->tty_drv, 0, 1);
+	if (!sdio_dld->tty_str) {
+		pr_err(MODULE_NAME ": %s - param ""sdio_dld->tty_str"" is "
 				   "NULL.\n", __func__);
-
-		tty_unregister_device(sdio_dld.tty_drv, 0);
-		status = tty_unregister_driver(sdio_dld.tty_drv);
-		if (status)
-			pr_err(MODULE_NAME ": %s - tty_unregister_driver() "
-					   "failed\n", __func__);
-		return -EINVAL;
+		status = -EINVAL;
+		goto exit_err;
 	}
 
-	sdio_dld.tty_str->low_latency = 1;
-	sdio_dld.tty_str->icanon = 0;
-	set_bit(TTY_NO_WRITE_SPLIT, &sdio_dld.tty_str->flags);
+	sdio_dld->tty_str->low_latency = 1;
+	sdio_dld->tty_str->icanon = 0;
+	set_bit(TTY_NO_WRITE_SPLIT, &sdio_dld->tty_str->flags);
 
-	sdio_dld.sdioc_boot_func = SDIOC_CHAN_TO_FUNC_NUM(channel_number);
-	func_in_array = REAL_FUNC_TO_FUNC_IN_ARRAY(sdio_dld.sdioc_boot_func);
-	str_func = sdio_dld.card->sdio_func[func_in_array];
+	sdio_dld->sdioc_boot_func = SDIOC_CHAN_TO_FUNC_NUM(channel_number);
+	func_in_array = REAL_FUNC_TO_FUNC_IN_ARRAY(sdio_dld->sdioc_boot_func);
+	str_func = sdio_dld->card->sdio_func[func_in_array];
 	status = sdio_dld_init_func(str_func);
 	if (status) {
 		pr_err(MODULE_NAME ": %s - Failure in Function "
 		       "sdio_dld_init_func(). status=%d\n",
-		       __func__, status);
-		return status;
+		       __func__, -status);
+		goto exit_err;
 	}
 
 	sdio_claim_host(str_func);
@@ -2378,8 +2389,8 @@ int sdio_downloader_setup(struct mmc_card *card,
 	 */
 	status = sdio_memcpy_toio(str_func,
 				  SDIOC_OP_MODE_PTR,
-				  (void *)&sdio_dld.op_mode,
-				  sizeof(sdio_dld.op_mode));
+				  (void *)&sdio_dld->op_mode,
+				  sizeof(sdio_dld->op_mode));
 
 	sdio_release_host(str_func);
 
@@ -2387,11 +2398,20 @@ int sdio_downloader_setup(struct mmc_card *card,
 		pr_err(MODULE_NAME ": %s - sdio_memcpy_toio() "
 		       "writing to OP_MODE_REGISTER failed. "
 		       "status=%d.\n",
-		       __func__, status);
-		return status;
+		       __func__, -status);
+		goto exit_err;
 	}
 
 	return 0;
+
+exit_err:
+	tty_unregister_device(sdio_dld->tty_drv, 0);
+	result = tty_unregister_driver(sdio_dld->tty_drv);
+	if (result)
+		pr_err(MODULE_NAME ": %s - tty_unregister_driver() "
+				   "failed. result=%d\n", __func__, -result);
+	kfree(sdio_dld);
+	return status;
 }
 
 MODULE_LICENSE("GPL v2");

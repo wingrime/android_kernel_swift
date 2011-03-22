@@ -114,15 +114,15 @@ static inline void msm_spm_set_slp_rst_en(
 static inline void msm_spm_flush_shadow(
 	struct msm_spm_device *dev, unsigned int reg_index)
 {
-	writel(dev->reg_shadow[reg_index],
+	__raw_writel(dev->reg_shadow[reg_index],
 		dev->reg_base_addr + msm_spm_reg_offsets[reg_index]);
 }
 
 static inline void msm_spm_load_shadow(
 	struct msm_spm_device *dev, unsigned int reg_index)
 {
-	dev->reg_shadow[reg_index] =
-		readl(dev->reg_base_addr + msm_spm_reg_offsets[reg_index]);
+	dev->reg_shadow[reg_index] = __raw_readl(dev->reg_base_addr +
+					msm_spm_reg_offsets[reg_index]);
 }
 
 static inline uint32_t msm_spm_get_sts_pmic_state(struct msm_spm_device *dev)

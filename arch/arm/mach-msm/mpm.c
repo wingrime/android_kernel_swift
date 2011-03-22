@@ -192,14 +192,14 @@ static inline uint32_t msm_mpm_read(
 	unsigned int reg, unsigned int subreg_index)
 {
 	unsigned int offset = reg * MSM_MPM_REG_WIDTH + subreg_index;
-	return readl(MSM_MPM_STATUS_BASE + offset * 4);
+	return __raw_readl(MSM_MPM_STATUS_BASE + offset * 4);
 }
 
 static inline void msm_mpm_write(
 	unsigned int reg, unsigned int subreg_index, uint32_t value)
 {
 	unsigned int offset = reg * MSM_MPM_REG_WIDTH + subreg_index;
-	writel(value, MSM_MPM_REQUEST_BASE + offset * 4);
+	__raw_writel(value, MSM_MPM_REQUEST_BASE + offset * 4);
 
 	if (MSM_MPM_DEBUG_WRITE & msm_mpm_debug_mask)
 		pr_info("%s: reg %u.%u: 0x%08x\n",
@@ -219,7 +219,7 @@ static inline void msm_mpm_write_barrier(void)
 
 static inline void msm_mpm_send_interrupt(void)
 {
-	writel(MSM_MPM_APPS_IPC_MPM, MSM_MPM_APPS_IPC);
+	__raw_writel(MSM_MPM_APPS_IPC_MPM, MSM_MPM_APPS_IPC);
 }
 
 static irqreturn_t msm_mpm_irq(int irq, void *dev_id)

@@ -1312,9 +1312,9 @@ static int msm_hsusb_pmic_vbus_notif_init(void (*callback)(int online),
 #if defined(CONFIG_SMB137B_CHARGER) || defined(CONFIG_SMB137B_CHARGER_MODULE)
 	if (machine_is_msm8x60_fluid()) {
 		if (init)
-			smb137b_register_vbus_sn(callback);
+			msm_charger_register_vbus_sn(callback);
 		else
-			smb137b_unregister_vbus_sn(callback);
+			msm_charger_unregister_vbus_sn(callback);
 		return  0;
 	}
 #endif
@@ -6471,7 +6471,6 @@ static void __init msm8x60_init_buses(void)
 	if (machine_is_msm8x60_fluid()) {
 #if defined(CONFIG_SMB137B_CHARGER) || defined(CONFIG_SMB137B_CHARGER_MODULE)
 		msm_otg_pdata.vbus_power = msm_hsusb_smb137b_vbus_power;
-		msm_otg_pdata.chg_vbus_draw = smb137b_vbus_draw;
 #endif
 #if defined(CONFIG_SPI_QUP) || defined(CONFIG_SPI_QUP_MODULE)
 		msm_gsbi10_qup_spi_device.dev.platform_data =
@@ -9065,7 +9064,7 @@ static void __init msm8x60_init(struct msm_board_data *board_data)
 #ifdef CONFIG_BATTERY_MSM8X60
 	if (machine_is_msm8x60_surf() || machine_is_msm8x60_ffa() ||
 		machine_is_msm8x60_charm_surf() ||
-		machine_is_msm8x60_charm_ffa())
+		machine_is_msm8x60_charm_ffa() || machine_is_msm8x60_fluid())
 		platform_device_register(&msm_charger_device);
 #endif
 

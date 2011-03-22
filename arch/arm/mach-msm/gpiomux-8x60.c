@@ -366,10 +366,28 @@ static struct gpiomux_setting max_touch_suspended = {
 	.pull = GPIOMUX_PULL_NONE,
 };
 
+static struct gpiomux_setting ts_ldo_active = {
+	.func = GPIOMUX_FUNC_GPIO,
+	.drv = GPIOMUX_DRV_6MA,
+	.pull = GPIOMUX_PULL_NONE,
+};
+
+static struct gpiomux_setting ts_ldo_suspended = {
+	.func = GPIOMUX_FUNC_GPIO,
+	.drv = GPIOMUX_DRV_2MA,
+	.pull = GPIOMUX_PULL_DOWN,
+};
+
 static struct gpiomux_setting lock_active = {
 	.func = GPIOMUX_FUNC_GPIO,
 	.drv = GPIOMUX_DRV_6MA,
 	.pull = GPIOMUX_PULL_UP,
+};
+
+static struct gpiomux_setting ts_active = {
+	.func = GPIOMUX_FUNC_GPIO,
+	.drv = GPIOMUX_DRV_6MA,
+	.pull = GPIOMUX_PULL_NONE,
 };
 
 static struct gpiomux_setting ts_suspended = {
@@ -891,6 +909,28 @@ static struct msm_gpiomux_config msm8x60_lock_configs[] __initdata = {
 		.gpio = 67,
 		.settings = {
 			[GPIOMUX_ACTIVE] = &lock_active,
+		},
+	},
+};
+
+static struct msm_gpiomux_config msm8x60_ts_ldo_configs[] __initdata = {
+	{
+		/* TS_LDO_EN */
+		.gpio = 69,
+		.settings = {
+			[GPIOMUX_ACTIVE] = &ts_ldo_active,
+			[GPIOMUX_SUSPENDED] = &ts_ldo_suspended,
+		},
+	},
+};
+
+static struct msm_gpiomux_config msm8x60_ts_reset_configs[] __initdata = {
+	{
+		/* TS_ATTN */
+		.gpio = 58,
+		.settings = {
+			[GPIOMUX_ACTIVE] = &ts_active,
+			[GPIOMUX_SUSPENDED] = &ts_suspended,
 		},
 	},
 };
@@ -1871,6 +1911,8 @@ msm8x60_qt_gpiomux_cfgs[] __initdata = {
 	{msm8x60_uart_configs, ARRAY_SIZE(msm8x60_uart_configs)},
 	{msm8x60_max_touch_configs, ARRAY_SIZE(msm8x60_max_touch_configs)},
 	{msm8x60_lock_configs, ARRAY_SIZE(msm8x60_lock_configs)},
+	{msm8x60_ts_ldo_configs, ARRAY_SIZE(msm8x60_ts_ldo_configs)},
+	{msm8x60_ts_reset_configs, ARRAY_SIZE(msm8x60_ts_reset_configs)},
 	{msm8x60_aux_pcm_configs, ARRAY_SIZE(msm8x60_aux_pcm_configs)},
 	{msm8x60_sdc_configs, ARRAY_SIZE(msm8x60_sdc_configs)},
 	{msm8x60_snd_configs, ARRAY_SIZE(msm8x60_snd_configs)},

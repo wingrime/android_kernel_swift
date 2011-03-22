@@ -2027,6 +2027,7 @@ static struct xoadc_platform_data xoadc_pdata = {
 #endif
 
 #define QT_ATMEL_TS_GPIO_IRQ	61
+#define QT_ATMEL_LDO_ENABLE_GPIO 69
 #define ATMEL_I2C_NAME "maXTouch"
 
 static struct regulator *pm8901_l2;
@@ -2072,8 +2073,23 @@ static int atmel_qt_platform_init(struct i2c_client *client)
 		goto free_gpio;
 	}
 
+	rc = gpio_request(QT_ATMEL_LDO_ENABLE_GPIO, "atmel_ldo_gpio");
+	if (rc) {
+		pr_err("%s: unable to request gpio %d\n",
+			__func__, QT_ATMEL_LDO_ENABLE_GPIO);
+		goto free_gpio;
+	}
+	rc = gpio_direction_output(QT_ATMEL_LDO_ENABLE_GPIO, 1);
+	if (rc < 0) {
+		pr_err("%s: unable to set the direction of gpio %d\n",
+			__func__, QT_ATMEL_LDO_ENABLE_GPIO);
+		goto free_ldo_gpio;
+	}
+
 	return 0;
 
+free_ldo_gpio:
+	gpio_free(QT_ATMEL_LDO_ENABLE_GPIO);
 free_gpio:
 	gpio_free(QT_ATMEL_TS_GPIO_IRQ);
 reg_disable:

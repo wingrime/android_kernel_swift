@@ -210,7 +210,8 @@ void kgsl_pwrctrl_clk(struct kgsl_device *device, unsigned int pwrflag)
 				clk_disable(pwr->imem_clk);
 			if (pwr->imem_pclk != NULL)
 				clk_disable(pwr->imem_pclk);
-			if (pwr->pwrlevels[0].gpu_freq > 0)
+			if ((pwr->pwrlevels[0].gpu_freq > 0) &&
+				(device->requested_state != KGSL_STATE_NAP))
 				clk_set_rate(pwr->grp_src_clk,
 					pwr->pwrlevels[pwr->num_pwrlevels - 1].
 						gpu_freq);
@@ -223,7 +224,8 @@ void kgsl_pwrctrl_clk(struct kgsl_device *device, unsigned int pwrflag)
 		if (pwr->power_flags & KGSL_PWRFLAGS_CLK_OFF) {
 			KGSL_PWR_INFO(device,
 				"clocks on, device %d\n", device->id);
-			if (pwr->pwrlevels[0].gpu_freq > 0)
+			if ((pwr->pwrlevels[0].gpu_freq > 0) &&
+				(device->state != KGSL_STATE_NAP))
 				clk_set_rate(pwr->grp_src_clk,
 					pwr->pwrlevels[pwr->active_pwrlevel].
 						gpu_freq);

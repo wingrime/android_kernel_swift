@@ -198,13 +198,13 @@ static bool msm_rpm_init_notif_done;
 
 static inline uint32_t msm_rpm_read(unsigned int page, unsigned int reg)
 {
-	return readl(msm_rpm_platform->reg_base_addrs[page] + reg * 4);
+	return __raw_readl(msm_rpm_platform->reg_base_addrs[page] + reg * 4);
 }
 
 static inline void msm_rpm_write(
 	unsigned int page, unsigned int reg, uint32_t value)
 {
-	writel(value, msm_rpm_platform->reg_base_addrs[page] + reg * 4);
+	__raw_writel(value, msm_rpm_platform->reg_base_addrs[page] + reg * 4);
 }
 
 static inline void msm_rpm_read_contiguous(
@@ -293,7 +293,7 @@ static inline void msm_rpm_write_barrier(void)
 
 static inline void msm_rpm_send_req_interrupt(void)
 {
-	writel(APPS_IPC_RPM, APPS_IPC);
+	__raw_writel(APPS_IPC_RPM, APPS_IPC);
 }
 
 /*

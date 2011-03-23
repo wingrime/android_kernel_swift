@@ -75,6 +75,10 @@
 #define VIDC_SM_DEC_CROP_INFO2_TOP_OFFSET_BMSK              0x0000ffff
 #define VIDC_SM_DEC_CROP_INFO2_TOP_OFFSET_SHFT              0
 
+#define VIDC_SM_IDR_DECODING_ONLY_ADDR                      0x0108
+#define VIDC_SM_IDR_DECODING_ONLY_BMSK                      0x00000001
+#define VIDC_SM_IDR_DECODING_ONLY_SHIFT                     0
+
 #define VIDC_SM_ENC_EXT_CTRL_ADDR                    0x0028
 #define VIDC_SM_ENC_EXT_CTRL_VBV_BUFFER_SIZE_BMSK    0xffff0000
 #define VIDC_SM_ENC_EXT_CTRL_VBV_BUFFER_SIZE_SHFT    16
@@ -614,4 +618,14 @@ void vidc_sm_set_encoder_init_rc_value(struct ddl_buf_addr *shared_mem,
 {
 	DDL_MEM_WRITE_32(shared_mem, 0x011C, new_rc_value);
 
+}
+void vidc_sm_set_idr_decode_only(struct ddl_buf_addr *shared_mem,
+	u32 enable)
+{
+	u32 idr_decode_only = VIDC_SETFIELD((enable) ? 1 : 0,
+			VIDC_SM_IDR_DECODING_ONLY_SHIFT,
+			VIDC_SM_IDR_DECODING_ONLY_BMSK
+			);
+	DDL_MEM_WRITE_32(shared_mem, VIDC_SM_IDR_DECODING_ONLY_ADDR,
+			idr_decode_only);
 }

@@ -80,6 +80,7 @@ static struct mmc_platform_data msm8960_sdc1_data = {
 	.msmsdcc_fmid	= 24000000,
 	.msmsdcc_fmax	= 48000000,
 	.nonremovable	= 1,
+	.sdcc_v4_sup	= true
 };
 #endif
 
@@ -90,6 +91,7 @@ static struct mmc_platform_data msm8960_sdc3_data = {
 	.msmsdcc_fmin	= 400000,
 	.msmsdcc_fmid	= 24000000,
 	.msmsdcc_fmax	= 48000000,
+	.sdcc_v4_sup	= true
 };
 #endif
 

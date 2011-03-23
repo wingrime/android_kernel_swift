@@ -16,7 +16,7 @@
  */
 
 /*
- * dsps_clk - control dsps clocks on/off.
+ * msm_dsps - control DSPS clocks, gpios and vregs.
  *
  */
 
@@ -41,7 +41,7 @@
 #include <mach/msm_dsps.h>
 
 #define DRV_NAME	"msm_dsps"
-#define DRV_VERSION	"1.01"
+#define DRV_VERSION	"1.02"
 
 #define PPSS_PAUSE_REG	0x1804
 
@@ -117,7 +117,8 @@ static void dsps_suspend(void)
 {
 	pr_debug("%s.\n", __func__);
 
-	writel(1, drv->ppss_base + PPSS_PAUSE_REG);
+	writel_relaxed(1, drv->ppss_base + PPSS_PAUSE_REG);
+	mb(); /* Make sure write commited before ioctl returns. */
 }
 
 /**
@@ -127,7 +128,8 @@ static void dsps_resume(void)
 {
 	pr_debug("%s.\n", __func__);
 
-	writel(0, drv->ppss_base + PPSS_PAUSE_REG);
+	writel_relaxed(0, drv->ppss_base + PPSS_PAUSE_REG);
+	mb(); /* Make sure write commited before ioctl returns. */
 }
 
 /**
@@ -137,7 +139,8 @@ static u32 dsps_read_slow_timer(void)
 {
 	u32 val;
 
-	val = readl(drv->ppss_base + PPSS_TIMER0_32KHZ_REG);
+	val = readl_relaxed(drv->ppss_base + PPSS_TIMER0_32KHZ_REG);
+	rmb(); /* order reads from the user output buffer */
 
 	pr_debug("%s.count=%d.\n", __func__, val);
 
@@ -151,7 +154,8 @@ static u32 dsps_read_fast_timer(void)
 {
 	u32 val;
 
-	val = readl(drv->ppss_base + PPSS_TIMER0_20MHZ_REG);
+	val = readl_relaxed(drv->ppss_base + PPSS_TIMER0_20MHZ_REG);
+	rmb(); /* order reads from the user output buffer */
 
 	pr_debug("%s.count=%d.\n", __func__, val);
 

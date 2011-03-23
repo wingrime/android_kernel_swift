@@ -1051,12 +1051,8 @@ static void vpe_send_outmsg(uint8_t msgid, uint32_t pyaddr,
 
 int msm_vpe_reg(struct msm_vpe_callback *presp)
 {
-
 	if (presp && presp->vpe_resp)
 		vpe_ctrl->resp = presp;
-		/*
-		CDBG("vpe_ctrl->resp = %x \n", vpe_ctrl->resp);
-		*/
 
 	return 0;
 }
@@ -1133,6 +1129,7 @@ static void vpe_do_tasklet(unsigned long data)
 
 			vpe_send_msg_no_payload(MSG_ID_VPE_OUTPUT_ST_L);
 			vpe_ctrl->state = 0;   /* put it back to idle. */
+			kfree(qcmd);
 			return;
 		} else if (vpe_ctrl->output_type == OUTPUT_TYPE_ST_R) {
 			src_y = orig_src_y;
@@ -1221,7 +1218,7 @@ static irqreturn_t vpe_parse_irq(int irq_num, void *data)
 		qcmd = kzalloc(sizeof(struct vpe_isr_queue_cmd_type),
 			GFP_ATOMIC);
 		if (!qcmd) {
-			CDBG("vpe_parse_irq: qcmd malloc failed!\n");
+			pr_err("%s: qcmd malloc failed!\n", __func__);
 			return IRQ_HANDLED;
 		}
 		/* must be 0x1 now. so in bottom half we don't really

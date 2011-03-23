@@ -37,7 +37,6 @@
 #include <linux/kthread.h>
 #include <linux/version.h>
 #include <linux/errno.h>
-#include <linux/syscalls.h>
 
 /* DEFINES AND MACROS */
 #define MAX_NUM_DEVICES		1
@@ -75,7 +74,6 @@
 #define SDIO_DLD_BOOT_TEST_MODE_NAME	"SDIO DLD BOOT TEST MODE"
 #define SDIO_DLD_AMSS_TEST_MODE_NAME	"SDIO DLD AMSS TEST MODE"
 #define TEST_NAME_MAX_SIZE		30
-#define SDIO_DLD_OP_MODE_FILE_PATH	"/data/sdio_al_dbg/op_mode.txt"
 
 #define PUSH_STRING
 #define DLOADER_DBG
@@ -166,7 +164,6 @@ struct sdio_downloader {
 	struct timer_list timer;
 	int poll_ms;
 	enum sdio_dld_op_mode op_mode;
-	atomic_t change_op_mode;
 	char op_mode_name[TEST_NAME_MAX_SIZE];
 };
 
@@ -196,6 +193,13 @@ static DEFINE_SPINLOCK(lock1);
 static unsigned long lock_flags1;
 static DEFINE_SPINLOCK(lock2);
 static unsigned long lock_flags2;
+
+/*
+ * sdio_op_mode sets the operation mode of the sdio_dloader -
+ * it may be in NORMAL_MODE, BOOT_TEST_MODE or AMSS_TEST_MODE
+ */
+static int sdio_op_mode = (int)SDIO_DLD_NORMAL_MODE;
+module_param(sdio_op_mode, int, 0);
 
 #ifdef DLOADER_DBG
 #include <linux/debugfs.h>
@@ -521,32 +525,18 @@ static int __init bootloader_debugfs_init(void)
 #endif /* DLOADER_DBG */
 
 /**
-  * sdio_dld_set_op_mode - sets the operation mode global
-  * variable
+  * sdio_dld_set_op_mode
+  * sets the op_mode and the name of the op_mode. Also, in case
+  * it's invalid mode sets op_mode to SDIO_DLD_NORMAL_MODE
   *
   * @op_mode: the operation mode to be set
-  * @return 0 on success or negative value on error.
+  * @return NONE
   */
-int sdio_dld_set_op_mode(enum sdio_dld_op_mode op_mode)
+static void sdio_dld_set_op_mode(enum sdio_dld_op_mode op_mode)
 {
-	int result = 0;
+	sdio_dld->op_mode = op_mode;
 
-	if (op_mode <= SDIO_DLD_NO_MODE ||
-	    op_mode > SDIO_DLD_NUM_OF_MODES) {
-		pr_err(MODULE_NAME ": %s - FLASHLESS BOOT - op_mode has "
-		       "invalid value = %d", __func__, op_mode);
-	    return -EINVAL;
-	}
-
-	if (atomic_read(&sdio_dld->change_op_mode) == 0) {
-		atomic_set(&sdio_dld->change_op_mode, 1);
-		sdio_dld->op_mode = op_mode;
-		atomic_set(&sdio_dld->change_op_mode, 0);
-	} else {
-		return -EAGAIN;
-	}
-
-	switch (sdio_dld->op_mode) {
+	switch (op_mode) {
 	case SDIO_DLD_NORMAL_MODE:
 		memcpy(sdio_dld->op_mode_name,
 		       SDIO_DLD_NORMAL_MODE_NAME, TEST_NAME_MAX_SIZE);
@@ -560,12 +550,12 @@ int sdio_dld_set_op_mode(enum sdio_dld_op_mode op_mode)
 		       SDIO_DLD_AMSS_TEST_MODE_NAME, TEST_NAME_MAX_SIZE);
 		break;
 	default:
+		sdio_dld->op_mode = SDIO_DLD_NORMAL_MODE;
 		pr_err(MODULE_NAME ": %s - Invalid Op_Mode = %d. Settings "
 		       "Op_Mode to default - NORMAL_MODE\n",
-		       __func__, sdio_dld->op_mode);
+		       __func__, op_mode);
 		memcpy(sdio_dld->op_mode_name,
 		       SDIO_DLD_NORMAL_MODE_NAME, TEST_NAME_MAX_SIZE);
-		result = -EINVAL;
 		break;
 	}
 
@@ -576,20 +566,6 @@ int sdio_dld_set_op_mode(enum sdio_dld_op_mode op_mode)
 		pr_info(MODULE_NAME ": %s - FLASHLESS BOOT - op_mode_name is "
 			"NULL\n", __func__);
 	}
-
-	return result;
-}
-
-/**
-  * sdio_dld_get_op_mode - gets the operation mode global
-  * variable
-  *
-  * @return the operation mode global variable.
-  *
-  */
-static enum sdio_dld_op_mode sdio_dld_get_op_mode(void)
-{
-	return sdio_dld->op_mode;
 }
 
 /**
@@ -2165,8 +2141,7 @@ static int sdio_dld_init_global(struct mmc_card *card,
 	sdio_dld->sdio_dloader_data.sdioc_reg.up_buff_address.reg_offset =
 		SDIOC_UP_BUFF_ADDRESS;
 
-	if (sdio_dld_get_op_mode() == SDIO_DLD_NO_MODE)
-		sdio_dld_set_op_mode(SDIO_DLD_NORMAL_MODE);
+	sdio_dld_set_op_mode(SDIO_DLD_NORMAL_MODE);
 
 	return 0;
 }
@@ -2191,13 +2166,9 @@ int sdio_downloader_setup(struct mmc_card *card,
 {
 	unsigned i;
 	int status = 0;
+	int result = 0;
 	int func_in_array = 0;
 	struct sdio_func *str_func = NULL;
-	int fd;
-	char ch[2] = {0, '\0'};
-	int result = 0;
-	unsigned int base = 10;
-	long res = 0;
 
 	if (num_of_devices == 0 || num_of_devices > MAX_NUM_DEVICES) {
 		pr_err(MODULE_NAME ": %s - invalid number of devices\n",
@@ -2247,71 +2218,10 @@ int sdio_downloader_setup(struct mmc_card *card,
 		return -EINVAL;
 	}
 
-	fd = sys_open(SDIO_DLD_OP_MODE_FILE_PATH, O_RDWR, 0644);
-	if (fd < 0) {
-		pr_err(MODULE_NAME ": %s - FLASHLESS BOOT - Fail to Open or "
-		       "locate the file %s\n",
-			__func__, SDIO_DLD_OP_MODE_FILE_PATH);
-		sdio_dld_set_op_mode(SDIO_DLD_NORMAL_MODE);
-	} else {
-		result = sys_read(fd, ch, 1);
-
-		if (result < 1) {
-			pr_info(MODULE_NAME ": %s - FLASHLESS BOOT - "
-				"sys_read() failed. Returned with %d",
-				__func__, result);
-			sdio_dld_set_op_mode(SDIO_DLD_NORMAL_MODE);
-		} else {
-			result = strict_strtol(ch, base, &res);
-			if (result) {
-				pr_info(MODULE_NAME ": %s - FLASHLESS BOOT - "
-					"strict_strtol() failed. Returned "
-					"with %d", __func__, result);
-				sdio_dld_set_op_mode(SDIO_DLD_NORMAL_MODE);
-			} else {
-				switch (res) {
-				case SDIO_DLD_NO_MODE:
-					pr_info(MODULE_NAME ": %s - "
-						"FLASHLESSBOOT '0'\n",
-						__func__);
-					sdio_dld_set_op_mode(
-					    SDIO_DLD_NORMAL_MODE);
-					break;
-				case SDIO_DLD_NORMAL_MODE:
-					pr_info(MODULE_NAME ": %s - "
-						"FLASHLESSBOOT '1'\n",
-						__func__);
-					sdio_dld_set_op_mode(
-					    SDIO_DLD_NORMAL_MODE);
-					break;
-				case SDIO_DLD_BOOT_TEST_MODE:
-					pr_info(MODULE_NAME ": %s - "
-						"FLASHLESSBOOT '2'\n",
-						__func__);
-					sdio_dld_set_op_mode(
-					    SDIO_DLD_BOOT_TEST_MODE);
-					break;
-				case SDIO_DLD_AMSS_TEST_MODE:
-					pr_info(MODULE_NAME ": %s - "
-						"FLASHLESSBOOT '3'\n",
-						__func__);
-					sdio_dld_set_op_mode(
-					    SDIO_DLD_AMSS_TEST_MODE);
-					break;
-				default:
-					pr_info(MODULE_NAME ": %s - "
-						"FLASHLESSBOOT 'default'\n",
-						__func__);
-					sdio_dld_set_op_mode(
-					    SDIO_DLD_NORMAL_MODE);
-					break;
-				}
-			}
-		}
-	}
+	sdio_dld_set_op_mode((enum sdio_dld_op_mode)sdio_op_mode);
 
 	/* according to op_mode, a different tty device is created */
-	if (sdio_dld_get_op_mode() == SDIO_DLD_BOOT_TEST_MODE)
+	if (sdio_dld->op_mode == SDIO_DLD_BOOT_TEST_MODE)
 		sdio_dld->tty_drv->name = TTY_SDIO_DEV_TEST;
 	else
 	    sdio_dld->tty_drv->name = TTY_SDIO_DEV;

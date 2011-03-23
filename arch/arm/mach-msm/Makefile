@@ -198,10 +198,9 @@ obj-$(CONFIG_ARCH_MSM7X27) += gpiomux-7x27.o gpiomux-v1.o gpiomux.o
 obj-$(CONFIG_ARCH_MSM7X30) += gpiomux-7x30.o gpiomux-v1.o gpiomux.o
 obj-$(CONFIG_ARCH_QSD8X50) += gpiomux-8x50.o gpiomux-v1.o gpiomux.o
 obj-$(CONFIG_ARCH_MSM8X60) += gpiomux-8x60.o gpiomux-v2.o gpiomux.o
+obj-$(CONFIG_ARCH_MSM8960) += gpiomux-v2.o gpiomux.o
 ifdef CONFIG_MSM_V2_TLMM
-ifndef CONFIG_ARCH_MSM8960
 obj-y	+= gpio-v2.o
-endif
 else
 obj-y	+= gpio.o
 endif
@@ -210,4 +209,3 @@ obj-$(CONFIG_MSM_SHOW_RESUME_IRQ) += msm_show_resume_irq.o
 obj-$(CONFIG_BT_MSM_PINTEST)  += btpintest.o
 obj-$(CONFIG_ENABLE_ROMLITE)  += romlite_sec.o
 romlite_sec-objs := msm_romlite_sec.o msm_romlite_pa.o
-

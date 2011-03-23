@@ -6631,8 +6631,8 @@ static void __init msm8x60_configure_smc91x(void)
 		smc91x_resources[0].start = 0x1d000300;
 		smc91x_resources[0].end   = 0x1d0003ff;
 
-		smc91x_resources[1].start = TLMM_SCSS_DIR_CONN_IRQ_0;
-		smc91x_resources[1].end   = TLMM_SCSS_DIR_CONN_IRQ_0;
+		smc91x_resources[1].start = TLMM_MSM_DIR_CONN_IRQ_0;
+		smc91x_resources[1].end   = TLMM_MSM_DIR_CONN_IRQ_0;
 	}
 }
 

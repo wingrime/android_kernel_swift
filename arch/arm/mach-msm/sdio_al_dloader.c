@@ -2164,11 +2164,11 @@ int sdio_downloader_setup(struct mmc_card *card,
 			  int channel_number,
 			  int(*done)(void))
 {
-	unsigned i;
 	int status = 0;
 	int result = 0;
 	int func_in_array = 0;
 	struct sdio_func *str_func = NULL;
+	struct device *tty_dev;
 
 	if (num_of_devices == 0 || num_of_devices > MAX_NUM_DEVICES) {
 		pr_err(MODULE_NAME ": %s - invalid number of devices\n",
@@ -2255,17 +2255,13 @@ int sdio_downloader_setup(struct mmc_card *card,
 		return status;
 	}
 
-	for (i = 0; i < num_of_devices ; i++) {
-		struct device *tty_dev;
-
-		tty_dev = tty_register_device(sdio_dld->tty_drv, i, NULL);
-		if (IS_ERR(tty_dev)) {
-			pr_err(MODULE_NAME ": %s - tty_register_device() "
-				"failed\n", __func__);
-			tty_unregister_driver(sdio_dld->tty_drv);
-			kfree(sdio_dld);
-			return PTR_ERR(tty_dev);
-		}
+	tty_dev = tty_register_device(sdio_dld->tty_drv, 0, NULL);
+	if (IS_ERR(tty_dev)) {
+		pr_err(MODULE_NAME ": %s - tty_register_device() "
+			"failed\n", __func__);
+		tty_unregister_driver(sdio_dld->tty_drv);
+		kfree(sdio_dld);
+		return PTR_ERR(tty_dev);
 	}
 
 	sdio_dld->tty_str = tty_init_dev(sdio_dld->tty_drv, 0, 1);
@@ -2287,7 +2283,7 @@ int sdio_downloader_setup(struct mmc_card *card,
 	if (status) {
 		pr_err(MODULE_NAME ": %s - Failure in Function "
 		       "sdio_dld_init_func(). status=%d\n",
-		       __func__, -status);
+		       __func__, status);
 		goto exit_err;
 	}
 
@@ -2308,7 +2304,7 @@ int sdio_downloader_setup(struct mmc_card *card,
 		pr_err(MODULE_NAME ": %s - sdio_memcpy_toio() "
 		       "writing to OP_MODE_REGISTER failed. "
 		       "status=%d.\n",
-		       __func__, -status);
+		       __func__, status);
 		goto exit_err;
 	}
 
@@ -2319,7 +2315,7 @@ exit_err:
 	result = tty_unregister_driver(sdio_dld->tty_drv);
 	if (result)
 		pr_err(MODULE_NAME ": %s - tty_unregister_driver() "
-				   "failed. result=%d\n", __func__, -result);
+		       "failed. result=%d\n", __func__, -result);
 	kfree(sdio_dld);
 	return status;
 }

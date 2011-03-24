@@ -67,6 +67,7 @@
 
 /** Number of SDIO-Client pipes */
 #define SDIO_AL_MAX_PIPES    16
+#define SDIO_AL_ACTIVE_PIPES 8
 
 /** CMD53/CMD54 Block size */
 #define SDIO_AL_BLOCK_SIZE   128
@@ -147,7 +148,6 @@
 
 #define TIME_TO_WAIT_US 500
 #define SDIO_PREFIX "SDIO_"
-#define FILE_ARRAY_SIZE 350
 
 #define DATA_DEBUG(x...) if (sdio_al->debug.debug_data_on) pr_info(x)
 #define LPM_DEBUG(x...) if (sdio_al->debug.debug_lpm_on) pr_info(x)
@@ -3162,64 +3162,31 @@ static int sdio_al_sdio_resume(struct device *dev)
 	return 0;
 }
 
-static void write_to_debug_file(int fd, char *buf, int size)
-{
-	if (fd >= 0) {
-		sys_write(fd, buf, size);
-		memset(buf, 0, size);
-	}
-}
-
-static void sdio_print_mailbox(struct sdio_mailbox *mailbox,
-				int fd,
-				char *buf,
-				int size)
+static void sdio_print_mailbox(struct sdio_mailbox *mailbox)
 {
 	int k = 0;
 
 	if (!mailbox) {
-		snprintf(buf, FILE_ARRAY_SIZE,
-			 "\n" MODULE_NAME ": mailbox is NULL\n");
-		pr_info("%s", buf);
-		write_to_debug_file(fd, buf, FILE_ARRAY_SIZE);
+		pr_err(MODULE_NAME ": mailbox is NULL\n");
 		return;
 	}
 
-	snprintf(buf,
-		 FILE_ARRAY_SIZE,
-		 "\n" MODULE_NAME ": eot_pipe(0_7)=%d, eot_pipe(8_15)=%d"
-		 "\n" MODULE_NAME ": thresh_above_limit_pipe(0_7)=%d, "
-		 "thresh_above_limit_pipe(8_15)=%d"
-		 "\n" MODULE_NAME ": overflow_pipe(0_7)=%d, "
-		 "overflow_pipe(8_15)=%d"
-		 "\n" MODULE_NAME ": underflow_pipe(0_7)=%d, "
-		 "underflow_pipe(8_15)=%d"
-		 "\n" MODULE_NAME ": mask_thresh_above_limit_pipe(0_7)=%d, "
-		 "mask_thresh_above_limit_pipe(8_15)=%d",
+	pr_err(MODULE_NAME ": eot_pipe(0_7)=%d, "
+		"thresh_above_limit_pipe(0_7)=%d\n"
+		MODULE_NAME ": overflow_pipe(0_7)=%d, "
+		"underflow_pipe(0_7)=%d, "
+		"mask_thresh_above_limit_pipe(0_7)=%d\n",
 		 mailbox->eot_pipe_0_7,
-		 mailbox->eot_pipe_8_15,
 		 mailbox->thresh_above_limit_pipe_0_7,
-		 mailbox->thresh_above_limit_pipe_8_15,
 		 mailbox->overflow_pipe_0_7,
-		 mailbox->overflow_pipe_8_15,
 		 mailbox->underflow_pipe_0_7,
-		 mailbox->underflow_pipe_8_15,
-		 mailbox->mask_thresh_above_limit_pipe_0_7,
-		 mailbox->mask_thresh_above_limit_pipe_8_15);
-	pr_info("%s", buf);
-	write_to_debug_file(fd, buf, FILE_ARRAY_SIZE);
+		 mailbox->mask_thresh_above_limit_pipe_0_7);
 
-	 snprintf(buf, FILE_ARRAY_SIZE,
-		 "\n\n" MODULE_NAME ": pipe_bytes_avail per channel:");
-	 pr_info("%s", buf);
-	 write_to_debug_file(fd, buf, FILE_ARRAY_SIZE);
+	 pr_err(MODULE_NAME ": pipe_bytes_avail for pipes 0-7:");
 
-	 for (k = 0 ; k < SDIO_AL_MAX_PIPES ; ++k) {
-		snprintf(buf, FILE_ARRAY_SIZE,
-			 "\n" MODULE_NAME ": pipe_bytes_avail in pipe#%d = %d",
+	 for (k = 0 ; k < SDIO_AL_ACTIVE_PIPES ; ++k) {
+		pr_err(MODULE_NAME ": pipe_bytes_avail in pipe#%d = %d",
 			 k, mailbox->pipe_bytes_avail[k]);
-		pr_info("%s", buf);
-		write_to_debug_file(fd, buf, FILE_ARRAY_SIZE);
 	 }
 }
 
@@ -3235,8 +3202,6 @@ static void sdio_al_print_info(void)
 	struct peer_sdioc_channel_config *ch_config = NULL;
 	struct sdio_func *func1 = NULL;
 	struct sdio_func *lpm_func = NULL;
-	static int fd;
-	char *buf = NULL;
 	int offset = 0;
 	int is_ok_to_sleep = 0;
 	static atomic_t first_time;
@@ -3246,140 +3211,101 @@ static void sdio_al_print_info(void)
 
 	atomic_set(&first_time, 1);
 
-	pr_info(MODULE_NAME ": %s - SDIO DEBUG INFO\n", __func__);
-
-	buf = kzalloc(FILE_ARRAY_SIZE, GFP_KERNEL);
-	if (!buf) {
-		pr_err(MODULE_NAME ": couldn't allocate buffer");
-		return;
-	}
-
-	set_fs(KERNEL_DS);
-	fd = sys_open("/data/local/tmp/sdio_debug_info_text.txt",
-		      O_WRONLY | O_CREAT, 0644);
-	if (fd < 0) {
-		pr_err(MODULE_NAME ": %s - Fail to Open or Create "
-			"the file /data/local/tmp/sdio_debug_info_text.txt. "
-			"fd=%d", __func__, fd);
-	}
+	pr_err(MODULE_NAME ": %s - SDIO DEBUG INFO\n", __func__);
 
 	if (!sdio_al) {
-		snprintf(buf, FILE_ARRAY_SIZE,
-			"\n" MODULE_NAME ": %s - ERROR - sdio_al is NULL\n",
+		pr_err(MODULE_NAME ": %s - ERROR - sdio_al is NULL\n",
 			 __func__);
-		pr_info("%s", buf);
-		write_to_debug_file(fd, buf, FILE_ARRAY_SIZE);
-		kfree(buf);
 		return;
 	}
 
-	snprintf(buf, FILE_ARRAY_SIZE,
-		 "\n" MODULE_NAME ": GPIO mdm2ap_status=%d\n",
-		sdio_al->pdata->get_mdm2ap_status());
-	pr_info("%s", buf);
-	write_to_debug_file(fd, buf, FILE_ARRAY_SIZE);
+	pr_err(MODULE_NAME ": GPIO mdm2ap_status=%d\n",
+				sdio_al->pdata->get_mdm2ap_status());
 
 	for (j = 0 ; j < MAX_NUM_OF_SDIO_DEVICES ; ++j) {
 		struct sdio_al_device *sdio_al_dev = sdio_al->devices[j];
 
 		if (sdio_al_dev == NULL) {
-			snprintf(buf, FILE_ARRAY_SIZE,
-				 "\n" MODULE_NAME ": Device#%d, is NULL", j);
-			pr_info("%s", buf);
-			write_to_debug_file(fd, buf, FILE_ARRAY_SIZE);
-
+			pr_err(MODULE_NAME ": Device#%d, is NULL. "
+				"continuing...", j);
 			continue;
 		}
 
-		snprintf(buf, FILE_ARRAY_SIZE,
-			 "\n" MODULE_NAME ": Device#%d - "
-			 "Shadowing HW Mailbox\n", j);
-		pr_info("%s", buf);
-		write_to_debug_file(fd, buf, FILE_ARRAY_SIZE);
+		if (!sdio_al_dev->card && !sdio_al_dev->card->host) {
+			pr_err(MODULE_NAME ": Card or Host fields "
+			       "are NULL\n);");
+			continue;
+		}
+
+		pr_err(MODULE_NAME ": Device#%d, Card#%d - "
+		       "Shadowing HW Mailbox:\n",
+		       j, sdio_al_dev->card->host->index);
 
 		/* printing Shadowing HW Mailbox*/
 		mailbox = sdio_al_dev->mailbox;
-		sdio_print_mailbox(mailbox, fd, buf, FILE_ARRAY_SIZE);
+		sdio_print_mailbox(mailbox);
+
+		pr_err(MODULE_NAME ": Device#%d, Card#%d. "
+			"sdio_al_dev->is_ok_to_sleep=%d\n",
+			j, sdio_al_dev->card->host->index,
+			sdio_al_dev->is_ok_to_sleep);
 
 		/* printing Shadowing SW Mailbox per channel*/
 		for (i = 0 ; i < SDIO_AL_MAX_CHANNELS ; ++i) {
 			struct sdio_channel *ch = &sdio_al_dev->channel[i];
 
 			if (ch == NULL) {
-				snprintf(buf, FILE_ARRAY_SIZE,
-					 "\n\n" MODULE_NAME
-					 ": Device#%d, Channel#%d %s is NULL",
-					 j, i, ch->name);
-				pr_info("%s", buf);
-				write_to_debug_file(fd, buf, FILE_ARRAY_SIZE);
-
+				pr_err(MODULE_NAME ": Device#%d, "
+					"Card#%d, Channel#%d %s is "
+					"NULL", j,
+					sdio_al_dev->card->host->index,
+					i, ch->name);
 				continue;
 			}
 
 			if (!ch->is_valid) {
-				snprintf(buf, FILE_ARRAY_SIZE,
-					 "\n" MODULE_NAME
-					 ": Channel#%d %s is NOT VALID",
-					 i, ch->name);
-				pr_info("%s", buf);
-				write_to_debug_file(fd, buf, FILE_ARRAY_SIZE);
+				pr_err(MODULE_NAME
+					 ": Channel#%d %s is NOT VALID. "
+					"continuing...", i, ch->name);
 				continue;
 			}
 
-			snprintf(buf, FILE_ARRAY_SIZE,
-				 "\n\n" MODULE_NAME ": Channel #%d %s: "
-				 "Shadowing SW Mailbox -",
-				 i, ch->name);
-			pr_info("%s", buf);
-			write_to_debug_file(fd, buf, FILE_ARRAY_SIZE);
+			pr_err(MODULE_NAME ": Channel #%d %s: "
+				 "Shadowing SW Mailbox:", i, ch->name);
 			ch_config = &sdio_al_dev->channel[i].ch_config;
 
-			/* Printing SW Mailbox Per Channel */
-			snprintf(buf, FILE_ARRAY_SIZE,
-				 "\n" MODULE_NAME ": max_rx_threshold=%d, "
-				 "max_tx_threshold=%d, tx_buf_size=%d"
-				 "\n" MODULE_NAME ": is_packet_mode=%d, "
-				 "max_packet_size=%d",
-				 ch_config->max_rx_threshold,
-				 ch_config->max_tx_threshold,
-				 ch_config->tx_buf_size,
-				 ch_config->is_packet_mode,
-				 ch_config->max_packet_size);
-			pr_info("%s", buf);
-			write_to_debug_file(fd, buf, FILE_ARRAY_SIZE);
+			pr_err(MODULE_NAME ": max_rx_threshold=%d, "
+				"max_tx_threshold=%d, tx_buf_size=%d\n"
+				MODULE_NAME ": is_packet_mode=%d, "
+				"max_packet_size=%d, min_write_avail=%d",
+				ch_config->max_rx_threshold,
+				ch_config->max_tx_threshold,
+				ch_config->tx_buf_size,
+				ch_config->is_packet_mode,
+				ch_config->max_packet_size,
+				ch->min_write_avail);
 
 			if (!ch->is_open) {
-				snprintf(buf, FILE_ARRAY_SIZE,
-					 "\n" MODULE_NAME
-					 ": %s is VALID but NOT OPEN",
-					 ch->name);
-				pr_info("%s", buf);
-				write_to_debug_file(fd, buf, FILE_ARRAY_SIZE);
-
+				pr_err(MODULE_NAME
+					 ": %s is VALID but NOT OPEN. "
+					"continuing...", ch->name);
 				continue;
 			}
 
-			/* Printing Channel Counters */
-			snprintf(buf, FILE_ARRAY_SIZE,
-				 "\n" MODULE_NAME ": total_rx_bytes = %d, "
-				 "total_tx_bytes = %d"
-				 "\n" MODULE_NAME ": read_avail = %d, "
-				 "write_avail = %d, rx_pending_bytes=%d",
-				 ch->total_rx_bytes, ch->total_tx_bytes,
-				 ch->read_avail, ch->write_avail,
-				 ch->rx_pending_bytes);
-			pr_info("%s", buf);
-			write_to_debug_file(fd, buf, FILE_ARRAY_SIZE);
+			pr_err(MODULE_NAME ": total_rx_bytes = %d, "
+				"total_tx_bytes = %d\n"
+				MODULE_NAME ": read_avail = %d, "
+				"write_avail = %d, rx_pending_bytes=%d",
+				ch->total_rx_bytes, ch->total_tx_bytes,
+				ch->read_avail, ch->write_avail,
+				ch->rx_pending_bytes);
 
 			list_for_each(pos, &(ch->rx_size_list_head)) {
 				p = list_entry(pos,
 						struct rx_packet_size, list);
-				pr_info(MODULE_NAME ": size=%d\n", p->size);
+				pr_err(MODULE_NAME ": size=%d\n", p->size);
 			}
 		} /* end loop over all channels */
-
-		if (fd >= 0)
-			sys_write(fd, "\n\n\n", sizeof("\n\n\n"));
 
 	} /* end loop over all devices */
 
@@ -3387,11 +3313,26 @@ static void sdio_al_print_info(void)
 	for (j = 0 ; j < MAX_NUM_OF_SDIO_DEVICES ; ++j) {
 		struct sdio_al_device *sdio_al_dev = sdio_al->devices[j];
 
-		if (sdio_al_dev == NULL)
+		if (sdio_al_dev == NULL) {
+			pr_err(MODULE_NAME ": %s - Device#%d is NULL, "
+			       "continuing...",
+			       __func__, j);
 			continue;
+		}
 
-		if (sdio_al_dev->lpm_chan == INVALID_SDIO_CHAN)
+		if (!sdio_al_dev->card && !sdio_al_dev->card->host) {
+			pr_err(MODULE_NAME ": Card or Host fields "
+			       "are NULL\n);");
 			continue;
+		}
+
+		if (sdio_al_dev->lpm_chan == INVALID_SDIO_CHAN) {
+			pr_err(MODULE_NAME ": %s - for Device#%d "
+			       "Card#%d, is lpm_chan=="
+			       "INVALID_SDIO_CHAN. continuing...",
+			       __func__, j, sdio_al_dev->card->host->index);
+			continue;
+		}
 
 		offset = offsetof(struct peer_sdioc_sw_mailbox, ch_config)+
 		sizeof(struct peer_sdioc_channel_config) *
@@ -3402,8 +3343,8 @@ static void sdio_al_print_info(void)
 		lpm_func = sdio_al_dev->card->sdio_func[sdio_al_dev->
 								lpm_chan+1];
 		if (!lpm_func) {
-			pr_err(MODULE_NAME ": %s - lpm_func is NULL\n",
-			       __func__);
+			pr_err(MODULE_NAME ": %s - lpm_func is NULL. "
+			       "continuing...\n", __func__);
 			continue;
 		}
 
@@ -3415,30 +3356,31 @@ static void sdio_al_print_info(void)
 		sdio_release_host(func1);
 
 		if (ret) {
-			snprintf(buf, FILE_ARRAY_SIZE,
-				 "\n" MODULE_NAME ": %s - fail to read "
+			pr_err(MODULE_NAME ": %s - fail to read "
 				 "is_ok_to_sleep from mailbox.", __func__);
-			pr_info("%s", buf);
-			write_to_debug_file(fd, buf, FILE_ARRAY_SIZE);
 		}
 
-		snprintf(buf, FILE_ARRAY_SIZE,
-			 "\n" MODULE_NAME ": Device#%d - is_ok_to_sleep=%d\n",
-			 j, is_ok_to_sleep);
-		pr_info("%s", buf);
-		write_to_debug_file(fd, buf, FILE_ARRAY_SIZE);
+		pr_err(MODULE_NAME ": Device#%d, Card#%d - "
+			"is_HOST_ok_to_sleep=%d\n",
+			j, sdio_al_dev->card->host->index,
+			is_ok_to_sleep);
 	}
 
 	for (j = 0 ; j < MAX_NUM_OF_SDIO_DEVICES ; ++j) {
 		struct sdio_al_device *sdio_al_dev = sdio_al->devices[j];
 
-		if (sdio_al_dev == NULL)
+		if (sdio_al_dev == NULL) {
+			pr_err(MODULE_NAME ": %s - Device#%d is NULL, "
+			       "continuing...",
+			       __func__, j);
 			continue;
+		}
 
-		snprintf(buf, FILE_ARRAY_SIZE,
-			 "\n" MODULE_NAME ": Device#%d\n", j);
-		pr_info("%s", buf);
-		write_to_debug_file(fd, buf, FILE_ARRAY_SIZE);
+		if (!sdio_al_dev->card && !sdio_al_dev->card->host) {
+			pr_err(MODULE_NAME ": Card or Host fields "
+			       "are NULL\n);");
+			continue;
+		}
 
 		/* Reading HW Mailbox */
 		func1 = sdio_al_dev->card->sdio_func[0];
@@ -3450,30 +3392,19 @@ static void sdio_al_print_info(void)
 		sdio_release_host(func1);
 
 		if (ret) {
-			snprintf(buf, FILE_ARRAY_SIZE,
-				 "\n" MODULE_NAME ": %s - fail to read "
-				 "mailbox.\n", __func__);
-			pr_err("%s", buf);
-			write_to_debug_file(fd, buf, FILE_ARRAY_SIZE);
-
+			pr_err(MODULE_NAME ": fail to read "
+			       "mailbox.from Device#%d card=#%d. "
+			       "continuing...\n",  j,
+			       sdio_al_dev->card->host->index);
 			continue;
 		}
 
-		snprintf(buf,
-			FILE_ARRAY_SIZE,
-			"\n" MODULE_NAME ": Device#%d - Current HW Mailbox:",
-			 j);
-		pr_info("%s", buf);
-		write_to_debug_file(fd, buf, FILE_ARRAY_SIZE);
+		pr_err(MODULE_NAME ": Device#%d Card=%d. Current HW "
+			"Mailbox:", j, sdio_al_dev->card->host->index);
 
 		/* Printing HW Mailbox */
-		sdio_print_mailbox(hw_mailbox, fd, buf, FILE_ARRAY_SIZE);
-
+		sdio_print_mailbox(hw_mailbox);
 	}
-
-	if (fd >= 0)
-		sys_close(fd);
-	kfree(buf);
 }
 
 static struct sdio_device_id sdio_al_sdioid[] = {

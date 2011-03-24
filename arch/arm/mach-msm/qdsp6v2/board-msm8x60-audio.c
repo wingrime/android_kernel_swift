@@ -145,6 +145,53 @@ static struct platform_device msm_mi2s_device = {
 	.resource	= msm_mi2s_gpio_resources,
 };
 
+/* Must be same size as msm_icodec_gpio_resources */
+static int msm_icodec_gpio_defaults[] = {
+	0,
+	0,
+};
+
+static struct resource msm_icodec_gpio_resources[] = {
+	{
+		.name   = "msm_icodec_speaker_left",
+		.start  = SNDDEV_GPIO_CLASS_D0_EN,
+		.end    = SNDDEV_GPIO_CLASS_D0_EN,
+		.flags  = IORESOURCE_IO,
+	},
+	{
+		.name   = "msm_icodec_speaker_right",
+		.start  = SNDDEV_GPIO_CLASS_D1_EN,
+		.end    = SNDDEV_GPIO_CLASS_D1_EN,
+		.flags  = IORESOURCE_IO,
+	},
+};
+
+static struct platform_device msm_icodec_gpio_device = {
+	.name   = "msm_icodec_gpio",
+	.num_resources  = ARRAY_SIZE(msm_icodec_gpio_resources),
+	.resource       = msm_icodec_gpio_resources,
+	.dev = { .platform_data = &msm_icodec_gpio_defaults },
+};
+
+static int msm_qt_icodec_gpio_defaults[] = {
+	0,
+};
+
+static struct resource msm_qt_icodec_gpio_resources[] = {
+	{
+		.name   = "msm_icodec_speaker_gpio",
+		.start  = SNDDEV_GPIO_CLASS_D0_EN,
+		.end    = SNDDEV_GPIO_CLASS_D0_EN,
+		.flags  = IORESOURCE_IO,
+	},
+};
+
+static struct platform_device msm_qt_icodec_gpio_device = {
+	.name   = "msm_icodec_gpio",
+	.num_resources  = ARRAY_SIZE(msm_qt_icodec_gpio_resources),
+	.resource       = msm_qt_icodec_gpio_resources,
+	.dev = { .platform_data = &msm_qt_icodec_gpio_defaults },
+};
 
 static struct regulator *s3;
 static struct regulator *mvs;
@@ -1331,6 +1378,7 @@ static struct platform_device *snd_devices_ffa[] __initdata = {
 	&msm_auxpga_lb_hs_device,
 	&msm_auxpga_lb_lo_device,
 	&msm_linein_pri_device,
+	&msm_icodec_gpio_device,
 };
 
 static struct platform_device *snd_devices_surf[] __initdata = {
@@ -1351,6 +1399,7 @@ static struct platform_device *snd_devices_surf[] __initdata = {
 	&msm_auxpga_lb_hs_device,
 	&msm_auxpga_lb_lo_device,
 	&msm_linein_pri_device,
+	&msm_icodec_gpio_device,
 };
 
 static struct platform_device *snd_devices_fluid[] __initdata = {
@@ -1367,6 +1416,7 @@ static struct platform_device *snd_devices_fluid[] __initdata = {
 	&msm_anc_headset_device,
 	&msm_auxpga_lb_hs_device,
 	&msm_auxpga_lb_lo_device,
+	&msm_icodec_gpio_device,
 };
 
 static struct platform_device *snd_devices_qt[] __initdata = {
@@ -1375,6 +1425,7 @@ static struct platform_device *snd_devices_qt[] __initdata = {
 	&msm_ispkr_stereo_device,
 	&msm_qt_dual_dmic_d0_device,
 	&msm_snddev_hdmi_stereo_rx_device,
+	&msm_qt_icodec_gpio_device,
 };
 
 static struct platform_device *snd_devices_common[] __initdata = {
@@ -1387,7 +1438,6 @@ void __init msm_snddev_init(void)
 {
 	int i;
 	int dev_id;
-	int rc;
 
 	atomic_set(&pamp_ref_cnt, 0);
 
@@ -1430,13 +1480,4 @@ void __init msm_snddev_init(void)
 				S_IFREG | S_IRUGO, NULL,
 		(void *) "msm_hsed_config", &snddev_hsed_config_debug_fops);
 #endif
-
-	rc = gpio_request(SNDDEV_GPIO_CLASS_D1_EN, "CLASSD1_EN");
-	if (rc) {
-		pr_err("%s: spkr pamp gpio %d request"
-			"failed\n", __func__, SNDDEV_GPIO_CLASS_D1_EN);
-	} else {
-		gpio_direction_output(SNDDEV_GPIO_CLASS_D1_EN, 0);
-		gpio_free(SNDDEV_GPIO_CLASS_D1_EN);
-	}
 }

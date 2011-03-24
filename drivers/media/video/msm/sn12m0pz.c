@@ -1,4 +1,4 @@
-/* Copyright (c) 2010, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2010-2011, Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -1327,7 +1327,7 @@ static int32_t sn12m0pz_video_config(int mode)
 	int rt;
 
 
-	if (mode == SENSOR_VIDEO_120FPS_MODE)
+	if (mode == SENSOR_HFR_120FPS_MODE)
 		sn12m0pz_ctrl->prev_res = QVGA_SIZE;
 
 	/* change sensor resolution if needed */
@@ -1406,7 +1406,7 @@ static int32_t sn12m0pz_set_sensor_mode(int  mode,
 
 	switch (mode) {
 	case SENSOR_PREVIEW_MODE:
-	case SENSOR_VIDEO_120FPS_MODE:
+	case SENSOR_HFR_120FPS_MODE:
 		rc = sn12m0pz_video_config(mode);
 		break;
 

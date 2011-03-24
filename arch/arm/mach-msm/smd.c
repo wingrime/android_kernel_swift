@@ -643,9 +643,11 @@ static void handle_smd_irq(struct list_head *list, void (*notify)(void))
 	int do_notify = 0;
 	unsigned ch_flags;
 	unsigned tmp;
+	unsigned char state_change;
 
 	spin_lock_irqsave(&smd_lock, flags);
 	list_for_each_entry(ch, list, ch_list) {
+		state_change = 0;
 		ch_flags = 0;
 		if (ch_is_open(ch)) {
 			if (ch->recv->fHEAD) {
@@ -665,12 +667,16 @@ static void handle_smd_irq(struct list_head *list, void (*notify)(void))
 			}
 		}
 		tmp = ch->recv->state;
-		if (tmp != ch->last_state)
+		if (tmp != ch->last_state) {
 			smd_state_change(ch, ch->last_state, tmp);
+			state_change = 1;
+		}
 		if (ch_flags) {
 			ch->update_state(ch);
 			ch->notify(ch->priv, SMD_EVENT_DATA);
 		}
+		if (ch_flags & 0x4 && !state_change)
+			ch->notify(ch->priv, SMD_EVENT_STATUS);
 	}
 	if (do_notify)
 		notify();

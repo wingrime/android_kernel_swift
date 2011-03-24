@@ -858,19 +858,19 @@ struct vfe31_cmd_type {
 	uint16_t id;
 	uint32_t length;
 	uint32_t offset;
-  uint32_t flag;
+	uint32_t flag;
 };
 
 struct vfe31_free_buf {
-	spinlock_t f_lock;
-	uint8_t available;
+	struct list_head node;
 	uint32_t paddr;
 	uint32_t y_off;
 	uint32_t cbcr_off;
 };
 
 struct vfe31_output_ch {
-	struct vfe31_free_buf free_buf;
+	struct list_head free_buf_head;
+	spinlock_t free_buf_lock;
 	uint16_t output_fmt;
 	int8_t ch0;
 	int8_t ch1;

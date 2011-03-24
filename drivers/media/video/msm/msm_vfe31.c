@@ -562,6 +562,82 @@ static int vfe31_disable(struct camera_enable_cmd *enable,
 	return 0;
 }
 
+static int vfe31_add_free_buf2(struct vfe31_output_ch *outch,
+	uint32_t paddr, uint32_t y_off, uint32_t cbcr_off)
+{
+	struct vfe31_free_buf *free_buf = NULL;
+	unsigned long flags = 0;
+	free_buf = kmalloc(sizeof(struct vfe31_free_buf), GFP_KERNEL);
+	if (!free_buf)
+		return -ENOMEM;
+
+	spin_lock_irqsave(&outch->free_buf_lock, flags);
+	free_buf->paddr = paddr;
+	free_buf->y_off = y_off;
+	free_buf->cbcr_off = cbcr_off;
+	list_add_tail(&free_buf->node, &outch->free_buf_head);
+
+	CDBG("%s: free_buf paddr = 0x%x, y_off = %d, cbcr_off = %d\n",
+		__func__, free_buf->paddr, free_buf->y_off,
+		free_buf->cbcr_off);
+	spin_unlock_irqrestore(&outch->free_buf_lock, flags);
+	return 0;
+}
+
+#define vfe31_add_free_buf(outch, regptr) \
+	vfe31_add_free_buf2(outch, regptr->paddr, regptr->info.y_off,	\
+		regptr->info.cbcr_off)
+
+#define vfe31_free_buf_available(outch) \
+	(!list_empty(&outch.free_buf_head))
+
+static inline struct vfe31_free_buf *vfe31_get_free_buf(
+	struct vfe31_output_ch *outch)
+{
+	unsigned long flags = 0;
+	struct vfe31_free_buf *free_buf = NULL;
+	spin_lock_irqsave(&outch->free_buf_lock, flags);
+	if (!list_empty(&outch->free_buf_head)) {
+		free_buf = list_first_entry(&outch->free_buf_head,
+			struct vfe31_free_buf, node);
+		if (free_buf)
+			list_del_init(&free_buf->node);
+	}
+	spin_unlock_irqrestore(&outch->free_buf_lock, flags);
+	return free_buf;
+}
+
+static inline void vfe31_reset_free_buf_queue(
+	struct vfe31_output_ch *outch)
+{
+	unsigned long flags = 0;
+	struct vfe31_free_buf *free_buf = NULL;
+	spin_lock_irqsave(&outch->free_buf_lock, flags);
+	while (!list_empty(&outch->free_buf_head)) {
+		free_buf = list_first_entry(&outch->free_buf_head,
+			struct vfe31_free_buf, node);
+		if (free_buf) {
+			list_del_init(&free_buf->node);
+			kfree(free_buf);
+		}
+	}
+	spin_unlock_irqrestore(&outch->free_buf_lock, flags);
+}
+
+#define vfe31_init_free_buf_queue() do {	\
+	INIT_LIST_HEAD(&vfe31_ctrl->outpath.out0.free_buf_head);	\
+	INIT_LIST_HEAD(&vfe31_ctrl->outpath.out1.free_buf_head);	\
+	INIT_LIST_HEAD(&vfe31_ctrl->outpath.out2.free_buf_head);	\
+	spin_lock_init(&vfe31_ctrl->outpath.out0.free_buf_lock);	\
+	spin_lock_init(&vfe31_ctrl->outpath.out1.free_buf_lock);	\
+	spin_lock_init(&vfe31_ctrl->outpath.out2.free_buf_lock);	\
+} while (0)
+
+#define vfe31_reset_free_buf_queue_all() do {	\
+	vfe31_reset_free_buf_queue(&vfe31_ctrl->outpath.out0);	\
+	vfe31_reset_free_buf_queue(&vfe31_ctrl->outpath.out1);	\
+	vfe31_reset_free_buf_queue(&vfe31_ctrl->outpath.out2);	\
+} while (0)
 
 static int vfe31_config_axi(int mode, struct axidata *ad, uint32_t *ao)
 {
@@ -571,6 +647,7 @@ static int vfe31_config_axi(int mode, struct axidata *ad, uint32_t *ao)
 	struct msm_pmem_region *regp1 = NULL;
 	struct msm_pmem_region *regp2 = NULL;
 	struct msm_pmem_region *regp3 = NULL;
+	int ret;
 
 	outp1 = NULL;
 	outp2 = NULL;
@@ -578,8 +655,8 @@ static int vfe31_config_axi(int mode, struct axidata *ad, uint32_t *ao)
 
 	p = ao + 2;
 
-	CDBG("vfe31_config_axi: mode = %d, bufnum1 = %d, bufnum2 = %d\n",
-		mode, ad->bufnum1, ad->bufnum2);
+	CDBG("vfe31_config_axi: mode = %d, bufnum1 = %d, bufnum2 = %d"
+		"bufnum3 = %d", mode, ad->bufnum1, ad->bufnum2, ad->bufnum3);
 
 	switch (mode) {
 
@@ -600,15 +677,9 @@ static int vfe31_config_axi(int mode, struct axidata *ad, uint32_t *ao)
 			*p1 = (regp1->paddr + regp1->info.cbcr_off);
 			regp1++;
 		}
-		outp1->free_buf.available = 1;
-		outp1->free_buf.paddr = regp1->paddr;
-		outp1->free_buf.y_off = regp1->info.y_off;
-		outp1->free_buf.cbcr_off = regp1->info.cbcr_off;
-
-		CDBG("vfe31_config_axi: free_buf paddr = 0x%x, y_off = %d,"
-			" cbcr_off = %d\n",
-			outp1->free_buf.paddr, outp1->free_buf.y_off,
-			outp1->free_buf.cbcr_off);
+		ret = vfe31_add_free_buf(outp1, regp1);
+		if (ret < 0)
+			return ret;
 	}
 		break;
 
@@ -681,16 +752,18 @@ static int vfe31_config_axi(int mode, struct axidata *ad, uint32_t *ao)
 				regp2++;
 			}
 
-			if (ad->bufnum2 == 3) { /* 3 maximum to begin with. */
-				outp1->free_buf.available = 1;
-				outp1->free_buf.paddr = regp1->paddr;
-				outp1->free_buf.y_off = regp1->info.y_off;
-				outp1->free_buf.cbcr_off = regp1->info.cbcr_off;
+			for (i = 2; i < ad->bufnum1; i++) {
+				ret = vfe31_add_free_buf(outp1, regp1);
+				if (ret < 0)
+					return ret;
+				regp1++;
+			}
 
-				outp2->free_buf.available = 1;
-				outp2->free_buf.paddr = regp2->paddr;
-				outp2->free_buf.y_off = regp2->info.y_off;
-				outp2->free_buf.cbcr_off = regp2->info.cbcr_off;
+			for (i = 2; i < ad->bufnum2; i++) {
+				ret = vfe31_add_free_buf(outp2, regp2);
+				if (ret < 0)
+					return ret;
+				regp2++;
 			}
 		}
 		break;
@@ -753,21 +826,25 @@ static int vfe31_config_axi(int mode, struct axidata *ad, uint32_t *ao)
 			regp3++;
 		}
 
-		if (ad->bufnum3 == 3) { /* 3 maximum to begin with. */
-			outp1->free_buf.available = 1;
-			outp1->free_buf.paddr = regp1->paddr;
-			outp1->free_buf.y_off = regp1->info.y_off;
-			outp1->free_buf.cbcr_off = regp1->info.cbcr_off;
+		for (i = 2; i < ad->bufnum1; i++) {
+			ret = vfe31_add_free_buf(outp1, regp1);
+			if (ret < 0)
+				return ret;
+			regp1++;
+		}
 
-			outp2->free_buf.available = 1;
-			outp2->free_buf.paddr = regp2->paddr;
-			outp2->free_buf.y_off = regp2->info.y_off;
-			outp2->free_buf.cbcr_off = regp2->info.cbcr_off;
+		for (i = 2; i < ad->bufnum2; i++) {
+			ret = vfe31_add_free_buf(outp2, regp2);
+			if (ret < 0)
+				return ret;
+			regp2++;
+		}
 
-			outp3->free_buf.available = 1;
-			outp3->free_buf.paddr = regp3->paddr;
-			outp3->free_buf.y_off = regp3->info.y_off;
-			outp3->free_buf.cbcr_off = regp3->info.cbcr_off;
+		for (i = 2; i < ad->bufnum3; i++) {
+			ret = vfe31_add_free_buf(outp3, regp3);
+			if (ret < 0)
+				return ret;
+			regp3++;
 		}
 		break;
 
@@ -812,26 +889,20 @@ static int vfe31_config_axi(int mode, struct axidata *ad, uint32_t *ao)
 			*p2 = (regp2->paddr + regp2->info.cbcr_off);
 			regp2++;
 		}
-		outp1->free_buf.available = 1;
-		outp1->free_buf.paddr = regp1->paddr;
-		outp1->free_buf.y_off = regp1->info.y_off;
-		outp1->free_buf.cbcr_off = regp1->info.cbcr_off;
-
-		outp2->free_buf.available = 1;
-		outp2->free_buf.paddr = regp2->paddr;
-		outp2->free_buf.y_off = regp2->info.y_off;
-		outp2->free_buf.cbcr_off = regp2->info.cbcr_off;
-		CDBG("vfe31_config_axi: preview free_buf"
-			"paddr = 0x%x, y_off = %d,"
-			" cbcr_off = %d\n",
-			outp1->free_buf.paddr, outp1->free_buf.y_off,
-			outp1->free_buf.cbcr_off);
-		CDBG("vfe31_config_axi: video free_buf"
-			"paddr = 0x%x,y_off = %d,"
-			" cbcr_off = %d\n",
-			outp2->free_buf.paddr, outp2->free_buf.y_off,
-			outp2->free_buf.cbcr_off);
+		for (i = 2; i < ad->bufnum1; i++) {
+			ret = vfe31_add_free_buf(outp1, regp1);
+			if (ret < 0)
+				return ret;
+			regp1++;
 		}
+
+		for (i = 2; i < ad->bufnum2; i++) {
+			ret = vfe31_add_free_buf(outp2, regp2);
+			if (ret < 0)
+				return ret;
+			regp2++;
+		}
+	}
 		break;
 	case CAMIF_TO_AXI_VIA_OUTPUT_2: {  /* use wm0 only */
 		if (ad->bufnum2 < 1)
@@ -910,6 +981,7 @@ static void vfe31_reset_internal_variables(void)
 static void vfe31_reset(void)
 {
 	uint32_t vfe_version;
+	vfe31_reset_free_buf_queue_all();
 	vfe31_reset_internal_variables();
 	vfe_version = msm_io_r(vfe31_ctrl->vfebase);
 	CDBG("vfe_version = 0x%x\n", vfe_version);
@@ -2127,7 +2199,8 @@ static int vfe31_config(struct msm_vfe_cfg_cmd *cmd, void *data)
 	case CMD_FRAME_BUF_RELEASE: {
 		struct msm_frame *b;
 		unsigned long p;
-		struct vfe31_free_buf *fbuf = NULL;
+		int ret;
+		struct vfe31_output_ch *outch = NULL;
 		if (!data) {
 			rc = -EFAULT;
 			break;
@@ -2140,27 +2213,27 @@ static int vfe31_config(struct msm_vfe_cfg_cmd *cmd, void *data)
 
 		if (b->path & OUTPUT_TYPE_P) {
 			CDBG("CMD_FRAME_BUF_RELEASE got free buffer\n");
-			fbuf = &vfe31_ctrl->outpath.out0.free_buf;
+			outch = &vfe31_ctrl->outpath.out0;
 		} else if (b->path & OUTPUT_TYPE_S) {
-			fbuf = &vfe31_ctrl->outpath.out1.free_buf;
+			outch = &vfe31_ctrl->outpath.out1;
 		} else if (b->path & OUTPUT_TYPE_V) {
-			fbuf = &vfe31_ctrl->outpath.out2.free_buf;
+			outch = &vfe31_ctrl->outpath.out2;
 		} else {
 			rc = -EFAULT;
 			break;
 		}
 
-		fbuf->paddr = p;
-		fbuf->y_off = b->y_off;
-		fbuf->cbcr_off = b->cbcr_off;
-		fbuf->available = 1;
+		ret = vfe31_add_free_buf2(outch, p, b->y_off, b->cbcr_off);
+		if (ret < 0)
+			return ret;
 		break;
 	}
 
 	case CMD_SNAP_BUF_RELEASE: {
 		struct msm_frame *b;
 		unsigned long p;
-		struct vfe31_free_buf *fbuf = NULL;
+		int ret;
+		struct vfe31_output_ch *outch = NULL;
 		if (!data)
 			return -EFAULT;
 
@@ -2171,16 +2244,15 @@ static int vfe31_config(struct msm_vfe_cfg_cmd *cmd, void *data)
 
 		if (b->path & OUTPUT_TYPE_T) {
 			CDBG("CMD_FRAME_BUF_RELEASE got free buffer\n");
-			fbuf = &vfe31_ctrl->outpath.out1.free_buf;
+			outch = &vfe31_ctrl->outpath.out1;
 		} else if (b->path & OUTPUT_TYPE_S) {
-			fbuf = &vfe31_ctrl->outpath.out2.free_buf;
+			outch = &vfe31_ctrl->outpath.out2;
 		} else
 			return -EFAULT;
 
-		fbuf->paddr = p;
-		fbuf->y_off = b->y_off;
-		fbuf->cbcr_off = b->cbcr_off;
-		fbuf->available = 1;
+		ret = vfe31_add_free_buf2(outch, p, b->y_off, b->cbcr_off);
+		if (ret < 0)
+			return ret;
 		break;
 	}
 
@@ -2752,8 +2824,8 @@ static void vfe31_process_output_path_irq_0(void)
 #ifdef CONFIG_MSM_CAMERA_V4L2
 	uint32_t pyaddr_ping, pcbcraddr_ping, pyaddr_pong, pcbcraddr_pong;
 #endif
-	uint8_t skip_frame =
-		(vfe31_ctrl->outpath.out0.free_buf.available == false);
+	struct vfe31_free_buf *free_buf = NULL;
+	uint8_t skip_frame = false;
 	/* we render frames in the following conditions:
 	1. Continuous mode and the free buffer is avaialable.
 	*/
@@ -2761,9 +2833,11 @@ static void vfe31_process_output_path_irq_0(void)
 		(vfe31_ctrl->rolloff_update == true)) {
 		vfe31_ctrl->rolloff_update = false;
 		skip_frame = true;
+	} else {
+		free_buf = vfe31_get_free_buf(&vfe31_ctrl->outpath.out0);
 	}
 
-	if (!skip_frame) {
+	if (!skip_frame && free_buf) {
 		ping_pong = msm_io_r(vfe31_ctrl->vfebase +
 			VFE_BUS_PING_PONG_STATUS);
 
@@ -2779,16 +2853,13 @@ static void vfe31_process_output_path_irq_0(void)
 		/* Y channel */
 		vfe31_put_ch_addr(ping_pong,
 			vfe31_ctrl->outpath.out0.ch0,
-			vfe31_ctrl->outpath.out0.free_buf.paddr +
-			vfe31_ctrl->outpath.out0.free_buf.y_off);
+			free_buf->paddr + free_buf->y_off);
 		/* Chroma channel */
 		vfe31_put_ch_addr(ping_pong,
 			vfe31_ctrl->outpath.out0.ch1,
-			vfe31_ctrl->outpath.out0.free_buf.paddr +
-			vfe31_ctrl->outpath.out0.free_buf.cbcr_off);
+			free_buf->paddr + free_buf->cbcr_off);
 
-		vfe31_ctrl->outpath.out0.free_buf.available = 0;
-
+		kfree(free_buf);
 		/* if continuous mode, for display. (preview) */
 		vfe_send_outmsg(MSG_ID_OUTPUT_P, pyaddr, pcbcraddr);
 	} else {
@@ -2837,6 +2908,7 @@ static void vfe31_process_snapshot_frame(void)
 {
 	uint32_t ping_pong;
 	uint32_t pyaddr, pcbcraddr;
+	struct vfe31_free_buf *free_buf = NULL;
 	ping_pong = msm_io_r(vfe31_ctrl->vfebase +
 		VFE_BUS_PING_PONG_STATUS);
 
@@ -2847,20 +2919,19 @@ static void vfe31_process_snapshot_frame(void)
 	pcbcraddr = vfe31_get_ch_addr(ping_pong,
 		vfe31_ctrl->outpath.out1.ch1);
 
+	free_buf = vfe31_get_free_buf(&vfe31_ctrl->outpath.out1);
 	CDBG("%s: snapshot main, pyaddr = 0x%x, pcbcraddr = 0x%x\n",
 		__func__, pyaddr, pcbcraddr);
-	if (vfe31_ctrl->outpath.out1.free_buf.available) {
+	if (free_buf) {
 		/* Y channel */
 		vfe31_put_ch_addr(ping_pong,
 			vfe31_ctrl->outpath.out1.ch0,
-			vfe31_ctrl->outpath.out1.free_buf.paddr +
-			vfe31_ctrl->outpath.out1.free_buf.y_off);
+			free_buf->paddr + free_buf->y_off);
 		/* Chroma channel */
 		vfe31_put_ch_addr(ping_pong,
 			vfe31_ctrl->outpath.out1.ch1,
-			vfe31_ctrl->outpath.out1.free_buf.paddr +
-			vfe31_ctrl->outpath.out1.free_buf.cbcr_off);
-		vfe31_ctrl->outpath.out1.free_buf.available = 0;
+			free_buf->paddr + free_buf->cbcr_off);
+		kfree(free_buf);
 	}
 	vfe_send_outmsg(MSG_ID_OUTPUT_S, pyaddr, pcbcraddr);
 
@@ -2871,20 +2942,19 @@ static void vfe31_process_snapshot_frame(void)
 	pcbcraddr = vfe31_get_ch_addr(ping_pong,
 		vfe31_ctrl->outpath.out0.ch1);
 
+	free_buf = vfe31_get_free_buf(&vfe31_ctrl->outpath.out0);
 	CDBG("%s: snapshot TN, pyaddr = 0x%x, pcbcraddr = 0x%x\n",
 		__func__, pyaddr, pcbcraddr);
-	if (vfe31_ctrl->outpath.out0.free_buf.available) {
+	if (free_buf) {
 		/* Y channel */
 		vfe31_put_ch_addr(ping_pong,
 			vfe31_ctrl->outpath.out0.ch0,
-			vfe31_ctrl->outpath.out0.free_buf.paddr +
-			vfe31_ctrl->outpath.out0.free_buf.y_off);
+			free_buf->paddr + free_buf->y_off);
 		/* Chroma channel */
 		vfe31_put_ch_addr(ping_pong,
 			vfe31_ctrl->outpath.out0.ch1,
-			vfe31_ctrl->outpath.out0.free_buf.paddr +
-			vfe31_ctrl->outpath.out0.free_buf.cbcr_off);
-		vfe31_ctrl->outpath.out0.free_buf.available = 0;
+			free_buf->paddr + free_buf->cbcr_off);
+		kfree(free_buf);
 	}
 
 	vfe_send_outmsg(MSG_ID_OUTPUT_T, pyaddr, pcbcraddr);
@@ -2905,6 +2975,7 @@ static void vfe31_process_raw_snapshot_frame(void)
 {
 	uint32_t ping_pong;
 	uint32_t pyaddr, pcbcraddr;
+	struct vfe31_free_buf *free_buf = NULL;
 	ping_pong = msm_io_r(vfe31_ctrl->vfebase +
 		VFE_BUS_PING_PONG_STATUS);
 
@@ -2915,20 +2986,19 @@ static void vfe31_process_raw_snapshot_frame(void)
 	pcbcraddr = vfe31_get_ch_addr(ping_pong,
 		vfe31_ctrl->outpath.out1.ch1);
 
-	CDBG("%s: snapshot main, pyaddr = 0x%x, pcbcraddr = 0x%x\n",
+	free_buf = vfe31_get_free_buf(&vfe31_ctrl->outpath.out1);
+	CDBG("%s: snapshot raw, pyaddr = 0x%x, pcbcraddr = 0x%x\n",
 		__func__, pyaddr, pcbcraddr);
-	if (vfe31_ctrl->outpath.out1.free_buf.available) {
+	if (free_buf) {
 		/* Y channel */
 		vfe31_put_ch_addr(ping_pong,
 			vfe31_ctrl->outpath.out1.ch0,
-			vfe31_ctrl->outpath.out1.free_buf.paddr +
-			vfe31_ctrl->outpath.out1.free_buf.y_off);
+			free_buf->paddr + free_buf->y_off);
 		/* Chroma channel */
 		vfe31_put_ch_addr(ping_pong,
 			vfe31_ctrl->outpath.out1.ch1,
-			vfe31_ctrl->outpath.out1.free_buf.paddr +
-			vfe31_ctrl->outpath.out1.free_buf.cbcr_off);
-		vfe31_ctrl->outpath.out1.free_buf.available = 0;
+			free_buf->paddr + free_buf->cbcr_off);
+		kfree(free_buf);
 	}
 	 vfe_send_outmsg(MSG_ID_OUTPUT_S, pyaddr, pcbcraddr);
 
@@ -2947,6 +3017,7 @@ static void vfe31_process_zsl_frame(void)
 {
 	uint32_t ping_pong;
 	uint32_t pyaddr, pcbcraddr;
+	struct vfe31_free_buf *free_buf = NULL;
 	ping_pong = msm_io_r(vfe31_ctrl->vfebase +
 		VFE_BUS_PING_PONG_STATUS);
 
@@ -2957,20 +3028,19 @@ static void vfe31_process_zsl_frame(void)
 	pcbcraddr = vfe31_get_ch_addr(ping_pong,
 		vfe31_ctrl->outpath.out2.ch1);
 
+	free_buf = vfe31_get_free_buf(&vfe31_ctrl->outpath.out2);
 	CDBG("%s: snapshot main, pyaddr = 0x%x, pcbcraddr = 0x%x\n",
 		__func__, pyaddr, pcbcraddr);
-	if (vfe31_ctrl->outpath.out2.free_buf.available) {
+	if (free_buf) {
 		/* Y channel */
 		vfe31_put_ch_addr(ping_pong,
 			vfe31_ctrl->outpath.out2.ch0,
-			vfe31_ctrl->outpath.out2.free_buf.paddr +
-			vfe31_ctrl->outpath.out2.free_buf.y_off);
+			free_buf->paddr + free_buf->y_off);
 		/* Chroma channel */
 		vfe31_put_ch_addr(ping_pong,
 			vfe31_ctrl->outpath.out2.ch1,
-			vfe31_ctrl->outpath.out2.free_buf.paddr +
-			vfe31_ctrl->outpath.out2.free_buf.cbcr_off);
-		vfe31_ctrl->outpath.out2.free_buf.available = 0;
+			free_buf->paddr + free_buf->cbcr_off);
+		kfree(free_buf);
 	}
 	 vfe_send_outmsg(MSG_ID_OUTPUT_S, pyaddr, pcbcraddr);
 
@@ -2981,20 +3051,19 @@ static void vfe31_process_zsl_frame(void)
 	pcbcraddr = vfe31_get_ch_addr(ping_pong,
 		vfe31_ctrl->outpath.out1.ch1);
 
+	free_buf = vfe31_get_free_buf(&vfe31_ctrl->outpath.out1);
 	CDBG("%s: snapshot TN, pyaddr = 0x%x, pcbcraddr = 0x%x\n",
 		__func__, pyaddr, pcbcraddr);
-	if (vfe31_ctrl->outpath.out1.free_buf.available) {
+	if (free_buf) {
 		/* Y channel */
 		vfe31_put_ch_addr(ping_pong,
 			vfe31_ctrl->outpath.out1.ch0,
-			vfe31_ctrl->outpath.out1.free_buf.paddr +
-			vfe31_ctrl->outpath.out1.free_buf.y_off);
+			free_buf->paddr + free_buf->y_off);
 		/* Chroma channel */
 		vfe31_put_ch_addr(ping_pong,
 			vfe31_ctrl->outpath.out1.ch1,
-			vfe31_ctrl->outpath.out1.free_buf.paddr +
-			vfe31_ctrl->outpath.out1.free_buf.cbcr_off);
-		vfe31_ctrl->outpath.out1.free_buf.available = 0;
+			free_buf->paddr + free_buf->cbcr_off);
+		kfree(free_buf);
 	}
 
 	vfe_send_outmsg(MSG_ID_OUTPUT_T, pyaddr, pcbcraddr);
@@ -3008,17 +3077,17 @@ static void vfe31_process_output_path_irq_1(void)
 	/* In Snapshot mode */
 	if ((VFE_MODE_OF_OPERATION_SNAPSHOT == vfe31_ctrl->operation_mode)
 		&& ((vfe31_ctrl->vfe_capture_count <= 1)
-		|| (vfe31_ctrl->outpath.out0.free_buf.available &&
-		vfe31_ctrl->outpath.out1.free_buf.available))) {
+		|| (vfe31_free_buf_available(vfe31_ctrl->outpath.out0) &&
+		vfe31_free_buf_available(vfe31_ctrl->outpath.out1)))) {
 		vfe31_process_snapshot_frame();
 	} else if ((VFE_MODE_OF_OPERATION_RAW_SNAPSHOT ==
 		vfe31_ctrl->operation_mode) &&
 		((vfe31_ctrl->vfe_capture_count <= 1) ||
-		(vfe31_ctrl->outpath.out1.free_buf.available))) {
+		vfe31_free_buf_available(vfe31_ctrl->outpath.out1))) {
 		vfe31_process_raw_snapshot_frame();
 	} else if ((VFE_MODE_OF_OPERATION_ZSL == vfe31_ctrl->operation_mode)
-		&& (vfe31_ctrl->outpath.out1.free_buf.available
-		&& vfe31_ctrl->outpath.out2.free_buf.available)) {
+		&& (vfe31_free_buf_available(vfe31_ctrl->outpath.out1)
+		&& vfe31_free_buf_available(vfe31_ctrl->outpath.out2))) {
 		vfe31_process_zsl_frame();
 	} else {
 		vfe31_ctrl->outpath.out1.frame_drop_cnt++;
@@ -3030,42 +3099,42 @@ static void vfe31_process_output_path_irq_2(void)
 {
 	uint32_t ping_pong;
 	uint32_t pyaddr, pcbcraddr;
+	struct vfe31_free_buf *free_buf = NULL;
 	/* we render frames in the following conditions:
 	1. Continuous mode and the free buffer is avaialable.
 	*/
-	CDBG("%s: output2.free_buf.available = %d\n", __func__,
-		 vfe31_ctrl->outpath.out2.free_buf.available);
+	free_buf = vfe31_get_free_buf(&vfe31_ctrl->outpath.out2);
+	CDBG("%s, operation_mode = %d,\n", __func__,
+		 vfe31_ctrl->operation_mode);
 
-	if (vfe31_ctrl->outpath.out2.free_buf.available) {
-			ping_pong = msm_io_r(vfe31_ctrl->vfebase +
-				VFE_BUS_PING_PONG_STATUS);
+	if (free_buf) {
+		ping_pong = msm_io_r(vfe31_ctrl->vfebase +
+			VFE_BUS_PING_PONG_STATUS);
 
-			/* Y channel */
-			pyaddr = vfe31_get_ch_addr(ping_pong,
-				vfe31_ctrl->outpath.out2.ch0);
-			/* Chroma channel */
-			pcbcraddr = vfe31_get_ch_addr(ping_pong,
-				vfe31_ctrl->outpath.out2.ch1);
+		/* Y channel */
+		pyaddr = vfe31_get_ch_addr(ping_pong,
+			vfe31_ctrl->outpath.out2.ch0);
+		/* Chroma channel */
+		pcbcraddr = vfe31_get_ch_addr(ping_pong,
+			vfe31_ctrl->outpath.out2.ch1);
 
-			CDBG("video output, pyaddr = 0x%x, pcbcraddr = 0x%x\n",
-				pyaddr, pcbcraddr);
+		CDBG("video output, pyaddr = 0x%x, pcbcraddr = 0x%x\n",
+			pyaddr, pcbcraddr);
 
-			/* Y channel */
-			vfe31_put_ch_addr(ping_pong,
-			vfe31_ctrl->outpath.out2.ch0,
-			vfe31_ctrl->outpath.out2.free_buf.paddr +
-			vfe31_ctrl->outpath.out2.free_buf.y_off);
-			/* Chroma channel */
-			vfe31_put_ch_addr(ping_pong,
-			vfe31_ctrl->outpath.out2.ch1,
-			vfe31_ctrl->outpath.out2.free_buf.paddr +
-			vfe31_ctrl->outpath.out2.free_buf.cbcr_off);
-			vfe31_ctrl->outpath.out2.free_buf.available = 0;
-			vfe_send_outmsg(MSG_ID_OUTPUT_V, pyaddr, pcbcraddr);
-		} else {
-			vfe31_ctrl->outpath.out2.frame_drop_cnt++;
-			pr_warning("path_irq_2 - no free buffer!\n");
-		}
+		/* Y channel */
+		vfe31_put_ch_addr(ping_pong,
+		vfe31_ctrl->outpath.out2.ch0,
+		free_buf->paddr + free_buf->y_off);
+		/* Chroma channel */
+		vfe31_put_ch_addr(ping_pong,
+		vfe31_ctrl->outpath.out2.ch1,
+		free_buf->paddr + free_buf->cbcr_off);
+		kfree(free_buf);
+		vfe_send_outmsg(MSG_ID_OUTPUT_V, pyaddr, pcbcraddr);
+	} else {
+		vfe31_ctrl->outpath.out2.frame_drop_cnt++;
+		pr_warning("path_irq_2 - no free buffer!\n");
+	}
 }
 
 static void vfe31_process_stats_comb_irq(uint32_t *irqstatus)
@@ -3458,6 +3527,7 @@ static void vfe31_release(struct platform_device *pdev)
 {
 	struct resource	*vfemem, *vfeio;
 
+	vfe31_reset_free_buf_queue_all();
 	CDBG("%s, free_irq\n", __func__);
 	free_irq(vfe31_ctrl->vfeirq, 0);
 	tasklet_kill(&vfe31_tasklet);
@@ -3552,6 +3622,7 @@ static int vfe31_resource_init(struct msm_vfe_callback *presp,
 	spin_lock_init(&vfe31_ctrl->awb_ack_lock);
 	spin_lock_init(&vfe31_ctrl->af_ack_lock);
 	INIT_LIST_HEAD(&vfe31_ctrl->tasklet_q);
+	vfe31_init_free_buf_queue();
 
 	vfe31_ctrl->syncdata = sdata;
 	vfe31_ctrl->vfemem = vfemem;

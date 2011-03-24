@@ -63,9 +63,7 @@ obj-$(CONFIG_MSM_SDIO_AL) += sdio_al_dloader.o
 obj-$(CONFIG_MSM_SDIO_DMUX) += sdio_dmux.o
 obj-$(CONFIG_MSM_SMD_LOGGING) += smem_log.o
 obj-$(CONFIG_MSM_SMD) += smd.o smd_debug.o remote_spinlock.o
-ifndef CONFIG_ARCH_MSM7X27A
         obj-y += socinfo.o
-endif
 ifndef CONFIG_ARCH_MSM8960
 ifndef CONFIG_ARCH_MSM8X60
 ifndef CONFIG_ARCH_MSM7X27A

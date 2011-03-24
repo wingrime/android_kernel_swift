@@ -52,6 +52,7 @@ enum msm_cpu {
 	MSM_CPU_8X55,
 	MSM_CPU_8X60,
 	MSM_CPU_8960,
+	MSM_CPU_7X27A,
 };
 
 enum msm_cpu socinfo_get_msm_cpu(void);

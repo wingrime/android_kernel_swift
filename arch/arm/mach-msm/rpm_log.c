@@ -1,4 +1,4 @@
-/* Copyright (c) 2010, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2010-2011, Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -65,7 +65,8 @@ static inline u32
 msm_rpm_log_read(const struct msm_rpm_log_platform_data *pdata, u32 page,
 		 u32 reg)
 {
-	return readl(pdata->reg_base + pdata->reg_offsets[page] + reg * 4);
+	return readl_relaxed(pdata->reg_base + pdata->reg_offsets[page]
+				+ reg * 4);
 }
 
 /*

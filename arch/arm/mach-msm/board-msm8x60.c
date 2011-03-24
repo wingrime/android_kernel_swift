@@ -7472,8 +7472,13 @@ static void __init msm8x60_init_mmc(void)
 
 	if (machine_is_msm8x60_charm_surf())
 		msm8x60_sdc2_data.msmsdcc_fmax = 24000000;
-	if (machine_is_msm8x60_charm_surf() || machine_is_msm8x60_charm_ffa())
+	if (machine_is_msm8x60_charm_surf() || machine_is_msm8x60_charm_ffa()) {
+#ifdef CONFIG_MMC_MSM_SDIO_SUPPORT
+		msm8x60_sdc2_data.sdiowakeup_irq = gpio_to_irq(144);
+		msm_sdcc_setup_gpio(2, 1);
+#endif
 		msm_add_sdcc(2, &msm8x60_sdc2_data);
+	}
 #endif
 #ifdef CONFIG_MMC_MSM_SDC3_SUPPORT
 	/* SDCC3 : External card slot connected */
@@ -7531,8 +7536,13 @@ static void __init msm8x60_init_mmc(void)
 
 	if (machine_is_msm8x60_charm_surf())
 		msm8x60_sdc5_data.msmsdcc_fmax = 24000000;
-	if (machine_is_msm8x60_charm_surf() || machine_is_msm8x60_charm_ffa())
+	if (machine_is_msm8x60_charm_surf() || machine_is_msm8x60_charm_ffa()) {
+#ifdef CONFIG_MMC_MSM_SDIO_SUPPORT
+		msm8x60_sdc5_data.sdiowakeup_irq = gpio_to_irq(99);
+		msm_sdcc_setup_gpio(5, 1);
+#endif
 		msm_add_sdcc(5, &msm8x60_sdc5_data);
+	}
 #endif
 }
 

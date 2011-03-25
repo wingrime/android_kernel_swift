@@ -32,6 +32,7 @@
 #include <mach/msm_hsusb.h>
 #include <mach/usbdiag.h>
 #include <mach/socinfo.h>
+#include <mach/usb_gadget_fserial.h>
 
 #include "timer.h"
 #include "devices.h"
@@ -107,34 +108,52 @@ static void __init msm8960_init_mmc(void)
 #endif
 }
 
+static struct usb_mass_storage_platform_data mass_storage_pdata = {
+	.nluns		= 1,
+	.vendor		= "Qualcomm Incorporated",
+	.product	= "Mass storage",
+	.can_stall	= 1,
+};
 static struct msm_otg_platform_data msm_otg_pdata;
 
 static struct usb_diag_platform_data usb_diag_pdata = {
 	.ch_name = DIAG_LEGACY,
 };
 
+static struct usb_gadget_fserial_platform_data fserial_pdata = {
+	.no_ports	= 2,
+};
 static char *usb_functions_default[] = {
 	"diag",
+	"modem",
+	"nmea",
+	"usb_mass_storage",
 };
 
 static char *usb_functions_default_adb[] = {
 	"diag",
 	"adb",
+	"modem",
+	"nmea",
+	"usb_mass_storage",
 };
 
 static char *usb_functions_all[] = {
 	"diag",
 	"adb",
+	"modem",
+	"nmea",
+	"usb_mass_storage",
 };
 
 struct android_usb_product usb_products[] = {
 	{
-		.product_id	= 0x901D,
+		.product_id	= 0x9018,
 		.num_functions	= ARRAY_SIZE(usb_functions_default_adb),
 		.functions	= usb_functions_default_adb,
 	},
 	{
-		.product_id	= 0x900E,
+		.product_id	= 0x9017,
 		.num_functions	= ARRAY_SIZE(usb_functions_default),
 		.functions	= usb_functions_default,
 	},
@@ -142,7 +161,7 @@ struct android_usb_product usb_products[] = {
 
 static struct android_usb_platform_data android_usb_pdata = {
 	.vendor_id	= 0x05C6,
-	.product_id	= 0x901D,
+	.product_id	= 0x9018,
 	.version	= 0x0100,
 	.product_name		= "Qualcomm HSUSB Device",
 	.manufacturer_name	= "Qualcomm Incorporated",
@@ -169,6 +188,21 @@ struct platform_device android_usb_device = {
 	},
 };
 
+struct platform_device usb_gadget_fserial_device = {
+	.name	= "usb_fserial",
+	.id	= -1,
+	.dev	= {
+		.platform_data = &fserial_pdata,
+	},
+};
+struct platform_device usb_mass_storage_device = {
+	.name	= "usb_mass_storage",
+	.id	= -1,
+	.dev	= {
+	.platform_data = &mass_storage_pdata,
+	},
+};
+
 static void gsbi_qup_i2c_gpio_config(int adap_id, int config_type)
 {
 }
@@ -191,6 +225,8 @@ static struct platform_device *sim_devices[] __initdata = {
 	&usb_diag_device,
 	&msm8960_device_qup_i2c_gsbi4,
 	&msm_device_wcnss_wlan,
+	&usb_mass_storage_device,
+	&usb_gadget_fserial_device,
 };
 
 static struct platform_device *rumi3_devices[] __initdata = {

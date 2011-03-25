@@ -465,6 +465,7 @@ void kgsl_check_suspended(struct kgsl_device *device)
 /* Caller must hold the device mutex. */
 int kgsl_pwrctrl_sleep(struct kgsl_device *device)
 {
+	struct kgsl_pwrctrl *pwr = &device->pwrctrl;
 	KGSL_PWR_INFO(device, "sleep device %d\n", device->id);
 
 	/* Work through the legal state transitions */
@@ -483,6 +484,10 @@ int kgsl_pwrctrl_sleep(struct kgsl_device *device)
 sleep:
 	kgsl_pwrctrl_irq(device, KGSL_PWRFLAGS_IRQ_OFF);
 	kgsl_pwrctrl_axi(device, KGSL_PWRFLAGS_AXI_OFF);
+	if (pwr->pwrlevels[0].gpu_freq > 0)
+		clk_set_rate(pwr->grp_src_clk,
+				pwr->pwrlevels[pwr->num_pwrlevels - 1].
+				gpu_freq);
 
 nap:
 	kgsl_pwrctrl_clk(device, KGSL_PWRFLAGS_CLK_OFF);

@@ -89,6 +89,7 @@
 #include <mach/qdsp5v2/audio_dev_ctl.h>
 #include <mach/sdio_al.h>
 #include "smd_private.h"
+#include <linux/bma150.h>
 
 #define MSM_PMEM_SF_SIZE	0x1700000
 #ifdef CONFIG_FB_MSM_TRIPLE_BUFFER
@@ -108,7 +109,7 @@
 #define PMIC_GPIO_HDMI_5V_EN_V3 32  /* PMIC GPIO for V3 H/W */
 #define PMIC_GPIO_HDMI_5V_EN_V2 39 /* PMIC GPIO for V2 H/W */
 
-
+#define ADV7520_I2C_ADDR	0x39
 
 #define FPGA_SDCC_STATUS       0x8E0001A8
 
@@ -125,6 +126,8 @@
 #define PMIC_GPIO_HAP_ENABLE   16  /* PMIC GPIO Number 17 */
 
 #define PMIC_GPIO_WLAN_EXT_POR  22 /* PMIC GPIO NUMBER 23 */
+
+#define BMA150_GPIO_INT 1
 
 #define HAP_LVL_SHFT_MSM_GPIO 24
 
@@ -3087,6 +3090,81 @@ static struct msm_hdmi_platform_data adv7520_hdmi_data = {
 	.cec_power = hdmi_cec_power,
 };
 
+#ifdef CONFIG_BOSCH_BMA150
+static struct vreg *vreg_gp6;
+static int sensors_ldo_enable(void)
+{
+	int rc;
+
+	/*
+	 * Enable the VREGs L8(gp7), L15(gp6)
+	 * for I2C communication with sensors.
+	 */
+	pr_info("sensors_ldo_enable called!!\n");
+	vreg_gp7 = vreg_get(NULL, "gp7");
+	if (IS_ERR(vreg_gp7)) {
+		pr_err("%s: vreg_get gp7 failed\n", __func__);
+		rc = PTR_ERR(vreg_gp7);
+		goto fail_gp7_get;
+	}
+
+	rc = vreg_set_level(vreg_gp7, 1800);
+	if (rc) {
+		pr_err("%s: vreg_set_level gp7 failed\n", __func__);
+		goto fail_gp7_level;
+	}
+
+	rc = vreg_enable(vreg_gp7);
+	if (rc) {
+		pr_err("%s: vreg_enable gp7 failed\n", __func__);
+		goto fail_gp7_level;
+	}
+
+	vreg_gp6 = vreg_get(NULL, "gp6");
+	if (IS_ERR(vreg_gp6)) {
+		pr_err("%s: vreg_get gp6 failed\n", __func__);
+		rc = PTR_ERR(vreg_gp6);
+		goto fail_gp6_get;
+	}
+
+	rc = vreg_set_level(vreg_gp6, 2800);
+	if (rc) {
+		pr_err("%s: vreg_set_level gp6 failed\n", __func__);
+		goto fail_gp6_level;
+	}
+
+	rc = vreg_enable(vreg_gp6);
+	if (rc) {
+		pr_err("%s: vreg_enable gp6 failed\n", __func__);
+		goto fail_gp6_level;
+	}
+
+	return 0;
+
+fail_gp6_level:
+	vreg_put(vreg_gp6);
+fail_gp6_get:
+	vreg_disable(vreg_gp7);
+fail_gp7_level:
+	vreg_put(vreg_gp7);
+fail_gp7_get:
+	return rc;
+}
+
+static void sensors_ldo_disable(void)
+{
+	pr_info("sensors_ldo_disable called!!\n");
+	vreg_disable(vreg_gp6);
+	vreg_put(vreg_gp6);
+	vreg_disable(vreg_gp7);
+	vreg_put(vreg_gp7);
+}
+static struct bma150_platform_data bma150_data = {
+	.power_on = sensors_ldo_enable,
+	.power_off = sensors_ldo_disable,
+};
+#endif
+
 static struct i2c_board_info msm_i2c_board_info[] = {
 	{
 		I2C_BOARD_INFO("m33c01", OPTNAV_I2C_SLAVE_ADDR),
@@ -3094,9 +3172,17 @@ static struct i2c_board_info msm_i2c_board_info[] = {
 		.platform_data = &optnav_data,
 	},
 	{
-		I2C_BOARD_INFO("adv7520", 0x72 >> 1),
+		I2C_BOARD_INFO("adv7520", ADV7520_I2C_ADDR),
 		.platform_data = &adv7520_hdmi_data,
 	},
+#ifdef CONFIG_BOSCH_BMA150
+	{
+		I2C_BOARD_INFO("bma150", 0x38),
+		.flags = I2C_CLIENT_WAKE,
+		.irq = MSM_GPIO_TO_INT(BMA150_GPIO_INT),
+		.platform_data = &bma150_data,
+	},
+#endif
 };
 
 static struct i2c_board_info msm_marimba_board_info[] = {
@@ -3679,6 +3765,114 @@ static int gpio_set(const char *label, const char *name, int level, int on)
 			__func__, name, rc);
 	return rc;
 }
+
+#if defined(CONFIG_FB_MSM_HDMI_ADV7520_PANEL) || defined(CONFIG_BOSCH_BMA150)
+/* there is an i2c address conflict between adv7520 and bma150 sensor after
+ * power up on fluid. As a solution, the default address of adv7520's packet
+ * memory is changed as soon as possible
+ */
+static int __init fluid_i2c_address_fixup(void)
+{
+	unsigned char wBuff[16];
+	unsigned char rBuff[16];
+	struct i2c_msg msgs[3];
+	int res;
+	int rc = -EINVAL;
+	struct vreg *vreg_ldo8;
+	struct i2c_adapter *adapter;
+
+	if (machine_is_msm7x30_fluid()) {
+		adapter = i2c_get_adapter(0);
+		if (!adapter) {
+			pr_err("%s: invalid i2c adapter\n", __func__);
+			return PTR_ERR(adapter);
+		}
+
+		/* turn on LDO8 */
+		vreg_ldo8 = vreg_get(NULL, "gp7");
+		if (!vreg_ldo8) {
+			pr_err("%s: VREG L8 get failed\n", __func__);
+			goto adapter_put;
+		}
+
+		rc = vreg_set_level(vreg_ldo8, 1800);
+		if (rc) {
+			pr_err("%s: VREG L8 set failed\n", __func__);
+			goto ldo8_put;
+		}
+
+		rc = vreg_enable(vreg_ldo8);
+		if (rc) {
+			pr_err("%s: VREG L8 enable failed\n", __func__);
+			goto ldo8_put;
+		}
+
+		/* change packet memory address to 0x74 */
+		wBuff[0] = 0x45;
+		wBuff[1] = 0x74;
+
+		msgs[0].addr = ADV7520_I2C_ADDR;
+		msgs[0].flags = 0;
+		msgs[0].buf = (unsigned char *) wBuff;
+		msgs[0].len = 2;
+
+		res = i2c_transfer(adapter, msgs, 1);
+		if (res != 1) {
+			pr_err("%s: error writing adv7520\n", __func__);
+			goto ldo8_disable;
+		}
+
+		/* powerdown adv7520 using bit 6 */
+		/* i2c read first */
+		wBuff[0] = 0x41;
+
+		msgs[0].addr = ADV7520_I2C_ADDR;
+		msgs[0].flags = 0;
+		msgs[0].buf = (unsigned char *) wBuff;
+		msgs[0].len = 1;
+
+		msgs[1].addr = ADV7520_I2C_ADDR;
+		msgs[1].flags = I2C_M_RD;
+		msgs[1].buf = rBuff;
+		msgs[1].len = 1;
+		res = i2c_transfer(adapter, msgs, 2);
+		if (res != 2) {
+			pr_err("%s: error reading adv7520\n", __func__);
+			goto ldo8_disable;
+		}
+
+		/* i2c write back */
+		wBuff[0] = 0x41;
+		wBuff[1] = rBuff[0] | 0x40;
+
+		msgs[0].addr = ADV7520_I2C_ADDR;
+		msgs[0].flags = 0;
+		msgs[0].buf = (unsigned char *) wBuff;
+		msgs[0].len = 2;
+
+		res = i2c_transfer(adapter, msgs, 1);
+		if (res != 1) {
+			pr_err("%s: error writing adv7520\n", __func__);
+			goto ldo8_disable;
+		}
+
+		/* for successful fixup, we release the i2c adapter */
+		/* but leave ldo8 on so that the adv7520 is not repowered */
+		i2c_put_adapter(adapter);
+		pr_info("%s: fluid i2c address conflict resolved\n", __func__);
+	}
+	return 0;
+
+ldo8_disable:
+	vreg_disable(vreg_ldo8);
+ldo8_put:
+	vreg_put(vreg_ldo8);
+adapter_put:
+	i2c_put_adapter(adapter);
+	return rc;
+}
+subsys_initcall_sync(fluid_i2c_address_fixup);
+#endif
 
 static int hdmi_comm_power(int on, int show)
 {

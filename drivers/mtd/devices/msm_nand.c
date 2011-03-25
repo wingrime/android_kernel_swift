@@ -1025,7 +1025,8 @@ static int msm_nand_read_oob(struct mtd_info *mtd, loff_t from,
 					/* empty blocks read 0x54 at
 					 * these offsets
 					 */
-					if (n % 516 == 3 && datbuf[n] == 0x54)
+					if ((n % 516 == 3 || n % 516 == 175)
+							&& datbuf[n] == 0x54)
 						datbuf[n] = 0xff;
 					if (datbuf[n] != 0xff) {
 						pageerr = rawerr;

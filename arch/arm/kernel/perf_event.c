@@ -204,7 +204,7 @@ armpmu_event_set_period(struct perf_event *event,
 static u64
 armpmu_event_update(struct perf_event *event,
 		    struct hw_perf_event *hwc,
-		    int idx)
+		    int idx, int overflow)
 {
 	int shift = 64 - 32;
 	s64 prev_raw_count, new_raw_count;
@@ -220,6 +220,9 @@ again:
 
 	delta = (new_raw_count << shift) - (prev_raw_count << shift);
 	delta >>= shift;
+
+	if (overflow && (new_raw_count - prev_raw_count) > 0)
+		delta += atomic64_read(&hwc->period_left) + prev_raw_count;
 
 	atomic64_add(delta, &event->count);
 	atomic64_sub(delta, &hwc->period_left);
@@ -241,7 +244,7 @@ armpmu_disable(struct perf_event *event)
 
 	barrier();
 
-	armpmu_event_update(event, hwc, idx);
+	armpmu_event_update(event, hwc, idx, 0);
 	cpuc->events[idx] = NULL;
 	clear_bit(idx, cpuc->used_mask);
 
@@ -257,7 +260,7 @@ armpmu_read(struct perf_event *event)
 	if (hwc->idx < 0)
 		return;
 
-	armpmu_event_update(event, hwc, hwc->idx);
+	armpmu_event_update(event, hwc, hwc->idx, 0);
 }
 
 static void
@@ -1045,7 +1048,7 @@ armv6pmu_handle_irq(int irq_num,
 			continue;
 
 		hwc = &event->hw;
-		armpmu_event_update(event, hwc, idx);
+		armpmu_event_update(event, hwc, idx, 1);
 		data.period = event->hw.last_period;
 		if (!armpmu_event_set_period(event, hwc, idx))
 			continue;
@@ -2229,7 +2232,7 @@ static irqreturn_t armv7pmu_handle_irq(int irq_num, void *dev)
 			continue;
 
 		hwc = &event->hw;
-		armpmu_event_update(event, hwc, idx);
+		armpmu_event_update(event, hwc, idx, 1);
 		data.period = event->hw.last_period;
 		if (!armpmu_event_set_period(event, hwc, idx))
 			continue;
@@ -3048,7 +3051,7 @@ xscale1pmu_handle_irq(int irq_num, void *dev)
 			continue;
 
 		hwc = &event->hw;
-		armpmu_event_update(event, hwc, idx);
+		armpmu_event_update(event, hwc, idx, 1);
 		data.period = event->hw.last_period;
 		if (!armpmu_event_set_period(event, hwc, idx))
 			continue;
@@ -3375,7 +3378,7 @@ xscale2pmu_handle_irq(int irq_num, void *dev)
 			continue;
 
 		hwc = &event->hw;
-		armpmu_event_update(event, hwc, idx);
+		armpmu_event_update(event, hwc, idx, 1);
 		data.period = event->hw.last_period;
 		if (!armpmu_event_set_period(event, hwc, idx))
 			continue;

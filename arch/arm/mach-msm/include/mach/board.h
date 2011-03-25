@@ -169,6 +169,7 @@ struct msm_camera_sensor_info {
 	int csi_if;
 	struct msm_camera_csi_params csi_params;
 	struct msm_camera_sensor_strobe_flash_data *strobe_flash_data;
+	char *eeprom_data;
 };
 
 struct clk;

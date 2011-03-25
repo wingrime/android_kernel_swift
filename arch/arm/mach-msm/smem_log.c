@@ -628,9 +628,13 @@ static inline unsigned int read_timestamp(void)
 {
 	unsigned int tick = 0;
 
+	/* no barriers necessary as the read value is a dependency for the
+	 * comparison operation so the processor shouldn't be able to
+	 * reorder things
+	 */
 	do {
-		tick = readl(TIMESTAMP_ADDR);
-	} while (tick != readl(TIMESTAMP_ADDR));
+		tick = __raw_readl(TIMESTAMP_ADDR);
+	} while (tick != __raw_readl(TIMESTAMP_ADDR));
 
 	return tick;
 }

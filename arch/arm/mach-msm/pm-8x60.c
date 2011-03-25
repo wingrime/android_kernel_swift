@@ -684,7 +684,12 @@ static void msm_pm_power_collapse(bool from_idle)
 
 	avsdscr_setting = avs_get_avsdscr();
 	avs_disable();
-	saved_acpuclk_rate = acpuclk_power_collapse();
+
+	if (cpu_online(dev->cpu))
+		saved_acpuclk_rate = acpuclk_power_collapse();
+	else
+		saved_acpuclk_rate = acpuclk_hot_unplug();
+
 	if (MSM_PM_DEBUG_CLOCK & msm_pm_debug_mask)
 		pr_info("CPU%u: %s: change clock rate (old rate = %lu)\n",
 			dev->cpu, __func__, saved_acpuclk_rate);
@@ -1077,7 +1082,7 @@ int msm_pm_platform_secondary_init(unsigned int cpu)
 	if (dev->saved_acpu_rate) {
 		ret = acpuclk_set_rate(dev->cpu,
 				dev->saved_acpu_rate,
-				SETRATE_PC);
+				SETRATE_HOTPLUG);
 		if (ret)
 			pr_err("CPU%u: %s: failed clock rate restore(%lu)\n",
 			dev->cpu, __func__, dev->saved_acpu_rate);

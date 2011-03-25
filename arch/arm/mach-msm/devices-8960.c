@@ -57,6 +57,10 @@
 #define MSM_GSBI10_QUP_PHYS	(MSM_GSBI10_PHYS + 0x80000)
 #define MSM_QUP_SIZE		SZ_4K
 
+#define MSM_PMIC1_SSBI_CMD_PHYS	0x00500000
+#define MSM_PMIC2_SSBI_CMD_PHYS	0x00C00000
+#define MSM_PMIC_SSBI_SIZE	SZ_4K
+
 static struct resource resources_otg[] = {
 	{
 		.start	= MSM_HSUSB_PHYS,
@@ -385,6 +389,21 @@ struct platform_device msm8960_device_qup_i2c_gsbi4 = {
 	.id		= 4,
 	.num_resources	= ARRAY_SIZE(resources_qup_i2c_gsbi4),
 	.resource	= resources_qup_i2c_gsbi4,
+};
+
+static struct resource resources_ssbi_pm8921[] = {
+	{
+		.start  = MSM_PMIC1_SSBI_CMD_PHYS,
+		.end    = MSM_PMIC1_SSBI_CMD_PHYS + MSM_PMIC_SSBI_SIZE - 1,
+		.flags  = IORESOURCE_MEM,
+	},
+};
+
+struct platform_device msm8960_device_ssbi_pm8921 = {
+	.name           = "msm_ssbi",
+	.id             = 0,
+	.resource       = resources_ssbi_pm8921,
+	.num_resources  = ARRAY_SIZE(resources_ssbi_pm8921),
 };
 
 struct clk_lookup msm_clocks_8960[] = {

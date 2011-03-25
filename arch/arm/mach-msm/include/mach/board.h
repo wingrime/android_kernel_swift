@@ -22,6 +22,7 @@
 #include <linux/input.h>
 #include <linux/usb.h>
 #include <linux/leds-pmic8058.h>
+#include <linux/msm_ssbi.h>
 #ifdef CONFIG_MSM_BUS_SCALING
 #include <mach/msm_bus.h>
 #endif
@@ -311,12 +312,6 @@ struct msm_i2c_platform_data {
 	int src_clk_rate;
 	int use_gsbi_shared_mode;
 	void (*msm_i2c_config_gpio)(int iface, int config_type);
-};
-
-enum msm_ssbi_controller_type {
-	MSM_SBI_CTRL_SSBI = 0,
-	MSM_SBI_CTRL_SSBI2,
-	MSM_SBI_CTRL_PMIC_ARBITER,
 };
 
 struct msm_i2c_ssbi_platform_data {

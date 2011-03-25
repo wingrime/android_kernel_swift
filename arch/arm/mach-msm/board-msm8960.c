@@ -21,6 +21,7 @@
 #include <linux/irq.h>
 #include <linux/i2c.h>
 #include <linux/usb/android_composite.h>
+#include <linux/msm_ssbi.h>
 
 #include <asm/mach-types.h>
 #include <asm/mach/arch.h>
@@ -219,6 +220,7 @@ static struct platform_device *sim_devices[] __initdata = {
 	&msm_device_dmov,
 	&msm_device_smd,
 	&msm8960_device_uart_gsbi2,
+	&msm8960_device_ssbi_pm8921,
 	&msm_device_otg,
 	&msm_device_gadget_peripheral,
 	&android_usb_device,
@@ -244,11 +246,20 @@ static void __init msm8960_i2c_init(void)
 					&msm8960_i2c_qup_gsbi4_pdata;
 }
 
+static struct msm_ssbi_platform_data msm8960_ssbi_pm8921_pdata = {
+	.controller_type = MSM_SBI_CTRL_PMIC_ARBITER,
+	.slave	= {
+		.name		= "pm8921-core",
+	},
+};
+
 static void __init msm8960_sim_init(void)
 {
 	if (socinfo_init() < 0)
 		pr_err("socinfo_init() failed!\n");
 	msm_clock_init(msm_clocks_8960, msm_num_clocks_8960);
+	msm8960_device_ssbi_pm8921.dev.platform_data =
+				&msm8960_ssbi_pm8921_pdata;
 	msm_device_otg.dev.platform_data = &msm_otg_pdata;
 	msm8960_i2c_init();
 	platform_add_devices(sim_devices, ARRAY_SIZE(sim_devices));
@@ -260,6 +271,8 @@ static void __init msm8960_rumi3_init(void)
 	if (socinfo_init() < 0)
 		pr_err("socinfo_init() failed!\n");
 	msm_clock_init(msm_clocks_8960, msm_num_clocks_8960);
+	msm8960_device_ssbi_pm8921.dev.platform_data =
+				&msm8960_ssbi_pm8921_pdata;
 	msm8960_i2c_init();
 	platform_add_devices(rumi3_devices, ARRAY_SIZE(rumi3_devices));
 	msm8960_init_mmc();

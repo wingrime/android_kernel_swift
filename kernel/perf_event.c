@@ -1412,7 +1412,7 @@ void perf_event_task_sched_in(struct task_struct *task)
 	struct perf_cpu_context *cpuctx = &__get_cpu_var(perf_cpu_context);
 	struct perf_event_context *ctx = task->perf_event_ctxp;
 
-	if (likely(!ctx))
+	if (likely(!ctx || !ctx->nr_events))
 		return;
 
 	if (cpuctx->task_ctx == ctx)

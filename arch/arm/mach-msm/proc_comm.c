@@ -35,6 +35,7 @@ static inline void notify_other_proc_comm(void)
 #else
 	writel_relaxed(1, MSM_CSR_BASE + 0x400 + (6) * 4);
 #endif
+	/* Make sure the write completes before returning */
 	wmb();
 }
 
@@ -90,7 +91,8 @@ again:
 
 	spin_unlock_irqrestore(&proc_comm_lock, flags);
 
-	/* spin_unlock_irqrestore will have the necessary barrier */
+	/* Make sure the writes complete before notifying the other side */
+	wmb();
 	notify_other_proc_comm();
 
 	return;
@@ -113,6 +115,7 @@ again:
 	writel_relaxed(data1 ? *data1 : 0, base + APP_DATA1);
 	writel_relaxed(data2 ? *data2 : 0, base + APP_DATA2);
 
+	/* Make sure the writes complete before notifying the other side */
 	wmb();
 	notify_other_proc_comm();
 
@@ -131,7 +134,8 @@ again:
 
 	writel_relaxed(PCOM_CMD_IDLE, base + APP_COMMAND);
 
-	/* spin_unlock_irqrestore will have the necessary barrier */
+	/* Make sure the writes complete before returning */
+	wmb();
 	spin_unlock_irqrestore(&proc_comm_lock, flags);
 	return ret;
 }

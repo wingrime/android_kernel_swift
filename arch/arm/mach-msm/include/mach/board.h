@@ -318,7 +318,7 @@ enum msm_ssbi_controller_type {
 	MSM_SBI_CTRL_PMIC_ARBITER,
 };
 
-struct msm_ssbi_platform_data {
+struct msm_i2c_ssbi_platform_data {
 	const char *rsl_id;
 	enum msm_ssbi_controller_type controller_type;
 };

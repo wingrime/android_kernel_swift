@@ -847,17 +847,17 @@ static struct msm_spi_platform_data msm_gsbi1_qup_spi_pdata = {
 
 #ifdef CONFIG_I2C_SSBI
 /* PMIC SSBI */
-static struct msm_ssbi_platform_data msm_ssbi1_pdata = {
+static struct msm_i2c_ssbi_platform_data msm_ssbi1_pdata = {
 	.controller_type = MSM_SBI_CTRL_PMIC_ARBITER,
 };
 
 /* PMIC SSBI */
-static struct msm_ssbi_platform_data msm_ssbi2_pdata = {
+static struct msm_i2c_ssbi_platform_data msm_ssbi2_pdata = {
 	.controller_type = MSM_SBI_CTRL_PMIC_ARBITER,
 };
 
 /* CODEC/TSSC SSBI */
-static struct msm_ssbi_platform_data msm_ssbi3_pdata = {
+static struct msm_i2c_ssbi_platform_data msm_ssbi3_pdata = {
 	.controller_type = MSM_SBI_CTRL_SSBI,
 };
 #endif

@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2010, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2009-2011, Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -8,12 +8,6 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
- * 02110-1301, USA.
- *
  */
 /*
  * SSBI driver for Qualcomm MSM platforms
@@ -372,7 +366,7 @@ static int __init i2c_ssbi_probe(struct platform_device *pdev)
 	int			 ret = 0;
 	struct resource		*ssbi_res;
 	struct i2c_ssbi_dev	*ssbi;
-	struct msm_ssbi_platform_data *pdata;
+	const struct msm_i2c_ssbi_platform_data *pdata;
 
 	pdata = pdev->dev.platform_data;
 	if (!pdata) {

@@ -90,5 +90,16 @@ static inline void clock_debug_print_enabled(void) { return; }
 
 extern struct clk_ops clk_ops_remote;
 
+extern struct clk_ops clk_ops_dummy;
+
+#define CLK_DUMMY(clk_name, clk_id, clk_dev, flags) { \
+	.con_id = clk_name, \
+	.dev_id = clk_dev, \
+	.clk = &(struct clk) { \
+		.dbg_name = #clk_id, \
+		.ops = &clk_ops_dummy, \
+	} \
+	}
+
 #endif
 

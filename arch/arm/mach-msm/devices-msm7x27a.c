@@ -26,7 +26,6 @@
 #include <asm/mach/mmc.h>
 
 #include "clock.h"
-#include "clock-dummy.h"
 #include "clock-voter.h"
 #include "devices.h"
 #include "devices-msm7x2xa.h"

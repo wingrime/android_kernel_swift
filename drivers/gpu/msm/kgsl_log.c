@@ -57,7 +57,8 @@ static int __log ## _set(void *data, u64 val)           \
 static int __log ## _get(void *data, u64 *val)	        \
 {                                                       \
 	struct kgsl_device *device = data;              \
-	return *val = device->__log;                    \
+	*val = device->__log;                           \
+	return 0;                                       \
 }                                                       \
 DEFINE_SIMPLE_ATTRIBUTE(__log ## _fops,                 \
 __log ## _get, __log ## _set, "%llu\n");                \

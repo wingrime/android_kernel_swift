@@ -139,6 +139,7 @@ static void __init msm7x27a_init_mmc(void)
 
 static struct platform_device *rumi_sim_devices[] __initdata = {
 	&msm_device_dmov,
+	&msm_device_smd,
 	&smc91x_device,
 	&msm_device_uart1,
 	&msm_device_nand,

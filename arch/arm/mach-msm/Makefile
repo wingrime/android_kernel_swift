@@ -7,11 +7,13 @@ obj-$(CONFIG_KEXEC) += msm_kexec.o
 
 obj-$(CONFIG_MSM_PROC_COMM) += proc_comm.o
 ifndef CONFIG_ARCH_MSM8X60
+ifndef CONFIG_ARCH_MSM7X27A
 	obj-$(CONFIG_MSM_PROC_COMM) += clock-pcom.o internal_power_rail.o
 	obj-$(CONFIG_MSM_PROC_COMM) += vreg.o mpp.o
 	ifdef CONFIG_MSM_PROC_COMM
 		obj-$(CONFIG_DEBUG_FS) += pmic_debugfs.o
 	endif
+endif
 endif
 
 obj-$(CONFIG_ARCH_MSM_ARM11) += acpuclock.o timer.o

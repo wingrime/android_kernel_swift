@@ -111,6 +111,11 @@ struct platform_device msm_device_dmov = {
 	.num_resources	= ARRAY_SIZE(msm_dmov_resource),
 };
 
+struct platform_device msm_device_smd = {
+	.name	= "msm_smd",
+	.id	= -1,
+};
+
 static struct resource resources_uart1[] = {
 	{
 		.start	= INT_UART1,

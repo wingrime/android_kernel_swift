@@ -543,7 +543,9 @@ struct msm_snapshot_pp_status {
 #define CFG_SEND_WB_INFO    28
 #define CFG_SENSOR_INIT    29
 #define CFG_GET_3D_CALI_DATA 30
-#define CFG_MAX				31
+#define CFG_GET_CALIB_DATA		31
+#define CFG_MAX			32
+
 
 #define MOVE_NEAR	0
 #define MOVE_FAR	1
@@ -630,6 +632,21 @@ struct sensor_init_cfg {
 	uint8_t prev_res;
 	uint8_t pict_res;
 };
+
+struct sensor_calib_data {
+	/* Color Related Measurements */
+	uint16_t r_over_g;
+	uint16_t b_over_g;
+	uint16_t gr_over_gb;
+
+	/* Lens Related Measurements */
+	uint16_t macro_2_inf;
+	uint16_t inf_2_macro;
+	uint16_t stroke_amt;
+	uint16_t af_pos_1m;
+	uint16_t af_pos_inf;
+};
+
 struct sensor_cfg_data {
 	int cfgtype;
 	int mode;
@@ -652,6 +669,7 @@ struct sensor_cfg_data {
 		struct fps_cfg fps;
 		struct wb_info_cfg wb_info;
 		struct sensor_3d_exp_cfg sensor_3d_exp;
+		struct sensor_calib_data calib_info;
 	} cfg;
 };
 

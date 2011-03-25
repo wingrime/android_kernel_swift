@@ -1068,7 +1068,11 @@ static int msm_divert_st_frame(struct msm_sync *sync,
 	struct video_crop_t *crop = NULL;
 	int rc = 0;
 
-	if (se->stats_event.msg_id != OUTPUT_TYPE_ST_L) {
+	if (se->stats_event.msg_id == OUTPUT_TYPE_ST_L) {
+		buf.type = OUTPUT_TYPE_ST_L;
+	} else if (se->stats_event.msg_id == OUTPUT_TYPE_ST_R) {
+		buf.type = OUTPUT_TYPE_ST_R;
+	} else {
 		if (se->resptype == MSM_CAM_RESP_STEREO_OP_1) {
 			rc = msm_pmem_frame_ptov_lookup(sync, data->phy.y_phy,
 					data->phy.cbcr_phy, &pinfo,
@@ -1141,8 +1145,7 @@ static int msm_divert_st_frame(struct msm_sync *sync,
 
 		CDBG("%s: buf 0x%x fd %d\n", __func__,
 			(unsigned int)buf.buf_info.buffer, buf.buf_info.fd);
-	} else
-		buf.type = OUTPUT_TYPE_ST_L;
+	}
 
 	if (copy_to_user((void *)(se->stats_event.data),
 			&buf, sizeof(struct msm_st_frame))) {
@@ -1202,9 +1205,16 @@ static int msm_get_stats(struct msm_sync *sync, void __user *arg)
 			se.stats_event.msg_id = OUTPUT_TYPE_ST_L;
 			rc = msm_divert_st_frame(sync, data, &se,
 				OUTPUT_TYPE_V);
-		} else
-			CDBG("%s: invalid vpe_data->type = %d\n", __func__,
-				vpe_data->type);
+		} else if (vpe_data->type == VPE_MSG_OUTPUT_ST_R) {
+			CDBG("%s: Change msg_id to OUTPUT_TYPE_ST_R\n",
+				__func__);
+			se.stats_event.msg_id = OUTPUT_TYPE_ST_R;
+			rc = msm_divert_st_frame(sync, data, &se,
+				OUTPUT_TYPE_V);
+		} else {
+			pr_warning("%s: invalid vpe_data->type = %d\n",
+				__func__, vpe_data->type);
+		}
 		break;
 
 	case MSM_CAM_Q_VFE_EVT:
@@ -1418,16 +1428,6 @@ static int msm_ctrl_cmd_done(struct msm_control_device *ctrl_pmsm,
 		ctrl_pmsm->pmsm->sync->ignore_qcmd_type = -1;
 	} else /* wake up control thread */
 		msm_enqueue(&ctrl_pmsm->ctrl_q, &qcmd->list_control);
-
-	/* 3d mode */
-	if (ctrl_pmsm->pmsm->sync->stereocam_enabled) {
-		if (command->type == CAMERA_STOP_VIDEO) {
-			CDBG("%s: drain event queue %d", __func__,
-				command->type);
-			msm_queue_drain(&(ctrl_pmsm->pmsm->sync->event_q),
-				list_config);
-		}
-	}
 
 	return 0;
 }
@@ -3527,6 +3527,9 @@ static void msm_vpe_sync(struct msm_vpe_resp *vdata,
 			CDBG("%s: send SNAPSHOT_DONE message\n", __func__);
 			msm_enqueue(&sync->event_q, &qcmd->list_config);
 		} else {
+			if (atomic_read(&qcmd->on_heap))
+				atomic_add(1, &qcmd->on_heap);
+			msm_enqueue(&sync->event_q, &qcmd->list_config);
 			if (sync->stereo_state == STEREO_VIDEO_ACTIVE) {
 				CDBG("%s: st frame to frame_q from VPE\n",
 					__func__);

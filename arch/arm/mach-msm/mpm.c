@@ -50,11 +50,6 @@ module_param_named(
  * Request and Status Definitions
  *****************************************************************************/
 
-#define MSM_MPM_REQUEST_REG_START  0x9d8
-#define MSM_MPM_STATUS_REG_START  0xdf8
-#define MSM_MPM_REQUEST_BASE  (MSM_RPM_BASE + MSM_MPM_REQUEST_REG_START)
-#define MSM_MPM_STATUS_BASE  (MSM_RPM_BASE + MSM_MPM_STATUS_REG_START)
-
 enum {
 	MSM_MPM_REQUEST_REG_ENABLE,
 	MSM_MPM_REQUEST_REG_DETECT_CTL,
@@ -67,105 +62,16 @@ enum {
 };
 
 /******************************************************************************
- * IPC Definitions
- *****************************************************************************/
-
-#define MSM_MPM_APPS_IPC  (MSM_GCC_BASE + 0x008)
-#define MSM_MPM_APPS_IPC_MPM  BIT(1)
-#define MSM_MPM_IPC_IRQ  RPM_SCSS_CPU0_GP_MEDIUM_IRQ
-
-/******************************************************************************
  * IRQ Mapping Definitions
  *****************************************************************************/
 
 #define MSM_MPM_NR_APPS_IRQS  (NR_MSM_IRQS + NR_GPIO_IRQS)
-#define MSM_MPM_NR_MPM_IRQS  64
 
 #define MSM_MPM_REG_WIDTH  DIV_ROUND_UP(MSM_MPM_NR_MPM_IRQS, 32)
 #define MSM_MPM_IRQ_INDEX(irq)  (irq / 32)
 #define MSM_MPM_IRQ_MASK(irq)  BIT(irq % 32)
 
 static uint8_t msm_mpm_irqs_a2m[MSM_MPM_NR_APPS_IRQS];
-static uint16_t msm_mpm_irqs_m2a[MSM_MPM_NR_MPM_IRQS] = {
-	[1] = MSM_GPIO_TO_INT(61),
-	[4] = MSM_GPIO_TO_INT(87),
-	[5] = MSM_GPIO_TO_INT(88),
-	[6] = MSM_GPIO_TO_INT(89),
-	[7] = MSM_GPIO_TO_INT(90),
-	[8] = MSM_GPIO_TO_INT(91),
-	[9] = MSM_GPIO_TO_INT(34),
-	[10] = MSM_GPIO_TO_INT(38),
-	[11] = MSM_GPIO_TO_INT(42),
-	[12] = MSM_GPIO_TO_INT(46),
-	[13] = MSM_GPIO_TO_INT(50),
-	[14] = MSM_GPIO_TO_INT(54),
-	[15] = MSM_GPIO_TO_INT(58),
-	[16] = MSM_GPIO_TO_INT(63),
-	[17] = MSM_GPIO_TO_INT(160),
-	[18] = MSM_GPIO_TO_INT(162),
-	[19] = MSM_GPIO_TO_INT(144),
-	[20] = MSM_GPIO_TO_INT(146),
-	[25] = USB1_HS_IRQ,
-	[26] = TV_ENC_IRQ,
-	[27] = HDMI_IRQ,
-	[29] = MSM_GPIO_TO_INT(123),
-	[30] = MSM_GPIO_TO_INT(172),
-	[31] = MSM_GPIO_TO_INT(99),
-	[32] = MSM_GPIO_TO_INT(96),
-	[33] = MSM_GPIO_TO_INT(67),
-	[34] = MSM_GPIO_TO_INT(71),
-	[35] = MSM_GPIO_TO_INT(105),
-	[36] = MSM_GPIO_TO_INT(117),
-	[37] = MSM_GPIO_TO_INT(29),
-	[38] = MSM_GPIO_TO_INT(30),
-	[39] = MSM_GPIO_TO_INT(31),
-	[40] = MSM_GPIO_TO_INT(37),
-	[41] = MSM_GPIO_TO_INT(40),
-	[42] = MSM_GPIO_TO_INT(41),
-	[43] = MSM_GPIO_TO_INT(45),
-	[44] = MSM_GPIO_TO_INT(51),
-	[45] = MSM_GPIO_TO_INT(52),
-	[46] = MSM_GPIO_TO_INT(57),
-	[47] = MSM_GPIO_TO_INT(73),
-	[48] = MSM_GPIO_TO_INT(93),
-	[49] = MSM_GPIO_TO_INT(94),
-	[50] = MSM_GPIO_TO_INT(103),
-	[51] = MSM_GPIO_TO_INT(104),
-	[52] = MSM_GPIO_TO_INT(106),
-	[53] = MSM_GPIO_TO_INT(115),
-	[54] = MSM_GPIO_TO_INT(124),
-	[55] = MSM_GPIO_TO_INT(125),
-	[56] = MSM_GPIO_TO_INT(126),
-	[57] = MSM_GPIO_TO_INT(127),
-	[58] = MSM_GPIO_TO_INT(128),
-	[59] = MSM_GPIO_TO_INT(129),
-};
-
-static uint16_t msm_mpm_bypassed_apps_irqs[] = {
-	TLMM_SCSS_SUMMARY_IRQ,
-	RPM_SCSS_CPU0_GP_HIGH_IRQ,
-	RPM_SCSS_CPU0_GP_MEDIUM_IRQ,
-	RPM_SCSS_CPU0_GP_LOW_IRQ,
-	RPM_SCSS_CPU0_WAKE_UP_IRQ,
-	RPM_SCSS_CPU1_GP_HIGH_IRQ,
-	RPM_SCSS_CPU1_GP_MEDIUM_IRQ,
-	RPM_SCSS_CPU1_GP_LOW_IRQ,
-	RPM_SCSS_CPU1_WAKE_UP_IRQ,
-	MARM_SCSS_GP_IRQ_0,
-	MARM_SCSS_GP_IRQ_1,
-	MARM_SCSS_GP_IRQ_2,
-	MARM_SCSS_GP_IRQ_3,
-	MARM_SCSS_GP_IRQ_4,
-	MARM_SCSS_GP_IRQ_5,
-	MARM_SCSS_GP_IRQ_6,
-	MARM_SCSS_GP_IRQ_7,
-	MARM_SCSS_GP_IRQ_8,
-	MARM_SCSS_GP_IRQ_9,
-	LPASS_SCSS_GP_LOW_IRQ,
-	LPASS_SCSS_GP_MEDIUM_IRQ,
-	LPASS_SCSS_GP_HIGH_IRQ,
-	SPS_MTI_31,
-};
 
 static DEFINE_SPINLOCK(msm_mpm_lock);
 
@@ -192,14 +98,14 @@ static inline uint32_t msm_mpm_read(
 	unsigned int reg, unsigned int subreg_index)
 {
 	unsigned int offset = reg * MSM_MPM_REG_WIDTH + subreg_index;
-	return __raw_readl(MSM_MPM_STATUS_BASE + offset * 4);
+	return __raw_readl(msm_mpm_dev_data.mpm_status_reg_base + offset * 4);
 }
 
 static inline void msm_mpm_write(
 	unsigned int reg, unsigned int subreg_index, uint32_t value)
 {
 	unsigned int offset = reg * MSM_MPM_REG_WIDTH + subreg_index;
-	__raw_writel(value, MSM_MPM_REQUEST_BASE + offset * 4);
+	__raw_writel(value, msm_mpm_dev_data.mpm_request_reg_base + offset * 4);
 
 	if (MSM_MPM_DEBUG_WRITE & msm_mpm_debug_mask)
 		pr_info("%s: reg %u.%u: 0x%08x\n",
@@ -219,7 +125,8 @@ static inline void msm_mpm_write_barrier(void)
 
 static inline void msm_mpm_send_interrupt(void)
 {
-	__raw_writel(MSM_MPM_APPS_IPC_MPM, MSM_MPM_APPS_IPC);
+	__raw_writel(msm_mpm_dev_data.mpm_apps_ipc_val,
+			msm_mpm_dev_data.mpm_apps_ipc_reg);
 }
 
 static irqreturn_t msm_mpm_irq(int irq, void *dev_id)
@@ -291,20 +198,20 @@ static inline void msm_mpm_set_irq_a2m(unsigned int apps_irq,
 
 static inline bool msm_mpm_is_valid_mpm_irq(unsigned int irq)
 {
-	return irq < ARRAY_SIZE(msm_mpm_irqs_m2a);
+	return irq < msm_mpm_dev_data.irqs_m2a_size;
 }
 
 static inline uint16_t msm_mpm_get_irq_m2a(unsigned int irq)
 {
-	return msm_mpm_irqs_m2a[irq];
+	return msm_mpm_dev_data.irqs_m2a[irq];
 }
 
 static bool msm_mpm_bypass_apps_irq(unsigned int irq)
 {
 	int i;
 
-	for (i = 0; i < ARRAY_SIZE(msm_mpm_bypassed_apps_irqs); i++)
-		if (irq == msm_mpm_bypassed_apps_irqs[i])
+	for (i = 0; i < msm_mpm_dev_data.bypassed_apps_irqs_size; i++)
+		if (irq == msm_mpm_dev_data.bypassed_apps_irqs[i])
 			return true;
 
 	return false;
@@ -551,7 +458,7 @@ core_initcall(msm_mpm_early_init);
 
 static int __init msm_mpm_init(void)
 {
-	unsigned int irq = MSM_MPM_IPC_IRQ;
+	unsigned int irq = msm_mpm_dev_data.mpm_ipc_irq;
 	int rc;
 
 	bitmap_set(msm_mpm_gpio_irqs_mask, NR_MSM_IRQS,

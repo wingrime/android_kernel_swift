@@ -76,6 +76,7 @@ config ARCH_MSM8X60
 	select MSM_BUS_SCALING
 	select MSM_SECURE_IO
 	select MSM_DALRPC
+	select MSM_SCHED_FAST_CPU_ONLINE
 
 config ARCH_MSM8960
 	bool "MSM8960"
@@ -1346,4 +1347,12 @@ config BT_MSM_PINTEST
 	  Bluetooth MSM Pin Connectivity test module.
 	  This driver provides support for verifying the MSM to BT pin
 	  connectivity.
+
+config MSM_SCHED_FAST_CPU_ONLINE
+	bool "Fast scheduler update for CPU online"
+	depends on ARCH_MSM8X60
+	default n
+	help
+		Bypass scheduler domain reconstruction when onlining the second
+		CPU on 8X60 to speed up operation.
 endif

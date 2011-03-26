@@ -8052,8 +8052,8 @@ static struct msm_bus_vectors mdp_sd_smi_vectors[] = {
 	{
 		.src = MSM_BUS_MASTER_MDP_PORT0,
 		.dst = MSM_BUS_SLAVE_SMI,
-		.ab = 147460000,
-		.ib = 184325000,
+		.ab = 175110000,
+		.ib = 218887500,
 	},
 	/* Master and slaves can be from different fabrics */
 	{
@@ -8076,8 +8076,8 @@ static struct msm_bus_vectors mdp_sd_ebi_vectors[] = {
 	{
 		.src = MSM_BUS_MASTER_MDP_PORT0,
 		.dst = MSM_BUS_SLAVE_EBI_CH0,
-		.ab = 334080000,
-		.ib = 417600000,
+		.ab = 175110000,
+		.ib = 218887500,
 	},
 };
 static struct msm_bus_vectors mdp_vga_vectors[] = {

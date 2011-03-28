@@ -34,6 +34,7 @@
 #include <asm/mach-types.h>
 #include <asm/uaccess.h>
 #include <mach/mdm.h>
+#include <mach/restart.h>
 #include "mdm_ioctls.h"
 
 #define CHARM_MODEM_TIMEOUT	2000
@@ -54,6 +55,7 @@ static int charm_debug_on;
 
 static void __soc_restart(void)
 {
+	msm_set_restart_mode(RESTART_DLOAD);
 	lock_kernel();
 	kernel_restart(NULL);
 	unlock_kernel();

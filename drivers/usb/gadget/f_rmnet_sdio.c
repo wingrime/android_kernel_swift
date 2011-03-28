@@ -529,6 +529,8 @@ rmnet_setup(struct usb_function *f, const struct usb_ctrlrequest *ctrl)
 			dev->cbits_to_modem &= ~TIOCM_DTR;
 		queue_work(dev->wq, &dev->set_modem_ctl_bits_work);
 
+		ret = 0;
+
 		break;
 	default:
 

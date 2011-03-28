@@ -430,11 +430,13 @@ static int mipi_dsi_off(struct platform_device *pdev)
 	 */
 	mipi_dsi_op_mode_config(DSI_CMD_MODE);
 
-	if (pinfo->lcd.vsync_enable) {
-		if (pinfo->lcd.hw_vsync_mode && vsync_gpio > 0)
-			gpio_free(vsync_gpio);
+	if (mfd->panel_info.type == MIPI_CMD_PANEL) {
+		if (pinfo->lcd.vsync_enable) {
+			if (pinfo->lcd.hw_vsync_mode && vsync_gpio > 0)
+				gpio_free(vsync_gpio);
 
-		mipi_dsi_set_tear_off(mfd);
+			mipi_dsi_set_tear_off(mfd);
+		}
 	}
 
 	ret = panel_next_off(pdev);

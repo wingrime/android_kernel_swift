@@ -123,6 +123,10 @@ config  MSM_VIC
 
 config MSM_RPM
 	bool "Resource Power Manager"
+	select MSM_MPM
+
+config MSM_MPM
+	bool "Modem Power Manager"
 
 config MSM_XO
 	bool

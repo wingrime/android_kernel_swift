@@ -34,7 +34,7 @@
 #include <asm/mach/irq.h>
 #include <asm/hardware/gic.h>
 
-#ifdef CONFIG_MSM_RPM
+#ifdef CONFIG_MSM_MPM
 #include <../mach-msm/mpm.h>
 #endif
 
@@ -113,7 +113,7 @@ static void gic_mask_irq(unsigned int irq)
 	writel(mask, gic_dist_base(irq) + GIC_DIST_ENABLE_CLEAR + (gic_irq(irq) / 32) * 4);
 	spin_unlock(&irq_controller_lock);
 
-#ifdef CONFIG_MSM_RPM
+#ifdef CONFIG_MSM_MPM
 	msm_mpm_enable_irq(irq, 0);
 #endif
 }
@@ -126,12 +126,12 @@ static void gic_unmask_irq(unsigned int irq)
 	writel(mask, gic_dist_base(irq) + GIC_DIST_ENABLE_SET + (gic_irq(irq) / 32) * 4);
 	spin_unlock(&irq_controller_lock);
 
-#ifdef CONFIG_MSM_RPM
+#ifdef CONFIG_MSM_MPM
 	msm_mpm_enable_irq(irq, 1);
 #endif
 }
 
-#ifdef CONFIG_MSM_RPM
+#ifdef CONFIG_MSM_MPM
 static void gic_disable_irq(unsigned int irq)
 {
 	msm_mpm_enable_irq(irq, 0);
@@ -352,7 +352,7 @@ static int gic_set_type(unsigned int irq, unsigned int type)
 	if ((type & IRQ_TYPE_EDGE_RISING) && gicirq > 31)
 		__set_irq_handler_unlocked(irq, handle_edge_irq);
 
-#ifdef CONFIG_MSM_RPM
+#ifdef CONFIG_MSM_MPM
 	msm_mpm_set_irq_type(irq, type);
 #endif
 

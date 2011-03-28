@@ -89,6 +89,9 @@ struct kgsl_driver {
 	struct cdev cdev;
 	dev_t major;
 	struct class *class;
+	/* Virtual device for managing the core */
+	struct device virtdev;
+	/* Kobjects for storing pagetable and process statistics */
 	struct kobject *ptkobj;
 	struct kobject *prockobj;
 	struct kgsl_device *devp[KGSL_DEVICE_MAX];

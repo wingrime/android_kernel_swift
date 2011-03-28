@@ -1797,6 +1797,7 @@ static void kgsl_driver_cleanup(void)
 		kgsl_driver.ptpool = NULL;
 	}
 
+	device_unregister(&kgsl_driver.virtdev);
 	class_destroy(kgsl_driver.class);
 	kgsl_driver.class = NULL;
 
@@ -1928,15 +1929,25 @@ kgsl_core_init(void)
 		goto err;
 	}
 
-	/* Make a kobject to store pagetable statistics in */
+	/* Make a virtual device for managing core related things
+	   in sysfs */
+	kgsl_driver.virtdev.class = kgsl_driver.class;
+	dev_set_name(&kgsl_driver.virtdev, "kgsl");
+	ret = device_register(&kgsl_driver.virtdev);
+	if (ret) {
+		KGSL_CORE_ERR("driver_register failed\n");
+		goto err_class;
+	}
+
+	/* Make kobjects in the virtual device for storing statistics */
 
 	kgsl_driver.ptkobj =
 	  kobject_create_and_add("pagetables",
-				 &kgsl_driver.pdev->dev.kobj);
+				 &kgsl_driver.virtdev.kobj);
 
 	kgsl_driver.prockobj =
 		kobject_create_and_add("proc",
-				       &kgsl_driver.pdev->dev.kobj);
+				       &kgsl_driver.virtdev.kobj);
 
 	kgsl_debugfs_dir = debugfs_create_dir("kgsl", 0);
 	kgsl_debug_init(kgsl_debugfs_dir);
@@ -1953,10 +1964,14 @@ kgsl_core_init(void)
 	ret = kgsl_drm_init(kgsl_driver.pdev);
 
 	if (ret)
-		goto err;
+		goto err_dev;
 
 	return 0;
 
+err_dev:
+	device_unregister(&kgsl_driver.virtdev);
+err_class:
+	class_destroy(kgsl_driver.class);
 err:
 	unregister_chrdev_region(kgsl_driver.major, KGSL_DEVICE_MAX);
 	return ret;

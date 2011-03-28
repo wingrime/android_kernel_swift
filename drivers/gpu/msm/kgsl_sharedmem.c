@@ -292,11 +292,11 @@ static struct device_attribute drv_histogram_attr = {
 void
 kgsl_sharedmem_uninit_sysfs(void)
 {
-	device_remove_file(&kgsl_driver.pdev->dev, &drv_vmalloc_attr);
-	device_remove_file(&kgsl_driver.pdev->dev, &drv_vmalloc_max_attr);
-	device_remove_file(&kgsl_driver.pdev->dev, &drv_coherent_attr);
-	device_remove_file(&kgsl_driver.pdev->dev, &drv_coherent_max_attr);
-	device_remove_file(&kgsl_driver.pdev->dev, &drv_histogram_attr);
+	device_remove_file(&kgsl_driver.virtdev, &drv_vmalloc_attr);
+	device_remove_file(&kgsl_driver.virtdev, &drv_vmalloc_max_attr);
+	device_remove_file(&kgsl_driver.virtdev, &drv_coherent_attr);
+	device_remove_file(&kgsl_driver.virtdev, &drv_coherent_max_attr);
+	device_remove_file(&kgsl_driver.virtdev, &drv_histogram_attr);
 }
 
 int
@@ -304,15 +304,15 @@ kgsl_sharedmem_init_sysfs(void)
 {
 	int ret;
 
-	ret  = device_create_file(&kgsl_driver.pdev->dev,
+	ret  = device_create_file(&kgsl_driver.virtdev,
 				  &drv_vmalloc_attr);
-	ret |= device_create_file(&kgsl_driver.pdev->dev,
+	ret |= device_create_file(&kgsl_driver.virtdev,
 				  &drv_vmalloc_max_attr);
-	ret |= device_create_file(&kgsl_driver.pdev->dev,
+	ret |= device_create_file(&kgsl_driver.virtdev,
 				  &drv_coherent_attr);
-	ret |= device_create_file(&kgsl_driver.pdev->dev,
+	ret |= device_create_file(&kgsl_driver.virtdev,
 				  &drv_coherent_max_attr);
-	ret |= device_create_file(&kgsl_driver.pdev->dev,
+	ret |= device_create_file(&kgsl_driver.virtdev,
 				  &drv_histogram_attr);
 
 	return ret;

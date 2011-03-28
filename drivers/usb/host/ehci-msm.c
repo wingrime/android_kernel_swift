@@ -729,8 +729,8 @@ static int __devinit ehci_msm_probe(struct platform_device *pdev)
 	retval = msm_xusb_init_host(mhcd);
 
 	if (retval < 0) {
-		usb_put_hcd(hcd);
 		wake_lock_destroy(&mhcd->wlock);
+		usb_put_hcd(hcd);
 		clk_put(pdata->ebi1_clk);
 	}
 
@@ -775,10 +775,10 @@ static int __exit ehci_msm_remove(struct platform_device *pdev)
 
 	msm_hsusb_request_host((void *)mhcd, REQUEST_STOP);
 	msm_xusb_uninit_host(mhcd);
-	usb_put_hcd(hcd);
 	retval = msm_xusb_rpc_close(mhcd);
 
 	wake_lock_destroy(&mhcd->wlock);
+	usb_put_hcd(hcd);
 	clk_put(pdata->ebi1_clk);
 
 	pm_runtime_disable(&pdev->dev);

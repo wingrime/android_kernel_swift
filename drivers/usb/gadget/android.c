@@ -430,9 +430,8 @@ static void android_set_default_product(int pid)
  * @f: usb function
  * @enable : function needs to be enable or disable
  *
- * This function selects product id having required function at first index.
- * TODO : Search of function in product id can be extended for all index.
- * RNDIS function enable/disable uses this.
+ * This function selects first product id having required function.
+ * RNDIS/MTP function enable/disable uses this.
 */
 #ifdef CONFIG_USB_ANDROID_RNDIS
 static void android_config_functions(struct usb_function *f, int enable)
@@ -440,13 +439,11 @@ static void android_config_functions(struct usb_function *f, int enable)
 	struct android_dev *dev = _android_dev;
 	struct android_usb_product *up = dev->products;
 	int index;
-	char **functions;
 
-	/* Searches for product id having function at first index */
+	/* Searches for product id having function */
 	if (enable) {
 		for (index = 0; index < dev->num_products; index++, up++) {
-			functions = up->functions;
-			if (!strcmp(*functions, f->name))
+			if (product_has_function(up, f))
 				break;
 		}
 		android_set_function_mask(up);
@@ -486,6 +483,11 @@ void android_enable_function(struct usb_function *f, int enable)
 
 			android_config_functions(f, enable);
 		}
+#endif
+
+#ifdef CONFIG_USB_ANDROID_MTP
+		if (!strcmp(f->name, "mtp"))
+			android_config_functions(f, enable);
 #endif
 
 		product_id = get_product_id(dev);

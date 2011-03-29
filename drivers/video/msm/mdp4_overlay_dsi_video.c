@@ -42,6 +42,13 @@ static int first_pixel_start_y;
 
 static struct mdp4_overlay_pipe *dsi_pipe;
 
+static cmd_fxn_t display_on;
+
+void mdp4_dsi_video_fxn_register(cmd_fxn_t fxn)
+{
+	display_on = fxn;
+}
+
 int mdp4_dsi_video_on(struct platform_device *pdev)
 {
 	int dsi_width;
@@ -223,6 +230,11 @@ int mdp4_dsi_video_on(struct platform_device *pdev)
 		/* enable DSI block */
 		MDP_OUTP(MDP_BASE + DSI_VIDEO_BASE, 1);
 		mdp_pipe_ctrl(MDP_OVERLAY0_BLOCK, MDP_BLOCK_POWER_ON, FALSE);
+
+		if (display_on != NULL) {
+			msleep(50);
+			display_on(pdev);
+		}
 	}
 	/* MDP cmd block disable */
 	mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_OFF, FALSE);

@@ -326,11 +326,11 @@ struct mdp4_statistic {
 	ulong intr_underrun_p;	/* Primary interface */
 	ulong intr_underrun_e;	/* external interface */
 	ulong kickoff_mddi;
-	ulong kickoff_piggy;
 	ulong kickoff_lcdc;
 	ulong kickoff_dtv;
 	ulong kickoff_atv;
 	ulong kickoff_dsi;
+	ulong writeback;	/* blt */
 	ulong overlay_set[MDP4_MIXER_MAX];
 	ulong overlay_unset[MDP4_MIXER_MAX];
 	ulong overlay_play[MDP4_MIXER_MAX];

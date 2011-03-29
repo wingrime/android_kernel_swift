@@ -1821,8 +1821,12 @@ int mdp4_overlay_set(struct fb_info *info, struct mdp_overlay *req)
 	}
 
 #ifdef CONFIG_FB_MSM_MIPI_DSI
+	/*
+	 * writeback (blt) mode to provide work around for
+	 * dsi cmd mode interface hardware bug.
+	 */
 	if (ctrl->panel_mode & MDP4_PANEL_DSI_CMD) {
-		if (mixer == MDP4_MIXER0) {
+		if (mixer == MDP4_MIXER0 && req->dst_rect.x != 0) {
 			mdp4_dsi_blt_dmap_busy_wait(mfd);
 			mdp4_dsi_overlay_blt_start(mfd);
 		}

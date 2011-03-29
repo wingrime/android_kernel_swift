@@ -39,6 +39,7 @@
 #include <mach/qdsp5v2/audio_acdbi.h>
 #include <mach/qdsp5v2/acdb_commands.h>
 #include <mach/qdsp5v2/audio_acdb_def.h>
+#include <linux/mfd/marimba.h>
 #include <mach/debug_mm.h>
 #include <linux/debugfs.h>
 
@@ -3185,6 +3186,58 @@ err:
 	return result;
 }
 
+static s32 initialize_modem_acdb(void)
+{
+	struct acdb_cmd_init_adie acdb_cmd;
+	u8 codec_type = -1;
+	s32 result = 0;
+	u8 iterations = 0;
+
+	codec_type = adie_get_detected_codec_type();
+	if (codec_type == MARIMBA_ID)
+		acdb_cmd.adie_type = ACDB_CURRENT_ADIE_MODE_MARIMBA;
+	else if (codec_type == TIMPANI_ID)
+		acdb_cmd.adie_type = ACDB_CURRENT_ADIE_MODE_TIMPANI;
+	else
+		acdb_cmd.adie_type = ACDB_CURRENT_ADIE_MODE_UNKNOWN;
+	acdb_cmd.command_id = ACDB_CMD_INITIALIZE_FOR_ADIE;
+	do {
+		/*Initialize ACDB software on modem based on codec type*/
+		result = dalrpc_fcn_8(ACDB_DalACDB_ioctl, acdb_data.handle,
+				(const void *)&acdb_cmd, sizeof(acdb_cmd),
+				&acdb_data.acdb_result,
+				sizeof(acdb_data.acdb_result));
+		if (result < 0) {
+			MM_ERR("ACDB=> RPC failure result = %d\n", result);
+			goto error;
+		}
+		/*following check is introduced to handle boot up race
+		condition between AUDCAL SW peers running on apps
+		and modem (ACDB_RES_BADSTATE indicates modem AUDCAL SW is
+		not in initialized sate) we need to retry to get ACDB
+		initialized*/
+		if (acdb_data.acdb_result.result == ACDB_RES_BADSTATE) {
+			msleep(500);
+			iterations++;
+		} else if (acdb_data.acdb_result.result == ACDB_RES_SUCCESS) {
+			MM_DBG("Modem ACDB SW initialized ((iterations = %d)\n",
+							iterations);
+			return result;
+		} else {
+			MM_ERR("ACDB=> Modem ACDB SW failed to initialize"
+					" reuslt = %d, (iterations = %d)\n",
+					acdb_data.acdb_result.result,
+					iterations);
+			goto error;
+		}
+	} while (iterations < MAX_RETRY);
+	MM_ERR("ACDB=> AUDCAL SW on modem is not in intiailized state (%d)\n",
+			acdb_data.acdb_result.result);
+error:
+	result = -EINVAL;
+	return result;
+}
+
 static s32 acdb_calibrate_device(void *data)
 {
 	s32 result = 0;
@@ -3193,6 +3246,10 @@ static s32 acdb_calibrate_device(void *data)
 	result = acdb_initialize_data();
 	if (result)
 		goto done;
+
+	result = initialize_modem_acdb();
+	if (result < 0)
+		MM_ERR("failed to initialize modem ACDB\n");
 
 	while (!kthread_should_stop()) {
 		MM_DBG("Waiting for call back events\n");

@@ -73,13 +73,11 @@ void gserial_disconnect(struct gserial *);
 
 #ifdef CONFIG_USB_F_SERIAL_SDIO
 /* sdio related functions */
-int gsdio_setup(struct usb_gadget *g, unsigned n_ports,
-		struct sdio_port_info *pi);
+int gsdio_setup(struct usb_gadget *g, unsigned n_ports);
 int gsdio_connect(struct gserial *, u8 port_num);
 void gsdio_disconnect(struct gserial *, u8 portno);
 #else
-static inline int gsdio_setup(struct usb_gadget *g, unsigned n_ports,
-		struct sdio_port_info *pi)
+static inline int gsdio_setup(struct usb_gadget *g, unsigned n_ports)
 {
 	return 0;
 }

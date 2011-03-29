@@ -260,14 +260,6 @@ unsigned long acpuclk_wait_for_irq(void)
 	return ret;
 }
 
-#define HOT_UNPLUG_KHZ MAX_AXI
-unsigned long acpuclk_hot_unplug(void)
-{
-	int ret = acpuclk_get_rate(smp_processor_id());
-	acpuclk_set_rate(smp_processor_id(), HOT_UNPLUG_KHZ, SETRATE_HOTPLUG);
-	return ret;
-}
-
 static void select_core_source(unsigned int id, unsigned int src)
 {
 	uint32_t regval;
@@ -550,9 +542,8 @@ int acpuclk_set_rate(int cpu, unsigned long rate, enum setrate_reason reason)
 	vdd_dig = max(tgt_s->l2_level->vdd_dig, pll_vdd_dig);
 
 	/* Increase VDD levels if needed. */
-	if ((reason == SETRATE_CPUFREQ || reason == SETRATE_HOTPLUG
-	  || reason == SETRATE_INIT)
-	  && (tgt_s->acpuclk_khz > strt_s->acpuclk_khz)) {
+	if ((reason == SETRATE_CPUFREQ || reason == SETRATE_INIT)
+			&& (tgt_s->acpuclk_khz > strt_s->acpuclk_khz)) {
 		rc = increase_vdd(cpu, tgt_s->vdd_sc, vdd_mem, vdd_dig);
 		if (rc)
 			goto out;

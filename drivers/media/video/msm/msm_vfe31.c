@@ -2521,10 +2521,10 @@ static void vfe31_process_reg_update_irq(void)
 			to the command register using the barrier */
 			temp = msm_io_r_mb(vfe31_ctrl->vfebase +
 				VFE_CAMIF_COMMAND);
-			/* then do reg_update. */
-			msm_io_w_mb(1, vfe31_ctrl->vfebase +
-				VFE_REG_UPDATE_CMD);
 		}
+		/* then do reg_update. */
+		msm_io_w_mb(1, vfe31_ctrl->vfebase +
+			VFE_REG_UPDATE_CMD);
 	} /* if snapshot mode. */
 }
 

@@ -908,7 +908,6 @@ CONFIG_MMC_MSM_SDC3_8_BIT_SUPPORT=y
 # CONFIG_MMC_MSM_SDC3_DUMMY52_REQUIRED is not set
 # CONFIG_MMC_MSM_SDC4_SUPPORT is not set
 # CONFIG_MMC_MSM_SDC5_SUPPORT is not set
-# CONFIG_MMC_MSM_PROG_DONE_SCAN is not set
 # CONFIG_MEMSTICK is not set
 # CONFIG_NEW_LEDS is not set
 # CONFIG_SWITCH is not set
@@ -946,6 +945,11 @@ CONFIG_ANDROID_LOW_MEMORY_KILLER=y
 # Texas Instruments shared transport line discipline
 #
 # CONFIG_GOBI_USBNET is not set
+
+#
+# Qualcomm MSM specific device drivers
+#
+# CONFIG_MSM_SSBI is not set
 
 #
 # File systems

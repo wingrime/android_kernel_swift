@@ -129,8 +129,6 @@ struct kgsl_mmu {
 	unsigned int     config;
 	uint32_t        mpu_base;
 	int              mpu_range;
-	uint32_t        va_base;
-	unsigned int     va_range;
 	struct kgsl_memdesc    dummyspace;
 	struct kgsl_mmu_reg    reg;
 	/* current page table object being used by device mmu */

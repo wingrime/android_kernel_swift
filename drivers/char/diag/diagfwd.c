@@ -755,12 +755,6 @@ static int diag_process_apps_pkt(unsigned char *buf, int len)
 		subsys_cmd_code = *(uint16_t *)temp;
 		temp += 2;
 
-		/* Dont send any command other than mode reset */
-		if (cpu_is_msm8x60() && cmd_code == 41) {
-			if (subsys_id != 2)
-				return packet_type;
-		}
-
 		for (i = 0; i < diag_max_registration; i++) {
 			if (driver->table[i].process_id != 0) {
 				if (driver->table[i].cmd_code ==

@@ -91,6 +91,25 @@ static inline void gsdio_disconnect(struct gserial *g, u8 portno)
 }
 #endif
 
+#ifdef CONFIG_USB_F_SERIAL_SMD
+int gsmd_setup(struct usb_gadget *g, unsigned n_ports);
+int gsmd_connect(struct gserial *, u8 port_num);
+void gsmd_disconnect(struct gserial *, u8 portno);
+#else
+static inline int gsmd_setup(struct usb_gadget *g, unsigned n_ports)
+{
+	return 0;
+}
+static inline int gsmd_connect(struct gserial *g, u8 port_num)
+{
+	return 0;
+}
+static inline void gsmd_disconnect(struct gserial *g, u8 portno)
+{
+	return;
+}
+#endif
+
 /* functions are bound to configurations by a config or gadget driver */
 int acm_bind_config(struct usb_configuration *c, u8 port_num);
 int gser_bind_config(struct usb_configuration *c, u8 port_num);

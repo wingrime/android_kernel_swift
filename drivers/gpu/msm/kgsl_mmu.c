@@ -22,8 +22,6 @@
 #include <linux/slab.h>
 #include <linux/io.h>
 #include <linux/bitmap.h>
-#include <linux/dmapool.h>
-
 #ifdef CONFIG_MSM_KGSL_MMU
 #include <asm/pgalloc.h>
 #include <asm/pgtable.h>
@@ -295,6 +293,62 @@ void kgsl_mh_intrcallback(struct kgsl_device *device)
 	*/
 }
 
+static int
+kgsl_ptpool_get(struct kgsl_memdesc *memdesc)
+{
+	int pt;
+	unsigned long flags;
+
+	spin_lock_irqsave(&kgsl_driver.ptpool.lock, flags);
+
+	pt = find_next_zero_bit(kgsl_driver.ptpool.bitmap,
+				KGSL_PAGETABLE_COUNT, 0);
+
+	if (pt >= KGSL_PAGETABLE_COUNT) {
+		spin_unlock_irqrestore(&kgsl_driver.ptpool.lock, flags);
+		return -ENOMEM;
+	}
+
+	set_bit(pt, kgsl_driver.ptpool.bitmap);
+
+	spin_unlock_irqrestore(&kgsl_driver.ptpool.lock, flags);
+
+	/* The memory is zeroed at init time and when page tables are
+	   freed.0 This saves us from having to do the memset here */
+
+	memdesc->hostptr = kgsl_driver.ptpool.hostptr +
+		(pt * kgsl_driver.ptsize);
+
+	memdesc->physaddr = kgsl_driver.ptpool.physaddr +
+		(pt * kgsl_driver.ptsize);
+
+	memdesc->size = kgsl_driver.ptsize;
+
+	return 0;
+}
+
+static void
+kgsl_ptpool_put(struct kgsl_memdesc *memdesc)
+{
+	int pt;
+	unsigned long flags;
+
+	if (memdesc->hostptr == NULL)
+		return;
+
+	pt = (memdesc->hostptr - kgsl_driver.ptpool.hostptr)
+		/ kgsl_driver.ptsize;
+
+	/* Clear the memory now to avoid having to do it next time
+	   these entries are allocated */
+
+	memset(memdesc->hostptr, 0, memdesc->size);
+
+	spin_lock_irqsave(&kgsl_driver.ptpool.lock, flags);
+	clear_bit(pt, kgsl_driver.ptpool.bitmap);
+	spin_unlock_irqrestore(&kgsl_driver.ptpool.lock, flags);
+}
+
 static struct kgsl_pagetable *kgsl_mmu_createpagetableobject(
 				unsigned int name)
 {
@@ -341,14 +395,11 @@ static struct kgsl_pagetable *kgsl_mmu_createpagetableobject(
 		goto err_pool;
 	}
 
-	pagetable->base.hostptr = dma_pool_alloc(kgsl_driver.ptpool,
-						 GFP_KERNEL,
-						 &pagetable->base.physaddr);
+	/* allocate page table memory */
+	status = kgsl_ptpool_get(&pagetable->base);
 
-	if (pagetable->base.hostptr == NULL) {
-		KGSL_CORE_ERR("dma_pool_alloc failed\n");
+	if (status != 0)
 		goto err_pool;
-	}
 
 	/* ptpool allocations are from coherent memory, so update the
 	   device statistics acordingly */
@@ -357,11 +408,10 @@ static struct kgsl_pagetable *kgsl_mmu_createpagetableobject(
 		       kgsl_driver.stats.coherent_max);
 
 	pagetable->base.gpuaddr = pagetable->base.physaddr;
-	pagetable->base.size = kgsl_driver.ptsize;
 
 	status = kgsl_setup_pt(pagetable);
 	if (status)
-		goto err_pool;
+		goto err_free_sharedmem;
 
 	list_add(&pagetable->list, &kgsl_driver.pagetable_list);
 
@@ -370,6 +420,8 @@ static struct kgsl_pagetable *kgsl_mmu_createpagetableobject(
 
 	return pagetable;
 
+err_free_sharedmem:
+	kgsl_ptpool_put(&pagetable->base);
 err_pool:
 	gen_pool_destroy(pagetable->pool);
 err_flushfilter:
@@ -388,8 +440,7 @@ static void kgsl_mmu_destroypagetable(struct kgsl_pagetable *pagetable)
 
 	kgsl_cleanup_pt(pagetable);
 
-	dma_pool_free(kgsl_driver.ptpool, pagetable->base.hostptr,
-		      pagetable->base.physaddr);
+	kgsl_ptpool_put(&pagetable->base);
 
 	kgsl_driver.stats.coherent -= kgsl_driver.ptsize;
 

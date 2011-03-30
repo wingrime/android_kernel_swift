@@ -300,6 +300,7 @@ struct ddl_decoder_data {
 	u32  dynmic_prop_change_req;
 	u32  flush_pending;
 	u32  meta_data_exists;
+	u32  idr_only_decoding;
 };
 union ddl_codec_data{
 	struct ddl_codec_data_hdr  hdr;

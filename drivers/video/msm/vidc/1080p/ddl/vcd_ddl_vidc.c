@@ -207,6 +207,9 @@ void ddl_vidc_decode_init_codec(struct ddl_client_context *ddl)
 		DDL_ADDR_OFFSET(ddl_context->dram_base_a,
 		ddl->codec_data.decoder.meta_data_input));
 
+	vidc_sm_set_idr_decode_only(&ddl->shared_mem[ddl->command_channel],
+			decoder->idr_only_decoding);
+
 	if ((decoder->codec.codec == VCD_CODEC_DIVX_3))
 		ddl_context->vidc_set_divx3_resolution
 		[ddl->command_channel](decoder->client_frame_size.width,

@@ -658,6 +658,22 @@ static u32 vid_dec_set_extradata(struct video_client_ctx *client_ctx,
 		return true;
 }
 
+static u32 vid_dec_set_idr_only_decoding(struct video_client_ctx *client_ctx)
+{
+	struct vcd_property_hdr vcd_property_hdr;
+	u32 vcd_status = VCD_ERR_FAIL;
+	u32 enable = true;
+	if (!client_ctx)
+		return false;
+	vcd_property_hdr.prop_id = VCD_I_DEC_PICTYPE;
+	vcd_property_hdr.sz = sizeof(u32);
+	vcd_status = vcd_set_property(client_ctx->vcd_handle,
+			&vcd_property_hdr, &enable);
+	if (vcd_status)
+		return false;
+	return true;
+}
+
 static u32 vid_dec_set_h264_mv_buffers(struct video_client_ctx *client_ctx,
 					struct vdec_h264_mv *mv_data)
 {
@@ -1566,6 +1582,13 @@ static int vid_dec_ioctl(struct inode *inode, struct file *file,
 					sizeof(mv_buff)))
 				return -EFAULT;
 		} else
+			return -EIO;
+		break;
+	}
+	case VDEC_IOCTL_SET_IDR_ONLY_DECODING:
+	{
+		result = vid_dec_set_idr_only_decoding(client_ctx);
+		if (!result)
 			return -EIO;
 		break;
 	}

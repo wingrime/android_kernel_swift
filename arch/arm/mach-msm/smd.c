@@ -320,6 +320,10 @@ struct smd_channel {
 	char name[20];
 	struct platform_device pdev;
 	unsigned type;
+
+	int pending_pkt_sz;
+
+	char is_pkt_ch;
 };
 
 static struct platform_device loopback_tty_pdev = {.name = "LOOPBACK_TTY"};
@@ -1039,6 +1043,7 @@ static int smd_alloc_channel(struct smd_alloc_elm *alloc_elm)
 		ch->write_avail = smd_packet_write_avail;
 		ch->update_state = update_packet_state;
 		ch->read_from_cb = smd_packet_read_from_cb;
+		ch->is_pkt_ch = 1;
 	} else {
 		ch->read = smd_stream_read;
 		ch->write = smd_stream_write;
@@ -1251,6 +1256,98 @@ int smd_close(smd_channel_t *ch)
 }
 EXPORT_SYMBOL(smd_close);
 
+int smd_write_start(smd_channel_t *ch, int len)
+{
+	int ret;
+	unsigned hdr[5];
+
+	if (!ch) {
+		pr_err("%s: Invalid channel specified\n", __func__);
+		return -ENODEV;
+	}
+	if (!ch->is_pkt_ch) {
+		pr_err("%s: non-packet channel specified\n", __func__);
+		return -EACCES;
+	}
+	if (len < 1) {
+		pr_err("%s: invalid length: %d\n", __func__, len);
+		return -EINVAL;
+	}
+
+	if (ch->pending_pkt_sz) {
+		pr_err("%s: packet of size: %d in progress\n", __func__,
+			ch->pending_pkt_sz);
+		return -EBUSY;
+	}
+	ch->pending_pkt_sz = len;
+
+	if (smd_stream_write_avail(ch) < (SMD_HEADER_SIZE)) {
+		ch->pending_pkt_sz = 0;
+		SMD_DBG("%s: no space to write packet header\n", __func__);
+		return -EAGAIN;
+	}
+
+	hdr[0] = len;
+	hdr[1] = hdr[2] = hdr[3] = hdr[4] = 0;
+
+
+	ret = smd_stream_write(ch, hdr, sizeof(hdr), 0);
+	if (ret < 0 || ret != sizeof(hdr)) {
+		ch->pending_pkt_sz = 0;
+		pr_err("%s: packet header failed to write\n", __func__);
+		return -EPERM;
+	}
+	return 0;
+}
+EXPORT_SYMBOL(smd_write_start);
+
+int smd_write_segment(smd_channel_t *ch, void *data, int len, int user_buf)
+{
+	int bytes_written;
+
+	if (!ch) {
+		pr_err("%s: Invalid channel specified\n", __func__);
+		return -ENODEV;
+	}
+	if (len < 1) {
+		pr_err("%s: invalid length: %d\n", __func__, len);
+		return -EINVAL;
+	}
+
+	if (!ch->pending_pkt_sz) {
+		pr_err("%s: no transaction in progress\n", __func__);
+		return -ENOEXEC;
+	}
+	if (ch->pending_pkt_sz - len < 0) {
+		pr_err("%s: segment of size: %d will make packet go over "
+			"length\n", __func__, len);
+		return -EINVAL;
+	}
+
+	bytes_written = smd_stream_write(ch, data, len, user_buf);
+
+	ch->pending_pkt_sz -= bytes_written;
+
+	return bytes_written;
+}
+EXPORT_SYMBOL(smd_write_segment);
+
+int smd_write_end(smd_channel_t *ch)
+{
+
+	if (!ch) {
+		pr_err("%s: Invalid channel specified\n", __func__);
+		return -ENODEV;
+	}
+	if (ch->pending_pkt_sz) {
+		pr_err("%s: current packet not completely written\n", __func__);
+		return -E2BIG;
+	}
+
+	return 0;
+}
+EXPORT_SYMBOL(smd_write_end);
+
 int smd_read(smd_channel_t *ch, void *data, int len)
 {
 	return ch->read(ch, data, len, 0);
@@ -1271,13 +1368,13 @@ EXPORT_SYMBOL(smd_read_from_cb);
 
 int smd_write(smd_channel_t *ch, const void *data, int len)
 {
-	return ch->write(ch, data, len, 0);
+	return ch->pending_pkt_sz ? -EBUSY : ch->write(ch, data, len, 0);
 }
 EXPORT_SYMBOL(smd_write);
 
 int smd_write_user_buffer(smd_channel_t *ch, const void *data, int len)
 {
-	return ch->write(ch, data, len, 1);
+	return ch->pending_pkt_sz ? -EBUSY : ch->write(ch, data, len, 1);
 }
 EXPORT_SYMBOL(smd_write_user_buffer);
 

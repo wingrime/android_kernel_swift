@@ -56,6 +56,8 @@
 #define SMEM_VERSION 0x000B
 #define SMD_VERSION 0x00020000
 
+uint32_t SMSM_NUM_ENTRIES = 8;
+uint32_t SMSM_NUM_HOSTS = 3;
 
 enum {
 	MSM_SMD_DEBUG = 1U << 0,
@@ -71,6 +73,13 @@ struct smsm_shared_info {
 };
 
 static struct smsm_shared_info smsm_info;
+
+struct smsm_size_info_type {
+	uint32_t num_hosts;
+	uint32_t num_entries;
+	uint32_t reserved0;
+	uint32_t reserved1;
+};
 
 #define SMSM_STATE_ADDR(entry)           (smsm_info.state + entry)
 #define SMSM_INTR_MASK_ADDR(entry, host) (smsm_info.intr_mask + \
@@ -1560,11 +1569,19 @@ static int smsm_init(void)
 {
 	struct smem_shared *shared = (void *) MSM_SHARED_RAM_BASE;
 	int i;
+	struct smsm_size_info_type *smsm_size_info;
 
 	i = remote_spin_lock_init(&remote_spinlock, SMEM_SPINLOCK_SMEM_ALLOC);
 	if (i) {
 		pr_err("%s: remote spinlock init failed %d\n", __func__, i);
 		return i;
+	}
+
+	smsm_size_info = smem_alloc(SMEM_SMSM_SIZE_INFO,
+				sizeof(struct smsm_size_info_type));
+	if (smsm_size_info) {
+		SMSM_NUM_ENTRIES = smsm_size_info->num_entries;
+		SMSM_NUM_HOSTS = smsm_size_info->num_hosts;
 	}
 
 	if (!smsm_info.state) {

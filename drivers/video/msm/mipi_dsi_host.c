@@ -46,11 +46,62 @@
 
 static struct completion dsi_dma_comp;
 static struct dsi_buf dsi_tx_buf;
+static int dsi_irq_enabled;
+static spinlock_t dsi_lock;
 
 void mipi_dsi_init(void)
 {
 	init_completion(&dsi_dma_comp);
 	mipi_dsi_buf_alloc(&dsi_tx_buf, DSI_BUF_SIZE);
+	spin_lock_init(&dsi_lock);
+}
+
+void mipi_dsi_enable_irq(void)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(&dsi_lock, flags);
+	if (dsi_irq_enabled) {
+		printk(KERN_ERR "%s: IRQ aleady enabled\n", __func__);
+		spin_unlock_irqrestore(&dsi_lock, flags);
+		return;
+	}
+	dsi_irq_enabled = 1;
+	enable_irq(DSI_IRQ);
+	spin_unlock_irqrestore(&dsi_lock, flags);
+}
+
+void mipi_dsi_disable_irq(void)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(&dsi_lock, flags);
+	if (dsi_irq_enabled == 0) {
+		printk(KERN_ERR "%s: IRQ already disabled\n", __func__);
+		spin_unlock_irqrestore(&dsi_lock, flags);
+		return;
+	}
+
+	dsi_irq_enabled = 0;
+	disable_irq(DSI_IRQ);
+	spin_unlock_irqrestore(&dsi_lock, flags);
+}
+
+/*
+ * mipi_dsi_disale_irq_nosync() should be called
+ * from interrupt context
+ */
+ void mipi_dsi_disable_irq_nosync(void)
+{
+	spin_lock(&dsi_lock);
+	if (dsi_irq_enabled == 0) {
+		printk(KERN_ERR "%s: IRQ cannot be disabled\n", __func__);
+		return;
+	}
+
+	dsi_irq_enabled = 0;
+	disable_irq_nosync(DSI_IRQ);
+	spin_unlock(&dsi_lock);
 }
 
 /*
@@ -827,6 +878,7 @@ int mipi_dsi_cmds_tx(struct msm_fb_data_type *mfd,
 			mdp4_dsi_cmd_dma_busy_wait(mfd);
 	}
 
+	mipi_dsi_enable_irq();
 	cm = cmds;
 	mipi_dsi_buf_init(tp);
 	for (i = 0; i < cnt; i++) {
@@ -837,6 +889,7 @@ int mipi_dsi_cmds_tx(struct msm_fb_data_type *mfd,
 			msleep(cm->wait);
 		cm++;
 	}
+	mipi_dsi_disable_irq();
 
 	if (video_mode)
 		MIPI_OUTP(MIPI_DSI_BASE + 0x0000, dsi_ctrl); /* restore */
@@ -880,6 +933,7 @@ int mipi_dsi_cmds_rx(struct msm_fb_data_type *mfd,
 	if (mfd->panel_info.type == MIPI_CMD_PANEL)
 		mdp4_dsi_cmd_dma_busy_wait(mfd);
 
+	mipi_dsi_enable_irq();
 	/* transmit read comamnd to client */
 	mipi_dsi_cmd_dma_tx(tp);
 	/*
@@ -889,6 +943,8 @@ int mipi_dsi_cmds_rx(struct msm_fb_data_type *mfd,
 	 */
 	mipi_dsi_buf_reserve(rp, res);
 	mipi_dsi_cmd_dma_rx(rp, cnt);
+
+	mipi_dsi_disable_irq();
 
 	/* strip off dcs read header & crc */
 	rp->data += (4 + res);

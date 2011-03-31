@@ -463,6 +463,7 @@ struct cyttsp_platform_data {
 	u32 disp_miny;
 	u32 disp_maxx;
 	u32 disp_maxy;
+	u8 correct_fw_ver;
 	u32 flags;
 	u8 gen;
 	u8 use_st;

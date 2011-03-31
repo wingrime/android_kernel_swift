@@ -2712,6 +2712,34 @@ static struct attribute_group tma300_properties_attr_group = {
 
 static struct kobject *properties_kobj;
 
+static struct cyttsp_platform_data cyttsp_fluid_pdata;
+static void cyttsp_set_params(void)
+{
+
+	uint32_t version;
+	version = socinfo_get_platform_version();
+	version = SOCINFO_VERSION_MAJOR(version);
+
+	if (version < 3) {
+		cyttsp_fluid_pdata.panel_maxx = 539;
+		cyttsp_fluid_pdata.panel_maxy = 994;
+		cyttsp_fluid_pdata.disp_minx = 30;
+		cyttsp_fluid_pdata.disp_maxx = 509;
+		cyttsp_fluid_pdata.disp_miny = 60;
+		cyttsp_fluid_pdata.disp_maxy = 859;
+		cyttsp_fluid_pdata.correct_fw_ver = 4;
+	} else {
+		cyttsp_fluid_pdata.panel_maxx = 550;
+		cyttsp_fluid_pdata.panel_maxy = 1013;
+		cyttsp_fluid_pdata.disp_minx = 35;
+		cyttsp_fluid_pdata.disp_maxx = 515;
+		cyttsp_fluid_pdata.disp_miny = 69;
+		cyttsp_fluid_pdata.disp_maxy = 869;
+		cyttsp_fluid_pdata.correct_fw_ver = 5;
+	}
+
+}
+
 #define FLUID_CYTTSP_TS_GPIO_IRQ	61
 static int cyttsp_fluid_platform_init(struct i2c_client *client)
 {
@@ -2810,12 +2838,6 @@ static int cyttsp_fluid_platform_resume(struct i2c_client *client)
 }
 
 static struct cyttsp_platform_data cyttsp_fluid_pdata = {
-	.panel_maxx = 539,
-	.panel_maxy = 994,
-	.disp_minx = 30,
-	.disp_maxx = 509,
-	.disp_miny = 60,
-	.disp_maxy = 859,
 	.flags = 0x04,
 	.gen = CY_GEN3,	/* or */
 	.use_st = CY_USE_ST,
@@ -9048,6 +9070,11 @@ static void __init msm8x60_init(struct msm_board_data *board_data)
 		platform_device_register(&msm_gsbi10_qup_spi_device);
 #endif
 
+#if defined(CONFIG_TOUCHSCREEN_CYTTSP_I2C) || \
+		defined(CONFIG_TOUCHSCREEN_CYTTSP_I2C_MODULE)
+	if (machine_is_msm8x60_fluid())
+		cyttsp_set_params();
+#endif
 	if (!machine_is_msm8x60_sim())
 		msm_fb_add_devices();
 	fixup_i2c_configs();

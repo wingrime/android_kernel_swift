@@ -1890,11 +1890,7 @@ static int config_camera_on_gpios_web_cam(void)
 static void config_camera_off_gpios_web_cam(void)
 {
 	config_gpio_table(MSM_CAM_OFF);
-	if (machine_is_msm8x60_fluid()) {
-		gpio_set_value(GPIO_FRONT_CAM_RESET_N, 0);
-		msleep(2);
-		gpio_free(GPIO_FRONT_CAM_RESET_N);
-	} else {
+	if (!machine_is_msm8x60_fluid()) {
 		gpio_set_value_cansleep(GPIO_WEB_CAMIF_STANDBY, 1);
 		gpio_free(GPIO_WEB_CAMIF_STANDBY);
 	}

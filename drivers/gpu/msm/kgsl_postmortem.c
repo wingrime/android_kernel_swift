@@ -666,7 +666,7 @@ static int kgsl_dump_yamato(struct kgsl_device *device)
 		"        MPU_END    = %08X | VA_RANGE = %08X | PT_BASE  ="
 		" %08X\n", r1, r2, pt_base);
 
-	KGSL_LOG_DUMP(device, "PAGETABLE SIZE: %08X ", kgsl_driver.ptsize);
+	KGSL_LOG_DUMP(device, "PAGETABLE SIZE: %08X ", KGSL_PAGETABLE_SIZE);
 
 	kgsl_regread(device, REG_MH_MMU_TRAN_ERROR, &r1);
 	KGSL_LOG_DUMP(device, "        TRAN_ERROR = %08X\n", r1);

@@ -1765,7 +1765,7 @@ struct kgsl_driver kgsl_driver  = {
 static void
 kgsl_ptpool_cleanup(void)
 {
-	int size = KGSL_PAGETABLE_COUNT * kgsl_driver.ptsize;
+	int size = KGSL_PAGETABLE_COUNT * KGSL_PAGETABLE_SIZE;
 
 	if (kgsl_driver.ptpool.hostptr)
 		dma_free_coherent(NULL, size, kgsl_driver.ptpool.hostptr,
@@ -1782,11 +1782,11 @@ kgsl_ptpool_cleanup(void)
 static int __devinit
 kgsl_ptpool_init(void)
 {
-	int size = KGSL_PAGETABLE_COUNT * kgsl_driver.ptsize;
+	int size = KGSL_PAGETABLE_COUNT * KGSL_PAGETABLE_SIZE;
 
 	if (size > SZ_4M) {
 		size = SZ_4M;
-		kgsl_driver.ptpool.entries = SZ_4M / kgsl_driver.ptsize;
+		kgsl_driver.ptpool.entries = SZ_4M / KGSL_PAGETABLE_SIZE;
 		KGSL_CORE_ERR("Pagetable pool too big.  Limiting to "
 			"%d processes\n", kgsl_driver.ptpool.entries);
 	}
@@ -2069,11 +2069,6 @@ static int __devinit
 kgsl_ptdata_init(void)
 {
 	INIT_LIST_HEAD(&kgsl_driver.pagetable_list);
-
-	kgsl_driver.ptsize =
-		KGSL_PAGETABLE_ENTRIES(CONFIG_MSM_KGSL_PAGE_TABLE_SIZE) *
-		KGSL_PAGETABLE_ENTRY_SIZE;
-	kgsl_driver.ptsize = ALIGN(kgsl_driver.ptsize, PAGE_SIZE);
 
 	return kgsl_ptpool_init();
 }

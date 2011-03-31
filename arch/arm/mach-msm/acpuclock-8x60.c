@@ -20,6 +20,7 @@
 #include <linux/io.h>
 #include <linux/delay.h>
 #include <linux/mutex.h>
+#include <linux/spinlock.h>
 #include <linux/errno.h>
 #include <linux/cpufreq.h>
 #include <linux/cpu.h>
@@ -88,7 +89,7 @@
 #define SPSS_L2_CLK_SEL_ADDR		(MSM_GCC_BASE  + 0x38)
 
 /* Speed bin register. */
-#define QFPROM_SPEED_BIN_PRI		(MSM_QFPROM_BASE + 0x00C0)
+#define QFPROM_SPEED_BIN_ADDR		(MSM_QFPROM_BASE + 0x00C0)
 
 static const void * const clk_ctl_addr[] = {SPSS0_CLK_CTL_ADDR,
 			SPSS1_CLK_CTL_ADDR};
@@ -119,6 +120,7 @@ enum sc_src {
 static struct clock_state {
 	struct clkctl_acpu_speed	*current_speed[NR_CPUS];
 	struct clkctl_l2_speed		*current_l2_speed;
+	spinlock_t			l2_lock;
 	struct mutex			lock;
 	uint32_t			acpu_switch_time_us;
 	uint32_t			vdd_switch_time_us;
@@ -498,6 +500,7 @@ int acpuclk_set_rate(int cpu, unsigned long rate, enum setrate_reason reason)
 	struct clkctl_acpu_speed *tgt_s, *strt_s;
 	struct clkctl_l2_speed *tgt_l2;
 	unsigned int vdd_mem, vdd_dig, pll_vdd_dig;
+	unsigned long flags;
 	int rc = 0;
 
 	if (cpu > num_possible_cpus()) {
@@ -556,8 +559,10 @@ int acpuclk_set_rate(int cpu, unsigned long rate, enum setrate_reason reason)
 	switch_sc_speed(cpu, tgt_s);
 
 	/* Update the L2 vote and apply the rate change. */
+	spin_lock_irqsave(&drv_state.l2_lock, flags);
 	tgt_l2 = compute_l2_speed(cpu, tgt_s->l2_level);
 	set_l2_speed(tgt_l2);
+	spin_unlock_irqrestore(&drv_state.l2_lock, flags);
 
 	/* Nothing else to do for SWFI. */
 	if (reason == SETRATE_SWFI)
@@ -742,14 +747,17 @@ static void __init cpufreq_table_init(void) {}
 
 static unsigned int __init select_freq_plan(void)
 {
-	uint32_t speed_bin, max_khz;
+	uint32_t raw_speed_bin, speed_bin, max_khz;
 	struct clkctl_acpu_speed *f;
 
 	acpu_freq_tbl = acpu_freq_tbl_v2;
 	l2_freq_tbl = l2_freq_tbl_v2;
 	l2_freq_tbl_size = ARRAY_SIZE(l2_freq_tbl_v2);
 
-	speed_bin = readl(QFPROM_SPEED_BIN_PRI) & 0xF;
+	raw_speed_bin = readl(QFPROM_SPEED_BIN_ADDR);
+	speed_bin = raw_speed_bin & 0xF;
+	if (speed_bin == 0xF)
+		speed_bin = (raw_speed_bin >> 4) & 0xF;
 	if (speed_bin == 0x1)
 		max_khz = 1512000;
 	else
@@ -774,6 +782,7 @@ void __init msm_acpu_clock_init(struct msm_acpu_clock_platform_data *clkdata)
 	int cpu;
 
 	mutex_init(&drv_state.lock);
+	spin_lock_init(&drv_state.l2_lock);
 	drv_state.acpu_switch_time_us = clkdata->acpu_switch_time_us;
 	drv_state.vdd_switch_time_us = clkdata->vdd_switch_time_us;
 

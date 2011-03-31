@@ -1870,18 +1870,13 @@ static int __devinit
 kgsl_ptdata_init(void)
 {
 	int ret = 0;
-	struct kgsl_platform_data *pdata =
-		kgsl_driver.pdev->dev.platform_data;
-	struct kgsl_core_platform_data *core = pdata->core;
 
 	INIT_LIST_HEAD(&kgsl_driver.pagetable_list);
 
-	kgsl_driver.ptsize = KGSL_PAGETABLE_ENTRIES(core->pt_va_size) *
+	kgsl_driver.ptsize =
+		KGSL_PAGETABLE_ENTRIES(CONFIG_MSM_KGSL_PAGE_TABLE_SIZE) *
 		KGSL_PAGETABLE_ENTRY_SIZE;
 	kgsl_driver.ptsize = ALIGN(kgsl_driver.ptsize, PAGE_SIZE);
-
-	kgsl_driver.pt_va_size = core->pt_va_size;
-	kgsl_driver.pt_va_base = core->pt_va_base;
 
 	kgsl_driver.ptpool = dma_pool_create("kgsl-ptpool", NULL,
 					     kgsl_driver.ptsize,
@@ -1897,10 +1892,7 @@ kgsl_ptdata_init(void)
 static int __devinit
 kgsl_core_init(void)
 {
-	struct kgsl_platform_data *pdata = NULL;
 	int ret;
-
-	pdata = kgsl_driver.pdev->dev.platform_data;
 
 	/* alloc major and minor device numbers */
 	ret = alloc_chrdev_region(&kgsl_driver.major, 0, KGSL_DEVICE_MAX,

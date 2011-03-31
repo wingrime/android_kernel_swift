@@ -313,8 +313,8 @@ static struct kgsl_pagetable *kgsl_mmu_createpagetableobject(
 	spin_lock_init(&pagetable->lock);
 	pagetable->tlb_flags = 0;
 	pagetable->name = name;
-	pagetable->va_base = kgsl_driver.pt_va_base;
-	pagetable->va_range = kgsl_driver.pt_va_size;
+	pagetable->va_base = KGSL_PAGETABLE_BASE;
+	pagetable->va_range = CONFIG_MSM_KGSL_PAGE_TABLE_SIZE;
 	pagetable->last_superpte = 0;
 	pagetable->max_entries = KGSL_PAGETABLE_ENTRIES(pagetable->va_range);
 
@@ -501,7 +501,7 @@ int kgsl_mmu_init(struct kgsl_device *device)
 	/* sub-client MMU lookups require address translation */
 	if ((mmu->config & ~0x1) > 0) {
 		/*make sure virtual address range is a multiple of 64Kb */
-		BUG_ON(mmu->va_range & ((1 << 16) - 1));
+		BUG_ON(CONFIG_MSM_KGSL_PAGE_TABLE_SIZE & ((1 << 16) - 1));
 
 		/* allocate memory used for completing r/w operations that
 		 * cannot be mapped by the MMU

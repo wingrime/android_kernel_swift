@@ -96,7 +96,6 @@ static struct kgsl_yamato_device yamato_device = {
 			   all pages. */
 			.mpu_base = 0x00000000,
 			.mpu_range =  0xFFFFF000,
-			/* va_range and va_base are set by the platform file */
 			.reg = {
 				.config = REG_MH_MMU_CONFIG,
 				.mpu_base = REG_MH_MMU_MPU_BASE,
@@ -494,7 +493,6 @@ kgsl_yamato_init(struct platform_device *pdev)
 	struct resource *res = NULL;
 	struct kgsl_platform_data *pdata = pdev->dev.platform_data;
 	struct kgsl_device_platform_data *pdata_dev = pdata->dev_3d0;
-	struct kgsl_core_platform_data *pdata_core = pdata->core;
 
 	status = kgsl_pwrctrl_init(device, pdev, pdata_dev);
 
@@ -564,9 +562,6 @@ kgsl_yamato_init(struct platform_device *pdev)
 	INIT_LIST_HEAD(&device->memqueue);
 
 	kgsl_yamato_getfunctable(&device->ftbl);
-
-	device->mmu.va_base = pdata_core->pt_va_base;
-	device->mmu.va_range = pdata_core->pt_va_size;
 
 	status = kgsl_mmu_init(device);
 	if (status != 0) {

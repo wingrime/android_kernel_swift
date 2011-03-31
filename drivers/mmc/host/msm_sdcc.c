@@ -868,7 +868,7 @@ msmsdcc_irq(int irq, void *dev_id)
 		}
 
 		if (!host->clks_on) {
-			pr_info("%s: %s: SDIO async irq received\n",
+			pr_debug("%s: %s: SDIO async irq received\n",
 					mmc_hostname(host->mmc), __func__);
 			host->mmc->ios.clock = host->clk_rate;
 			spin_unlock(&host->lock);

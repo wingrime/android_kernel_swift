@@ -314,8 +314,8 @@ int mdp4_dsi_overlay_blt_start(struct msm_fb_data_type *mfd)
 		dsi_pipe->ov_cnt = 0;
 		dsi_pipe->dmap_cnt = 0;
 		dsi_pipe->blt_addr = dsi_pipe->blt_base;
+		mdp4_stat.writeback++;
 		spin_unlock_irqrestore(&mdp_spin_lock, flag);
-		mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_ON, FALSE);
 		return 0;
 	}
 
@@ -334,7 +334,6 @@ int mdp4_dsi_overlay_blt_stop(struct msm_fb_data_type *mfd)
 		spin_lock_irqsave(&mdp_spin_lock, flag);
 		dsi_pipe->blt_end = 1;	/* mark as end */
 		spin_unlock_irqrestore(&mdp_spin_lock, flag);
-		mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_OFF, FALSE);
 		return 0;
 	}
 

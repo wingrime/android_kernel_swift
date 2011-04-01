@@ -421,29 +421,56 @@ struct log_field {
 	const char *display;
 };
 
+static int kgsl_dump_fields_line(struct kgsl_device *device,
+				 const char *start, char *str, int slen,
+				 const struct log_field **lines,
+				 int num)
+{
+	const struct log_field *l = *lines;
+	int sptr, count  = 0;
+
+	sptr = snprintf(str, slen, "%s", start);
+
+	for (  ; num && sptr < slen; num--, l++) {
+		int ilen = strlen(l->display);
+
+		if (count)
+			ilen += strlen("  | ");
+
+		if (ilen > (slen - sptr))
+			break;
+
+		if (count++)
+			sptr += snprintf(str + sptr, slen - sptr, " | ");
+
+		sptr += snprintf(str + sptr, slen - sptr, "%s", l->display);
+	}
+
+	KGSL_LOG_DUMP(device, "%s\n", str);
+
+	*lines = l;
+	return num;
+}
+
 static void kgsl_dump_fields(struct kgsl_device *device,
 			     const char *start, const struct log_field *lines,
 			     int num)
 {
-	int count, i;
 	char lb[90];
+	const char *sstr = start;
 
-	strncpy(lb, start, sizeof(lb));
-	count = 0;
-	for (i = 0; i < num; ++i, ++lines) {
-		if (lines->show) {
-			if (count++)
-				strncat(lb, " | ", sizeof(lb));
-			strncat(lb, lines->display, sizeof(lb));
-			if (count == 6) {
-				KGSL_LOG_DUMP(device, "%s\n", lb);
-				strncpy(lb, "        ", sizeof(lb));
-				count = 0;
-			}
-		}
+	lb[sizeof(lb)  - 1] = '\0';
+
+	while (num) {
+		int ret = kgsl_dump_fields_line(device, sstr, lb,
+			sizeof(lb) - 1, &lines, num);
+
+		if (ret == num)
+			break;
+
+		num = ret;
+		sstr = "        ";
 	}
-	if (count)
-		KGSL_LOG_DUMP(device, "%s\n", lb);
 }
 
 static int kgsl_dump_yamato(struct kgsl_device *device)

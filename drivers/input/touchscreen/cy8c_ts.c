@@ -318,100 +318,6 @@ static irqreturn_t cy8c_ts_irq(int irq, void *dev_id)
 	return IRQ_HANDLED;
 }
 
-static int cy8c_ts_open(struct input_dev *dev)
-{
-	int rc;
-	struct cy8c_ts *ts = input_get_drvdata(dev);
-
-	if (ts->pdata->resout_gpio < 0)
-		goto config_irq_gpio;
-
-	/* configure touchscreen reset out gpio */
-	rc = gpio_request(ts->pdata->resout_gpio, "cy8c_resout_gpio");
-	if (rc) {
-		pr_err("%s: unable to request gpio %d\n",
-			__func__, ts->pdata->resout_gpio);
-		return rc;
-	}
-
-	rc = gpio_direction_output(ts->pdata->resout_gpio, 0);
-	if (rc) {
-		pr_err("%s: unable to set direction for gpio %d\n",
-			__func__, ts->pdata->resout_gpio);
-		goto error_resout_gpio_dir;
-	}
-	/* reset gpio stabilization time */
-	msleep(20);
-
-config_irq_gpio:
-	/* configure touchscreen interrupt gpio */
-	rc = gpio_request(ts->pdata->irq_gpio, "cy8c_irq_gpio");
-	if (rc) {
-		pr_err("%s: unable to request gpio %d\n",
-			__func__, ts->pdata->irq_gpio);
-		goto error_irq_gpio_req;
-	}
-
-	rc = gpio_direction_input(ts->pdata->irq_gpio);
-	if (rc) {
-		pr_err("%s: unable to set direction for gpio %d\n",
-			__func__, ts->pdata->irq_gpio);
-		goto error_irq_gpio_dir;
-	}
-
-	ts->pen_irq = gpio_to_irq(ts->pdata->irq_gpio);
-	rc = request_irq(ts->pen_irq, cy8c_ts_irq,
-				IRQF_TRIGGER_FALLING,
-				ts->client->dev.driver->name, ts);
-	if (rc) {
-		dev_err(&ts->client->dev, "could not request irq\n");
-		goto error_req_irq_fail;
-	}
-
-	/* Clear the status register of the TS controller */
-	rc = cy8c_ts_write_reg_u8(ts->client, ts->dd->status_reg,
-						ts->dd->update_data);
-	if (rc < 0) {
-		/* Do multiple writes in case of failure */
-		dev_err(&ts->client->dev, "%s: write failed %d"
-				"trying again\n", __func__, rc);
-		rc = cy8c_ts_write_reg_u8(ts->client,
-			ts->dd->status_reg, ts->dd->update_data);
-		if (rc < 0) {
-			dev_err(&ts->client->dev, "%s: write failed"
-				"second time(%d)\n", __func__, rc);
-		}
-	}
-
-	return 0;
-
-error_req_irq_fail:
-error_irq_gpio_dir:
-	gpio_free(ts->pdata->irq_gpio);
-error_irq_gpio_req:
-error_resout_gpio_dir:
-	if (ts->pdata->resout_gpio >= 0)
-		gpio_free(ts->pdata->resout_gpio);
-	return rc;
-}
-
-static void cy8c_ts_close(struct input_dev *dev)
-{
-	int rc;
-	struct cy8c_ts *ts = input_get_drvdata(dev);
-
-	rc = cancel_delayed_work_sync(&ts->work);
-
-	if (rc)
-		enable_irq(ts->pen_irq);
-
-	free_irq(ts->pen_irq, ts);
-
-	gpio_free(ts->pdata->irq_gpio);
-	if (ts->pdata->resout_gpio >= 0)
-		gpio_free(ts->pdata->resout_gpio);
-}
-
 static int cy8c_ts_init_ts(struct i2c_client *client, struct cy8c_ts *ts)
 {
 	struct input_dev *input_device;
@@ -474,9 +380,6 @@ static int cy8c_ts_init_ts(struct i2c_client *client, struct cy8c_ts *ts)
 			ts->pdata->min_width, ts->pdata->max_width, 0, 0);
 	input_set_abs_params(input_device, ABS_MT_TRACKING_ID,
 			ts->pdata->min_tid, ts->pdata->max_tid, 0, 0);
-
-	input_device->open = cy8c_ts_open;
-	input_device->close = cy8c_ts_close;
 
 	ts->wq = create_singlethread_workqueue("kworkqueue_ts");
 	if (!ts->wq) {
@@ -685,6 +588,66 @@ static int __devinit cy8c_ts_probe(struct i2c_client *client,
 		goto error_mutex_destroy;
 	}
 
+	if (ts->pdata->resout_gpio < 0)
+		goto config_irq_gpio;
+
+	/* configure touchscreen reset out gpio */
+	rc = gpio_request(ts->pdata->resout_gpio, "cy8c_resout_gpio");
+	if (rc) {
+		pr_err("%s: unable to request gpio %d\n",
+			__func__, ts->pdata->resout_gpio);
+		goto error_uninit_ts;
+	}
+
+	rc = gpio_direction_output(ts->pdata->resout_gpio, 0);
+	if (rc) {
+		pr_err("%s: unable to set direction for gpio %d\n",
+			__func__, ts->pdata->resout_gpio);
+		goto error_resout_gpio_dir;
+	}
+	/* reset gpio stabilization time */
+	msleep(20);
+
+config_irq_gpio:
+	/* configure touchscreen interrupt gpio */
+	rc = gpio_request(ts->pdata->irq_gpio, "cy8c_irq_gpio");
+	if (rc) {
+		pr_err("%s: unable to request gpio %d\n",
+			__func__, ts->pdata->irq_gpio);
+		goto error_irq_gpio_req;
+	}
+
+	rc = gpio_direction_input(ts->pdata->irq_gpio);
+	if (rc) {
+		pr_err("%s: unable to set direction for gpio %d\n",
+			__func__, ts->pdata->irq_gpio);
+		goto error_irq_gpio_dir;
+	}
+
+	ts->pen_irq = gpio_to_irq(ts->pdata->irq_gpio);
+	rc = request_irq(ts->pen_irq, cy8c_ts_irq,
+				IRQF_TRIGGER_FALLING,
+				ts->client->dev.driver->name, ts);
+	if (rc) {
+		dev_err(&ts->client->dev, "could not request irq\n");
+		goto error_req_irq_fail;
+	}
+
+	/* Clear the status register of the TS controller */
+	rc = cy8c_ts_write_reg_u8(ts->client, ts->dd->status_reg,
+						ts->dd->update_data);
+	if (rc < 0) {
+		/* Do multiple writes in case of failure */
+		dev_err(&ts->client->dev, "%s: write failed %d"
+				"trying again\n", __func__, rc);
+		rc = cy8c_ts_write_reg_u8(ts->client,
+			ts->dd->status_reg, ts->dd->update_data);
+		if (rc < 0) {
+			dev_err(&ts->client->dev, "%s: write failed"
+				"second time(%d)\n", __func__, rc);
+		}
+	}
+
 	device_init_wakeup(&client->dev, ts->pdata->wakeup);
 
 #ifdef CONFIG_HAS_EARLYSUSPEND
@@ -694,8 +657,19 @@ static int __devinit cy8c_ts_probe(struct i2c_client *client,
 	ts->early_suspend.resume = cy8c_ts_late_resume;
 	register_early_suspend(&ts->early_suspend);
 #endif
-	return 0;
 
+	return 0;
+error_req_irq_fail:
+error_irq_gpio_dir:
+	gpio_free(ts->pdata->irq_gpio);
+error_irq_gpio_req:
+error_resout_gpio_dir:
+	if (ts->pdata->resout_gpio >= 0)
+		gpio_free(ts->pdata->resout_gpio);
+error_uninit_ts:
+	destroy_workqueue(ts->wq);
+	input_unregister_device(ts->input);
+	kfree(ts->touch_data);
 error_mutex_destroy:
 	mutex_destroy(&ts->sus_lock);
 error_power_on:
@@ -722,6 +696,15 @@ static int __devexit cy8c_ts_remove(struct i2c_client *client)
 	pm_runtime_disable(&client->dev);
 
 	device_init_wakeup(&client->dev, 0);
+
+	cancel_delayed_work_sync(&ts->work);
+
+	free_irq(ts->pen_irq, ts);
+
+	gpio_free(ts->pdata->irq_gpio);
+
+	if (ts->pdata->resout_gpio >= 0)
+		gpio_free(ts->pdata->resout_gpio);
 
 	destroy_workqueue(ts->wq);
 

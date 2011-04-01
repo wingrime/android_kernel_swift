@@ -354,8 +354,8 @@ config SPI_QSD
 
 config SPI_QUP
 	tristate "Qualcomm MSM SPI QUPe Support"
-	depends on ARCH_MSM8X60 && !SPI_QSD
-	default y
+	depends on ARCH_MSM && !SPI_QSD
+	default n
 	help
 	  Support for Serial Peripheral Interface for Qualcomm Universal
           Peripheral.

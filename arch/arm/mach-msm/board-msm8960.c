@@ -30,6 +30,7 @@
 
 #include <mach/board.h>
 #include <mach/msm_iomap.h>
+#include <mach/msm_spi.h>
 #include <mach/msm_hsusb.h>
 #include <mach/usbdiag.h>
 #include <mach/socinfo.h>
@@ -109,12 +110,17 @@ static void __init msm8960_init_mmc(void)
 #endif
 }
 
+static struct msm_spi_platform_data msm8960_qup_spi_gsbi1_pdata = {
+	.max_clock_speed = 26000000,
+};
+
 static struct usb_mass_storage_platform_data mass_storage_pdata = {
 	.nluns		= 1,
 	.vendor		= "Qualcomm Incorporated",
 	.product	= "Mass storage",
 	.can_stall	= 1,
 };
+
 static struct msm_otg_platform_data msm_otg_pdata;
 
 static struct usb_diag_platform_data usb_diag_pdata = {
@@ -221,6 +227,7 @@ static struct platform_device *sim_devices[] __initdata = {
 	&msm_device_smd,
 	&msm8960_device_uart_gsbi2,
 	&msm8960_device_ssbi_pm8921,
+	&msm8960_device_qup_spi_gsbi1,
 	&msm_device_otg,
 	&msm_device_gadget_peripheral,
 	&android_usb_device,
@@ -236,6 +243,7 @@ static struct platform_device *rumi3_devices[] __initdata = {
 	&msm_device_smd,
 	&msm8960_device_uart_gsbi5,
 	&msm_device_kgsl_8960,
+	&msm8960_device_qup_spi_gsbi1,
 	&msm8960_device_qup_i2c_gsbi4,
 	&msm_device_wcnss_wlan,
 };
@@ -260,6 +268,8 @@ static void __init msm8960_sim_init(void)
 	msm_clock_init(msm_clocks_8960, msm_num_clocks_8960);
 	msm8960_device_ssbi_pm8921.dev.platform_data =
 				&msm8960_ssbi_pm8921_pdata;
+	msm8960_device_qup_spi_gsbi1.dev.platform_data =
+				&msm8960_qup_spi_gsbi1_pdata;
 	msm_device_otg.dev.platform_data = &msm_otg_pdata;
 	msm8960_i2c_init();
 	platform_add_devices(sim_devices, ARRAY_SIZE(sim_devices));
@@ -273,6 +283,8 @@ static void __init msm8960_rumi3_init(void)
 	msm_clock_init(msm_clocks_8960, msm_num_clocks_8960);
 	msm8960_device_ssbi_pm8921.dev.platform_data =
 				&msm8960_ssbi_pm8921_pdata;
+	msm8960_device_qup_spi_gsbi1.dev.platform_data =
+				&msm8960_qup_spi_gsbi1_pdata;
 	msm8960_i2c_init();
 	platform_add_devices(rumi3_devices, ARRAY_SIZE(rumi3_devices));
 	msm8960_init_mmc();

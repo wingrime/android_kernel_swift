@@ -347,13 +347,13 @@ static void otg_pm_qos_update_latency(struct msm_otg *dev, int vote)
  */
 static void msm_otg_vote_for_pclk_source(struct msm_otg *dev, int vote)
 {
-	if (!pclk_requires_voting(&dev->otg))
-		return;
+	if (dev->pclk_src && pclk_requires_voting(&dev->otg)) {
 
-	if (vote)
-		clk_enable(dev->pclk_src);
-	else
-		clk_disable(dev->pclk_src);
+		if (vote)
+			clk_enable(dev->pclk_src);
+		else
+			clk_disable(dev->pclk_src);
+	}
 }
 
 /* Controller gives interrupt for every 1 mesc if 1MSIE is set in OTGSC.

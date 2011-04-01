@@ -70,6 +70,20 @@ enum msm_bus_dbg_op_type {
 
 extern struct bus_type msm_bus_type;
 
+struct msm_bus_node_info {
+	unsigned int id;
+	unsigned int priv_id;
+	int gateway;
+	int masterp;
+	int slavep;
+	int tier;
+	int ahb;
+	const char *slaveclk;
+	const char *a_slaveclk;
+	const char *memclk;
+	unsigned int buswidth;
+};
+
 struct path_node {
 	unsigned long clk;
 	unsigned long a_clk;
@@ -159,9 +173,10 @@ struct msm_bus_client {
 
 int msm_bus_fabric_device_register(struct msm_bus_fabric_device *fabric);
 void msm_bus_fabric_device_unregister(struct msm_bus_fabric_device *fabric);
-struct msm_bus_fabric_device *msm_bus_get_fabric(int fabid);
+struct msm_bus_fabric_device *msm_bus_get_fabric_device(int fabid);
+int msm_bus_get_num_fab(void);
 
-#ifdef CONFIG_DEBUG_FS
+#if defined(CONFIG_DEBUG_FS) && defined(CONFIG_MSM_BUS_SCALING)
 void msm_bus_dbg_client_data(struct msm_bus_scale_pdata *pdata, int index,
 	uint32_t cl);
 void msm_bus_dbg_commit_data(const char *fabname, struct commit_data *cdata,

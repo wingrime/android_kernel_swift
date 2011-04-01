@@ -61,20 +61,6 @@
 #define IB_THROUGHPUTBW(Tb) (Tb)
 #define AB_THROUGHPUTBW(Tb, R) ((Tb) * (R))
 
-struct msm_bus_node_info {
-	unsigned int id;
-	unsigned int priv_id;
-	int gateway;
-	int masterp;
-	int slavep;
-	int tier;
-	int ahb;
-	const char *slaveclk;
-	const char *a_slaveclk;
-	const char *memclk;
-	unsigned int buswidth;
-};
-
 struct msm_bus_vectors {
 	int src; /* Master */
 	int dst; /* Slave */
@@ -112,6 +98,10 @@ struct msm_bus_scale_pdata {
 uint32_t msm_bus_scale_register_client(struct msm_bus_scale_pdata *pdata);
 int msm_bus_scale_client_update_request(uint32_t cl, unsigned int index);
 void msm_bus_scale_unregister_client(uint32_t cl);
+/* AXI Port configuration APIs */
+int msm_bus_axi_porthalt(int master_port);
+int msm_bus_axi_portunhalt(int master_port);
+
 #else
 static inline uint32_t
 msm_bus_scale_register_client(struct msm_bus_scale_pdata *pdata)
@@ -129,10 +119,16 @@ static inline void
 msm_bus_scale_unregister_client(uint32_t cl)
 {
 }
-#endif
 
-/* AXI Port configuration APIs */
-int msm_bus_axi_porthalt(int master_port);
-int msm_bus_axi_portunhalt(int master_port);
+static inline int msm_bus_axi_porthalt(int master_port)
+{
+	return 0;
+}
+
+static inline int msm_bus_axi_portunhalt(int master_port)
+{
+	return 0;
+}
+#endif
 
 #endif /*_ARCH_ARM_MACH_MSM_BUS_H*/

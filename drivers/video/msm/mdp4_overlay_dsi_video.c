@@ -1,4 +1,4 @@
-/* Copyright (c) 2010, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2010-2011, Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -169,17 +169,19 @@ int mdp4_dsi_video_on(struct platform_device *pdev)
 	dsi_height = mfd->panel_info.yres;
 	dsi_bpp = mfd->panel_info.bpp;
 
-	hsync_period = h_back_porch + dsi_width + h_front_porch;
+	hsync_period = hsync_pulse_width + h_back_porch + dsi_width
+				+ h_front_porch;
 	hsync_ctrl = (hsync_period << 16) | hsync_pulse_width;
-	hsync_start_x = h_back_porch;
+	hsync_start_x = h_back_porch + hsync_pulse_width;
 	hsync_end_x = hsync_period - h_front_porch - 1;
 	display_hctl = (hsync_end_x << 16) | hsync_start_x;
 
 	vsync_period =
-	    (v_back_porch + dsi_height + v_front_porch) * hsync_period;
-	display_v_start = v_back_porch * hsync_period + dsi_hsync_skew;
+	    (vsync_pulse_width + v_back_porch + dsi_height + v_front_porch);
+	display_v_start = ((vsync_pulse_width + v_back_porch) * hsync_period)
+				+ dsi_hsync_skew;
 	display_v_end =
-	    vsync_period - (v_front_porch * hsync_period) + dsi_hsync_skew - 1;
+	  ((vsync_period - v_front_porch) * hsync_period) + dsi_hsync_skew - 1;
 
 	if (dsi_width != var->xres) {
 		active_h_start = hsync_start_x + first_pixel_start_x;
@@ -209,7 +211,7 @@ int mdp4_dsi_video_on(struct platform_device *pdev)
 	    (data_en_polarity << 2) | (vsync_polarity << 1) | (hsync_polarity);
 
 	MDP_OUTP(MDP_BASE + DSI_VIDEO_BASE + 0x4, hsync_ctrl);
-	MDP_OUTP(MDP_BASE + DSI_VIDEO_BASE + 0x8, vsync_period);
+	MDP_OUTP(MDP_BASE + DSI_VIDEO_BASE + 0x8, vsync_period * hsync_period);
 	MDP_OUTP(MDP_BASE + DSI_VIDEO_BASE + 0xc,
 				vsync_pulse_width * hsync_period);
 	MDP_OUTP(MDP_BASE + DSI_VIDEO_BASE + 0x10, display_hctl);

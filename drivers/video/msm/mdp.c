@@ -579,24 +579,30 @@ void mdp_pipe_ctrl(MDP_BLOCK_TYPE block, MDP_BLOCK_POWER_STATE state,
 	 * Otherwise, processing happens in the current context
 	 */
 	if (isr) {
-		/* checking all blocks power state */
-		for (i = 0; i < MDP_MAX_BLOCK; i++) {
-			if (atomic_read(&mdp_block_power_cnt[i]) > 0)
-				mdp_all_blocks_off = FALSE;
-		}
+		if (mdp_current_clk_on) {
+			/* checking all blocks power state */
+			for (i = 0; i < MDP_MAX_BLOCK; i++) {
+				if (atomic_read(&mdp_block_power_cnt[i]) > 0) {
+					mdp_all_blocks_off = FALSE;
+					break;
+				}
+			}
 
-		if ((mdp_all_blocks_off) && (mdp_current_clk_on)) {
-			/* send workqueue to turn off mdp power */
-			queue_delayed_work(mdp_pipe_ctrl_wq,
-					   &mdp_pipe_ctrl_worker,
-					   mdp_timer_duration);
+			if (mdp_all_blocks_off) {
+				/* send workqueue to turn off mdp power */
+				queue_delayed_work(mdp_pipe_ctrl_wq,
+						   &mdp_pipe_ctrl_worker,
+						   mdp_timer_duration);
+			}
 		}
 	} else {
 		down(&mdp_pipe_ctrl_mutex);
 		/* checking all blocks power state */
 		for (i = 0; i < MDP_MAX_BLOCK; i++) {
-			if (atomic_read(&mdp_block_power_cnt[i]) > 0)
+			if (atomic_read(&mdp_block_power_cnt[i]) > 0) {
 				mdp_all_blocks_off = FALSE;
+				break;
+			}
 		}
 
 		/*

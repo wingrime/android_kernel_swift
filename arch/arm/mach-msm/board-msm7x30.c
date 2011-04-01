@@ -3877,7 +3877,7 @@ adapter_put:
 	i2c_put_adapter(adapter);
 	return rc;
 }
-subsys_initcall_sync(fluid_i2c_address_fixup);
+fs_initcall_sync(fluid_i2c_address_fixup);
 #endif
 
 static int hdmi_comm_power(int on, int show)

@@ -406,6 +406,35 @@ struct platform_device msm8960_device_ssbi_pm8921 = {
 	.num_resources  = ARRAY_SIZE(resources_ssbi_pm8921),
 };
 
+static struct resource resources_qup_spi_gsbi1[] = {
+	{
+		.name   = "spi_base",
+		.start  = MSM_GSBI1_QUP_PHYS,
+		.end    = MSM_GSBI1_QUP_PHYS + SZ_4K - 1,
+		.flags  = IORESOURCE_MEM,
+	},
+	{
+		.name   = "gsbi_base",
+		.start  = MSM_GSBI1_PHYS,
+		.end    = MSM_GSBI1_PHYS + 4 - 1,
+		.flags  = IORESOURCE_MEM,
+	},
+	{
+		.name   = "spi_irq_in",
+		.start  = GSBI1_QUP_IRQ,
+		.end    = GSBI1_QUP_IRQ,
+		.flags  = IORESOURCE_IRQ,
+	},
+};
+
+struct platform_device msm8960_device_qup_spi_gsbi1 = {
+	.name	= "spi_qsd",
+	.id	= 0,
+	.num_resources	= ARRAY_SIZE(resources_qup_spi_gsbi1),
+	.resource	= resources_qup_spi_gsbi1,
+};
+
+
 struct clk_lookup msm_clocks_8960[] = {
 	CLK_DUMMY("gsbi_uart_clk",	GSBI1_UART_CLK,		NULL, OFF),
 	CLK_DUMMY("gsbi_uart_clk",	GSBI2_UART_CLK,
@@ -420,7 +449,7 @@ struct clk_lookup msm_clocks_8960[] = {
 	CLK_DUMMY("gsbi_uart_clk",	GSBI10_UART_CLK,	NULL, OFF),
 	CLK_DUMMY("gsbi_uart_clk",	GSBI11_UART_CLK,	NULL, OFF),
 	CLK_DUMMY("gsbi_uart_clk",	GSBI12_UART_CLK,	NULL, OFF),
-	CLK_DUMMY("gsbi_qup_clk",	GSBI1_QUP_CLK,		NULL, OFF),
+	CLK_DUMMY("spi_clk",		GSBI1_QUP_CLK, "spi_qsd.0", OFF),
 	CLK_DUMMY("gsbi_qup_clk",	GSBI2_QUP_CLK,		NULL, OFF),
 	CLK_DUMMY("gsbi_qup_clk",	GSBI3_QUP_CLK,		NULL, OFF),
 	CLK_DUMMY("gsbi_qup_clk",	GSBI4_QUP_CLK,
@@ -452,7 +481,7 @@ struct clk_lookup msm_clocks_8960[] = {
 	CLK_DUMMY("usb_fs_clk",		USB_FS2_XCVR_CLK,	NULL, OFF),
 	CLK_DUMMY("usb_fs_sys_clk",	USB_FS2_SYS_CLK,	NULL, OFF),
 	CLK_DUMMY("ce_clk",		CE2_CLK,		NULL, OFF),
-	CLK_DUMMY("gsbi_pclk",		GSBI1_P_CLK,		NULL, OFF),
+	CLK_DUMMY("spi_pclk",		GSBI1_P_CLK, "spi_qsd.0", OFF),
 	CLK_DUMMY("gsbi_pclk",		GSBI2_P_CLK,
 						  "msm_serial_hsl.0", OFF),
 	CLK_DUMMY("gsbi_pclk",		GSBI3_P_CLK,		NULL, OFF),

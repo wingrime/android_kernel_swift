@@ -51,6 +51,8 @@ extern uint32 mdp4_extn_disp;
 #define MDP4_RGB_BASE 0x40000
 #define MDP4_RGB_OFF 0x10000
 
+typedef int (*cmd_fxn_t)(struct platform_device *pdev);
+
 enum {		/* display */
 	PRIMARY_INTF_SEL,
 	SECONDARY_INTF_SEL,
@@ -388,6 +390,7 @@ int mdp4_dtv_off(struct platform_device *pdev);
 void mdp4_atv_overlay(struct msm_fb_data_type *mfd);
 int mdp4_atv_on(struct platform_device *pdev);
 int mdp4_atv_off(struct platform_device *pdev);
+void mdp4_dsi_video_fxn_register(cmd_fxn_t fxn);
 void mdp4_dsi_video_overlay(struct msm_fb_data_type *mfd);
 int mdp4_dsi_video_on(struct platform_device *pdev);
 int mdp4_dsi_video_off(struct platform_device *pdev);

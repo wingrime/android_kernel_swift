@@ -622,6 +622,23 @@ static struct platform_device msm_imic_device = {
 	.dev = { .platform_data = &snddev_imic_data },
 };
 
+static struct snddev_icodec_data snddev_fluid_ispkr_mic_data = {
+	.capability = (SNDDEV_CAP_TX | SNDDEV_CAP_VOICE),
+	.name = "speaker_mono_tx",
+	.copp_id = PRIMARY_I2S_TX,
+	.profile = &imic_profile,
+	.channel_mode = 1,
+	.default_sample_rate = 48000,
+	.pamp_on = msm_snddev_enable_amic_power,
+	.pamp_off = msm_snddev_disable_amic_power,
+};
+
+static struct platform_device msm_fluid_ispkr_mic_device = {
+	.name = "snddev_icodec",
+	.dev = { .platform_data = &snddev_fluid_ispkr_mic_data },
+};
+
+
 static struct adie_codec_action_unit headset_ab_cpls_48KHz_osr256_actions[] =
 	HEADSET_AB_CPLS_48000_OSR_256;
 
@@ -1421,6 +1438,7 @@ static struct platform_device *snd_devices_fluid[] __initdata = {
 	&msm_snddev_hdmi_stereo_rx_device,
 	&msm_headset_stereo_device,
 	&msm_headset_mic_device,
+	&msm_fluid_ispkr_mic_device,
 	&msm_bt_sco_earpiece_device,
 	&msm_bt_sco_mic_device,
 	&msm_mi2s_fm_tx_device,

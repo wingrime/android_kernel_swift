@@ -40,21 +40,38 @@
 static struct mdp4_overlay_pipe *dsi_pipe;
 static struct msm_fb_data_type *dsi_mfd;
 static int busy_wait_cnt;
+static int dsi_state;
+static unsigned long  tout_expired;
+
+#define TOUT_PERIOD	HZ	/* 1 second */
+#define MS_100		(HZ/10)	/* 100 ms */
 
 static int vsync_start_y_adjust = 4;
 
 #define OVERLAY_BLT_EMBEDDED
 
 
-#ifdef DSI_CLK_CTRL
 struct timer_list dsi_clock_timer;
+
+void mdp4_overlay_dsi_state_set(int state)
+{
+	unsigned long flag;
+
+	spin_lock_irqsave(&mdp_spin_lock, flag);
+	dsi_state = state;
+	spin_unlock_irqrestore(&mdp_spin_lock, flag);
+}
 
 static void dsi_clock_tout(unsigned long data)
 {
-	if (mipi_dsi_clk_on)
-		mipi_dsi_clk_disable();
+	if (mipi_dsi_clk_on) {
+		if (dsi_state == ST_DSI_PLAYING) {
+			mdp4_stat.dsi_clkoff++;
+			mipi_dsi_clk_disable();
+			mdp4_overlay_dsi_state_set(ST_DSI_CLK_OFF);
+		}
+	}
 }
-#endif
 
 static __u32 msm_fb_line_length(__u32 fb_index, __u32 xres, int bpp)
 {
@@ -133,12 +150,14 @@ void mdp4_overlay_update_dsi_cmd(struct msm_fb_data_type *mfd)
 		ret = mdp4_overlay_format2pipe(pipe);
 		if (ret < 0)
 			printk(KERN_INFO "%s: format2type failed\n", __func__);
-#ifdef DSI_CLK_CTRL
+
 		init_timer(&dsi_clock_timer);
 		dsi_clock_timer.function = dsi_clock_tout;
 		dsi_clock_timer.data = (unsigned long) mfd;;
-		dsi_clock_timer.expires = HZ;
-#endif
+		dsi_clock_timer.expires = 0xffffffff;
+		add_timer(&dsi_clock_timer);
+		tout_expired = jiffies;
+
 		dsi_pipe = pipe; /* keep it */
 
 #ifdef OVERLAY_BLT_EMBEDDED
@@ -553,16 +572,27 @@ void mdp4_dsi_cmd_dma_busy_wait(struct msm_fb_data_type *mfd)
 	unsigned long flag;
 	int need_wait = 0;
 
-#ifdef DSI_CLK_CTRL
-	mod_timer(&dsi_clock_timer, jiffies + HZ); /* one second */
-#endif
+
+
+	if (dsi_clock_timer.function) {
+		if (time_after(jiffies, tout_expired)) {
+			tout_expired = jiffies + TOUT_PERIOD;
+			mod_timer(&dsi_clock_timer, tout_expired);
+			tout_expired -= MS_100;
+		}
+	}
+
+	pr_debug("%s: start pid=%d dsi_clk_on=%d\n",
+			__func__, current->pid, mipi_dsi_clk_on);
+
+	/* satrt dsi clock if necessary */
+	if (mipi_dsi_clk_on == 0) {
+		local_bh_disable();
+		mipi_dsi_clk_enable();
+		local_bh_enable();
+	}
 
 	spin_lock_irqsave(&mdp_spin_lock, flag);
-#ifdef DSI_CLK_CTRL
-	if (mipi_dsi_clk_on == 0)
-		mipi_dsi_clk_enable();
-#endif
-
 	if (mfd->dma->busy == TRUE) {
 		if (busy_wait_cnt == 0)
 			INIT_COMPLETION(mfd->dma->comp);
@@ -573,8 +603,12 @@ void mdp4_dsi_cmd_dma_busy_wait(struct msm_fb_data_type *mfd)
 
 	if (need_wait) {
 		/* wait until DMA finishes the current job */
+		pr_debug("%s: pending pid=%d dsi_clk_on=%d\n",
+				__func__, current->pid, mipi_dsi_clk_on);
 		wait_for_completion(&mfd->dma->comp);
 	}
+	pr_debug("%s: done pid=%d dsi_clk_on=%d\n",
+			 __func__, current->pid, mipi_dsi_clk_on);
 }
 
 void mdp4_dsi_cmd_kickoff_video(struct msm_fb_data_type *mfd,
@@ -583,6 +617,7 @@ void mdp4_dsi_cmd_kickoff_video(struct msm_fb_data_type *mfd,
 	if (dsi_pipe->blt_addr && dsi_pipe->blt_cnt == 0)
 		mdp4_overlay_update_dsi_cmd(mfd);
 
+	pr_debug("%s: pid=%d\n", __func__, current->pid);
 	mdp4_dsi_cmd_overlay_kickoff(mfd, pipe);
 }
 
@@ -590,6 +625,7 @@ void mdp4_dsi_cmd_kickoff_ui(struct msm_fb_data_type *mfd,
 				struct mdp4_overlay_pipe *pipe)
 {
 
+	pr_debug("%s: pid=%d\n", __func__, current->pid);
 	mdp4_dsi_cmd_overlay_kickoff(mfd, pipe);
 }
 
@@ -599,6 +635,8 @@ void mdp4_dsi_cmd_overlay_kickoff(struct msm_fb_data_type *mfd,
 {
 	unsigned long flag;
 
+
+	mdp4_overlay_dsi_state_set(ST_DSI_PLAYING);
 
 	spin_lock_irqsave(&mdp_spin_lock, flag);
 	mdp_enable_irq(MDP_OVERLAY0_TERM);
@@ -622,9 +660,8 @@ void mdp4_dsi_cmd_overlay(struct msm_fb_data_type *mfd)
 	if (mfd && mfd->panel_power_on) {
 		mdp4_dsi_cmd_dma_busy_wait(mfd);
 
-
-if (dsi_pipe && dsi_pipe->blt_addr)
-		mdp4_dsi_blt_dmap_busy_wait(mfd);
+		if (dsi_pipe && dsi_pipe->blt_addr)
+			mdp4_dsi_blt_dmap_busy_wait(mfd);
 
 		mdp4_overlay_update_dsi_cmd(mfd);
 

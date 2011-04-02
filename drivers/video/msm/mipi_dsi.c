@@ -184,7 +184,7 @@ static void mipi_dsi_ahb_en(void)
 
 	ahb = mmss_cc_base + 0x08;
 
-	printk(KERN_INFO "%s: ahb=%x %x\n",
+	pr_debug("%s: ahb=%x %x\n",
 		__func__, (int) ahb, MIPI_INP_SECURE(ahb));
 }
 
@@ -416,6 +416,47 @@ void mipi_dsi_phy_init(int panel_ndx, struct msm_panel_info const *panel_info)
 	MIPI_OUTP(MIPI_DSI_BASE + 0x200, (pd->pll[0] | 0x01));
 }
 
+void mipi_dsi_clk_enable(void)
+{
+
+	if (mipi_dsi_clk_on) {
+		pr_err("%s: mipi_dsi_clk already ON\n", __func__);
+		return;
+	}
+
+	mipi_dsi_clk_on = 1;
+
+	clk_enable(amp_pclk); /* clock for AHB-master to AXI */
+	clk_enable(dsi_m_pclk);
+	clk_enable(dsi_s_pclk);
+	clk_enable(dsi_byte_div_clk);
+	clk_enable(dsi_esc_clk);
+	mipi_dsi_pclk(&dsi_pclk, 1);
+	mipi_dsi_clk(&dsicore_clk, 1);
+	mipi_dsi_ahb_en();
+	mipi_dsi_sfpb_cfg();
+}
+
+void mipi_dsi_clk_disable(void)
+{
+	if (mipi_dsi_clk_on == 0) {
+		pr_err("%s: mipi_dsi_clk already OFF\n", __func__);
+		return;
+	}
+
+	mipi_dsi_clk_on = 0;
+
+	MIPI_OUTP(MIPI_DSI_BASE + 0x0118, 0);
+
+	mipi_dsi_pclk(&dsi_pclk, 0);
+	mipi_dsi_clk(&dsicore_clk, 0);
+	clk_disable(dsi_esc_clk);
+	clk_disable(dsi_byte_div_clk);
+	clk_disable(dsi_m_pclk);
+	clk_disable(dsi_s_pclk);
+	clk_disable(amp_pclk); /* clock for AHB-master to AXI */
+}
+
 static int mipi_dsi_off(struct platform_device *pdev)
 {
 	int ret = 0;
@@ -424,6 +465,8 @@ static int mipi_dsi_off(struct platform_device *pdev)
 
 	mfd = platform_get_drvdata(pdev);
 	pinfo = &mfd->panel_info;
+
+	mdp4_overlay_dsi_state_set(ST_DSI_SUSPEND);
 
 	/* change to DSI_CMD_MODE since it needed to
 	 * tx DCS dsiplay off comamnd to panel
@@ -479,15 +522,9 @@ static int mipi_dsi_off(struct platform_device *pdev)
 	/* disbale dsi clk */
 	MIPI_OUTP(MIPI_DSI_BASE + 0x0118, 0);
 
-	mipi_dsi_pclk(&dsi_pclk, 0);
-	mipi_dsi_clk(&dsicore_clk, 0);
-	clk_disable(dsi_esc_clk);
-	clk_disable(dsi_byte_div_clk);
-	clk_disable(dsi_m_pclk);
-	clk_disable(dsi_s_pclk);
-	clk_disable(amp_pclk); /* clock for AHB-master to AXI */
-
-	mipi_dsi_clk_on = 0;
+	local_bh_disable();
+	mipi_dsi_clk_disable();
+	local_bh_enable();
 
 	/* disbale dsi engine */
 	MIPI_OUTP(MIPI_DSI_BASE + 0x0000, 0);
@@ -519,6 +556,8 @@ static int mipi_dsi_on(struct platform_device *pdev)
 	var = &fbi->var;
 	pinfo = &mfd->panel_info;
 
+	mdp4_overlay_dsi_state_set(ST_DSI_RESUME);
+
 	if (mipi_dsi_pdata && mipi_dsi_pdata->dsi_power_save)
 		mipi_dsi_pdata->dsi_power_save(1);
 
@@ -529,11 +568,9 @@ static int mipi_dsi_on(struct platform_device *pdev)
 		printk(KERN_ERR "%s: clk_set_rate failed\n",
 			__func__);
 
-	clk_enable(amp_pclk); /* clock for AHB-master to AXI */
-	clk_enable(dsi_m_pclk);
-	clk_enable(dsi_s_pclk);
-	clk_enable(dsi_byte_div_clk);
-	clk_enable(dsi_esc_clk);
+	local_bh_disable();
+	mipi_dsi_clk_enable();
+	local_bh_enable();
 
 	hbp = var->left_margin;
 	hfp = var->right_margin;
@@ -543,12 +580,6 @@ static int mipi_dsi_on(struct platform_device *pdev)
 	vspw = var->vsync_len;
 	width = mfd->panel_info.xres;
 	height = mfd->panel_info.yres;
-
-	mipi_dsi_ahb_en();
-	mipi_dsi_sfpb_cfg();
-	mipi_dsi_clk(&dsicore_clk, 1);
-	mipi_dsi_pclk(&dsi_pclk, 1);
-	mipi_dsi_clk_on = 1;
 
 	/* DSIPHY_PLL_CTRL_5 */
 	MIPI_OUTP(MIPI_DSI_BASE + 0x0214, 0x050);
@@ -630,36 +661,6 @@ static int mipi_dsi_on(struct platform_device *pdev)
 	return ret;
 }
 
-void mipi_dsi_clk_enable(void)
-{
-
-	clk_enable(amp_pclk); /* clock for AHB-master to AXI */
-	clk_enable(dsi_m_pclk);
-	clk_enable(dsi_s_pclk);
-	clk_enable(dsi_byte_div_clk);
-	clk_enable(dsi_esc_clk);
-	mipi_dsi_pclk(&dsi_pclk, 1);
-	mipi_dsi_clk(&dsicore_clk, 1);
-
-	MIPI_OUTP(MIPI_DSI_BASE + 0x118, 0x23f); /* DSI_CLK_CTRL */
-
-	mipi_dsi_clk_on = 1;
-}
-
-void mipi_dsi_clk_disable(void)
-{
-	MIPI_OUTP(MIPI_DSI_BASE + 0x0118, 0);
-
-	mipi_dsi_pclk(&dsi_pclk, 0);
-	mipi_dsi_clk(&dsicore_clk, 0);
-	clk_disable(dsi_esc_clk);
-	clk_disable(dsi_byte_div_clk);
-	clk_disable(dsi_m_pclk);
-	clk_disable(dsi_s_pclk);
-	clk_disable(amp_pclk); /* clock for AHB-master to AXI */
-
-	mipi_dsi_clk_on = 0;
-}
 
 static int mipi_dsi_resource_initialized;
 

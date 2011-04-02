@@ -337,6 +337,7 @@ struct mdp4_statistic {
 	ulong overlay_unset[MDP4_MIXER_MAX];
 	ulong overlay_play[MDP4_MIXER_MAX];
 	ulong pipe[MDP4_MAX_PIPE];
+	ulong dsi_clkoff;
 	ulong err_mixer;
 	ulong err_zorder;
 	ulong err_size;
@@ -397,6 +398,7 @@ int mdp4_dsi_video_off(struct platform_device *pdev);
 void mdp4_overlay0_done_dsi_video(void);
 void mdp4_overlay0_done_dsi_cmd(struct mdp_dma_data *dma);
 void mdp4_dsi_cmd_overlay(struct msm_fb_data_type *mfd);
+void mdp4_overlay_dsi_state_set(int state);
 void mdp4_overlay_rgb_setup(struct mdp4_overlay_pipe *pipe);
 void mdp4_overlay_reg_flush(struct mdp4_overlay_pipe *pipe, int all);
 void mdp4_mixer_blend_setup(struct mdp4_overlay_pipe *pipe);

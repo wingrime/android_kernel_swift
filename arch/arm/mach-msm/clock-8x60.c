@@ -1264,7 +1264,7 @@ static struct bank_masks bmnd_info_mdp = {
 			.mode_mask =		BM(7, 6),
 	},
 };
-#define CLK_MDP(id) \
+#define CLK_MDP(id, par) \
 	[L_##id##_CLK] = { \
 		.type = MND, \
 		.ns_reg = MDP_NS_REG, \
@@ -1279,7 +1279,7 @@ static struct bank_masks bmnd_info_mdp = {
 		.set_rate = set_rate_mnd_banked, \
 		.freq_tbl = clk_tbl_mdp, \
 		.bank_masks = &bmnd_info_mdp, \
-		.parent = L_NONE_CLK, \
+		.parent = L_##par##_CLK, \
 		.test_vector = TEST_MM_HS(0x1A), \
 		.current_freq = &local_dummy_freq, \
 	}
@@ -1976,7 +1976,7 @@ struct clk_local soc_clk_local_tbl[] = {
 
 	CLK_JPEGD(JPEGD, JPEGD_AXI),
 
-	CLK_MDP(MDP),
+	CLK_MDP(MDP, MDP_AXI),
 	CLK_MDP_VSYNC(MDP_VSYNC),
 
 	CLK_PIXEL_MDP(PIXEL_MDP),
@@ -2017,11 +2017,12 @@ struct clk_local soc_clk_local_tbl[] = {
 		DBG_BUS_VEC_E_REG, HALT, 7, TEST_MM_HS(0x13)),
 	CLK_NORATE(JPEGD_AXI, MAXI_EN_REG, BIT(25), NULL, 0,
 		DBG_BUS_VEC_E_REG, HALT, 5, TEST_MM_HS(0x14)),
+	CLK_NORATE(MDP_AXI,  MAXI_EN_REG, BIT(23), SW_RESET_AXI_REG, BIT(13),
+		DBG_BUS_VEC_E_REG, HALT, 8, TEST_MM_HS(0x15)),
 	CLK_NORATE(VCODEC_AXI,   MAXI_EN_REG, BIT(19), SW_RESET_AXI_REG,
 		BIT(4)|BIT(5), DBG_BUS_VEC_E_REG, HALT, 3, TEST_MM_HS(0x17)),
 	CLK_NORATE(VFE_AXI,   MAXI_EN_REG, BIT(18), SW_RESET_AXI_REG, BIT(9),
 		DBG_BUS_VEC_E_REG, HALT, 0, TEST_MM_HS(0x18)),
-	CLK_RESET(MDP_AXI,    SW_RESET_AXI_REG, BIT(13)),
 	CLK_RESET(ROT_AXI,    SW_RESET_AXI_REG, BIT(6)),
 	CLK_RESET(VPE_AXI,    SW_RESET_AXI_REG, BIT(15)),
 
@@ -2430,7 +2431,7 @@ static void reg_init(void)
 	/* Initialize MM AXI registers: Enable HW gating for all clocks that
 	 * support it. Also set FORCE_CORE_ON bits, and any sleep and wake-up
 	 * delays to safe values. */
-	rmwreg(0x000307F9, MAXI_EN_REG,  0x0FFFFFFF);
+	rmwreg(0x000207F9, MAXI_EN_REG,  0x0FFFFFFF);
 	/* MAXI_EN2_REG is owned by the RPM.  Don't touch it. */
 	writel(0x3FE7FCFF, MAXI_EN3_REG);
 	writel(0x000001D8, SAXI_EN_REG);

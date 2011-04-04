@@ -141,6 +141,7 @@ obj-$(CONFIG_ARCH_MSM8X60) += footswitch-8x60.o
 ifdef CONFIG_MSM_SUBSYSTEM_RESTART
 	obj-y += subsystem_notif.o
 	obj-y += subsystem_restart.o
+	obj-y += ramdump.o
 	obj-$(CONFIG_ARCH_MSM8X60) += subsystem-fatal-8x60.o
 endif
 

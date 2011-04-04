@@ -47,6 +47,7 @@ enum msm_hardware_charger_event {
 	CHG_BATT_TEMP_INRANGE,
 	CHG_BATT_INSERTED,
 	CHG_BATT_REMOVED,
+	CHG_BATT_STATUS_CHANGE,
 };
 
 /**
@@ -83,6 +84,7 @@ struct msm_battery_gauge {
 	int (*is_battery_present) (void);
 	int (*is_battery_temp_within_range) (void);
 	int (*is_battery_id_valid) (void);
+	int (*get_battery_status)(void);
 	int (*get_batt_remaining_capacity) (void);
 };
 /**

@@ -244,6 +244,14 @@ static int get_prop_batt_status(void)
 {
 	int status = 0;
 
+	if (msm_batt_gauge && msm_batt_gauge->get_battery_status) {
+		status = msm_batt_gauge->get_battery_status();
+		if (status == POWER_SUPPLY_STATUS_CHARGING ||
+			status == POWER_SUPPLY_STATUS_FULL ||
+			status == POWER_SUPPLY_STATUS_DISCHARGING)
+			return status;
+	}
+
 	if (is_batt_status_charging())
 		status = POWER_SUPPLY_STATUS_CHARGING;
 	else if (msm_chg.batt_status ==
@@ -920,6 +928,10 @@ static void handle_event(struct msm_hardware_charger *hw_chg, int event)
 			break;
 		msm_chg.batt_status = BATT_STATUS_ABSENT;
 		handle_battery_removed();
+		break;
+	case CHG_BATT_STATUS_CHANGE:
+		/* TODO  battery SOC like battery-alarm/charging-full features
+		can be added here for future improvement */
 		break;
 	}
 	dev_dbg(msm_chg.dev, "%s %d done batt_status=%d\n", __func__,

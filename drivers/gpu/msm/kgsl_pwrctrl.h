@@ -79,9 +79,7 @@ void kgsl_pwrctrl_clk(struct kgsl_device *device, unsigned int pwrflag);
 void kgsl_pwrctrl_axi(struct kgsl_device *device, unsigned int pwrflag);
 void kgsl_pwrctrl_pwrrail(struct kgsl_device *device, unsigned int pwrflag);
 void kgsl_pwrctrl_irq(struct kgsl_device *device, unsigned int pwrflag);
-int kgsl_pwrctrl_init(struct kgsl_device *device,
-			struct platform_device *pdev,
-			struct kgsl_device_platform_data *pdata_dev);
+int kgsl_pwrctrl_init(struct kgsl_device *device);
 void kgsl_pwrctrl_close(struct kgsl_device *device);
 void kgsl_timer(unsigned long data);
 void kgsl_idle_check(struct work_struct *work);

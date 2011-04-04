@@ -1715,7 +1715,7 @@ static struct platform_device *qrdc_devices[] __initdata = {
 #endif
 	&msm_fb_device,
 	&lcdc_qrdc_panel_device,
-	&msm_device_kgsl,
+	&msm_kgsl_3d0,
 	&lcdc_samsung_panel_device,
 #ifdef CONFIG_FB_MSM_HDMI_MSM_PANEL
 	&hdmi_msm_device,

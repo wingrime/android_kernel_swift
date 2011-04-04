@@ -40,6 +40,7 @@
 
 #include "timer.h"
 #include "devices.h"
+#include "devices-msm8x60.h"
 #include "gpiomux.h"
 
 struct msm_gpiomux_config msm8960_gpiomux_configs[NR_GPIO_IRQS] = {};
@@ -272,9 +273,13 @@ static struct platform_device *rumi3_devices[] __initdata = {
 	&msm_device_smd,
 	&msm8960_device_uart_gsbi5,
 	&msm8960_device_ssbi_pm8921,
-	&msm_device_kgsl_8960,
 	&msm8960_device_qup_spi_gsbi1,
 	&msm8960_device_qup_i2c_gsbi4,
+	&msm_kgsl_3d0,
+#ifdef CONFIG_MSM_KGSL_2D
+	&msm_kgsl_2d0,
+	&msm_kgsl_2d1,
+#endif
 	&msm_device_wcnss_wlan,
 };
 

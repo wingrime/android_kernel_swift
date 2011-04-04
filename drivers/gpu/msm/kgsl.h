@@ -42,8 +42,8 @@
 #include "kgsl_device.h"
 #include "kgsl_sharedmem.h"
 
-#define DRIVER_NAME "kgsl"
-#define CLASS_NAME "msm_kgsl"
+#define KGSL_NAME "kgsl"
+
 #define CHIP_REV_251 0x020501
 
 /* Flags to control whether to flush or invalidate a cached memory range */
@@ -103,8 +103,8 @@ struct kgsl_driver {
 	/* Kobjects for storing pagetable and process statistics */
 	struct kobject *ptkobj;
 	struct kobject *prockobj;
+	atomic_t device_count;
 	struct kgsl_device *devp[KGSL_DEVICE_MAX];
-	struct platform_device *pdev;
 
 	uint32_t flags_debug;
 
@@ -119,8 +119,6 @@ struct kgsl_driver {
 
 	/* Mutex for protecting the device list */
 	struct mutex devlock;
-
-	struct kgsl_pagetable *global_pt;
 
 	/* Size (in bytes) for each pagetable */
 	unsigned int ptsize;
@@ -186,8 +184,18 @@ int kgsl_register_ts_notifier(struct kgsl_device *device,
 int kgsl_unregister_ts_notifier(struct kgsl_device *device,
 				struct notifier_block *nb);
 
-void kgsl_unregister_device(struct kgsl_device *device);
-int kgsl_register_device(struct kgsl_device *device);
+int kgsl_device_probe(struct kgsl_device *device,
+		irqreturn_t (*dev_isr) (int, void*));
+void kgsl_device_remove(struct kgsl_device *device);
+
+int kgsl_suspend(struct device *dev);
+int kgsl_resume(struct device *dev);
+int kgsl_runtime_suspend(struct device *dev);
+int kgsl_runtime_resume(struct device *dev);
+extern const struct dev_pm_ops kgsl_pm_ops;
+
+int kgsl_suspend_driver(struct platform_device *pdev, pm_message_t state);
+int kgsl_resume_driver(struct platform_device *pdev);
 
 #ifdef CONFIG_MSM_KGSL_DRM
 extern int kgsl_drm_init(struct platform_device *dev);

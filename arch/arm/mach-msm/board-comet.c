@@ -774,9 +774,9 @@ static void __init bt_power_init(void)
 #define bt_power_init(x) do {} while (0)
 #endif
 
-static struct resource kgsl_resources[] = {
+static struct resource kgsl_3d0_resources[] = {
        {
-	       .name  = "kgsl_reg_memory",
+	       .name = KGSL_3D0_REG_MEMORY,
 	       .start = 0xA0000000,
 	       .end = 0xA001ffff,
 	       .flags = IORESOURCE_MEM,
@@ -794,11 +794,11 @@ static struct resource kgsl_resources[] = {
        },
 };
 
-static struct platform_device msm_device_kgsl = {
-	.name = "kgsl",
-	.id = -1,
-	.num_resources = ARRAY_SIZE(kgsl_resources),
-	.resource = kgsl_resources,
+static struct platform_device msm_kgsl_3d0 = {
+	.name = "kgsl-3d0",
+	.id = 0,
+	.num_resources = ARRAY_SIZE(kgsl_3d0_resources),
+	.resource = kgsl_3d0_resources,
 };
 
 
@@ -828,7 +828,7 @@ static struct platform_device *devices[] __initdata = {
 	&qsd_device_spi,
 	&msm_device_tssc,
 	&hs_device,
-	&msm_device_kgsl,
+	&msm_kgsl_3d0,
 };
 
 #ifdef CONFIG_QSD_SVS
@@ -1083,8 +1083,8 @@ static void __init comet_init_irq(void)
 
 static void kgsl_phys_memory_init(void)
 {
-	request_mem_region(kgsl_resources[1].start,
-			resource_size(&kgsl_resources[1]), "kgsl");
+	request_mem_region(kgsl_3d_resources[1].start,
+			resource_size(&kgsl_3d_resources[1]), "kgsl-3d");
 }
 
 static void __init comet_init_host(void)

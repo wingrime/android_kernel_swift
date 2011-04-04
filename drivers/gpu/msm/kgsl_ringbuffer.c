@@ -96,7 +96,7 @@ void kgsl_cp_intrcallback(struct kgsl_device *device)
 			 * did not ack any interrupts this interrupt will
 			 * be generated again */
 			KGSL_DRV_WARN(device, "Unable to read CP_INT_STATUS\n");
-			wake_up_interruptible_all(&yamato_device->ib1_wq);
+			wake_up_interruptible_all(&device->wait_queue);
 		} else
 			KGSL_DRV_WARN(device, "Spurious interrput detected\n");
 		return;
@@ -153,7 +153,7 @@ void kgsl_cp_intrcallback(struct kgsl_device *device)
 
 	if (status & (CP_INT_CNTL__IB1_INT_MASK | CP_INT_CNTL__RB_INT_MASK)) {
 		KGSL_CMD_WARN(rb->device, "ringbuffer ib1/rb interrupt\n");
-		wake_up_interruptible_all(&yamato_device->ib1_wq);
+		wake_up_interruptible_all(&device->wait_queue);
 		atomic_notifier_call_chain(&(device->ts_notifier_list),
 					   KGSL_DEVICE_YAMATO,
 					   NULL);

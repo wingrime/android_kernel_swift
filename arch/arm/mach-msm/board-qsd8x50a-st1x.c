@@ -1412,41 +1412,19 @@ static void __init bt_power_init_st_1_5(void)
 #define bt_power_init_st_1_5(x) do {} while (0)
 #endif
 
-static struct resource kgsl_resources[] = {
+static struct resource kgsl_3d0_resources[] = {
 	{
-		.name  = "kgsl_reg_memory",
+		.name  = KGSL_3D0_REG_MEMORY,
 		.start = 0xA0000000,
 		.end = 0xA001ffff,
 		.flags = IORESOURCE_MEM,
 	},
 	{
-		.name = "kgsl_yamato_irq",
+		.name = KGSL_3D0_IRQ,
 		.start = INT_GRAPHICS,
 		.end = INT_GRAPHICS,
 		.flags = IORESOURCE_IRQ,
 	},
-	{
-		.name = "kgsl_2d0_reg_memory",
-		.start = 0xA1300000,
-		.end =  0xA13fffff,
-		.flags = IORESOURCE_MEM,
-	},
-	{
-	       .name = "kgsl_2d0_irq",
-	       .start = INT_GRP2D,
-	       .end = INT_GRP2D,
-	       .flags = IORESOURCE_IRQ,
-	},
-};
-
-static struct kgsl_core_platform_data kgsl_core_pdata = {
-	/* pt_va_base is currently shared between kgsl devices */
-	.pt_va_base = 0x66000000,
-#ifdef CONFIG_KGSL_PER_PROCESS_PAGE_TABLE
-	.pt_va_size = SZ_32M,
-#else
-	.pt_va_size = SZ_128M,
-#endif
 };
 
 static struct kgsl_device_platform_data kgsl_3d0_pdata = {
@@ -1479,6 +1457,32 @@ static struct kgsl_device_platform_data kgsl_3d0_pdata = {
 	},
 };
 
+static struct platform_device msm_kgsl_3d0 = {
+	.name = "kgsl-3d0",
+	.id = 0,
+	.num_resources = ARRAY_SIZE(kgsl_3d0_resources),
+	.resource = kgsl_3d0_resources,
+	.dev = {
+		.platform_data = &kgsl_3d0_pdata,
+	},
+};
+
+#ifdef CONFIG_MSM_KGSL_2D
+static struct resource kgsl_2d0_resources[] = {
+	{
+		.name = KGSL_2D0_REG_MEMORY,
+		.start = 0xA1300000,
+		.end =  0xA13fffff,
+		.flags = IORESOURCE_MEM,
+	},
+	{
+	       .name = KGSL_2D0_IRQ,
+	       .start = INT_GRP2D,
+	       .end = INT_GRP2D,
+	       .flags = IORESOURCE_IRQ,
+	},
+};
+
 static struct kgsl_device_platform_data kgsl_2d0_pdata = {
 	.pwr_data = {
 		.pwrlevel = {
@@ -1494,34 +1498,22 @@ static struct kgsl_device_platform_data kgsl_2d0_pdata = {
 	},
 	.clk = {
 		.name = {
-#ifdef CONFIG_MSM_KGSL_2D
 			.clk = "grp_2d_clk",
 			.pclk = "grp_2d_pclk",
-#else
-			.clk = NULL,
-#endif
 		},
 	},
 };
 
-static struct kgsl_device_platform_data kgsl_2d1_pdata;
-
-static struct kgsl_platform_data kgsl_pdata = {
-	.core = &kgsl_core_pdata,
-	.dev_3d0 = &kgsl_3d0_pdata,
-	.dev_2d0 = &kgsl_2d0_pdata,
-	.dev_2d1 = &kgsl_2d1_pdata,
-};
-
-static struct platform_device msm_device_kgsl = {
-	.name = "kgsl",
-	.id = -1,
-	.num_resources = ARRAY_SIZE(kgsl_resources),
-	.resource = kgsl_resources,
+static struct platform_device msm_kgsl_2d0 = {
+	.name = "kgsl-2d0",
+	.id = 0,
+	.num_resources = ARRAY_SIZE(kgsl_2d0_resources),
+	.resource = kgsl_2d0_resources,
 	.dev = {
-		.platform_data = &kgsl_pdata,
+		.platform_data = &kgsl_2d0_pdata,
 	},
 };
+#endif
 
 static struct platform_device msm_device_pmic_leds = {
 	.name	= "pmic-leds",
@@ -1847,7 +1839,10 @@ static struct platform_device *devices[] __initdata = {
 	&msm_device_uart3,
 #endif
 	&msm_device_pmic_leds,
-	&msm_device_kgsl,
+	&msm_kgsl_3d0,
+#ifdef CONFIG_MSM_KGSL_2D
+	&msm_kgsl_2d0,
+#endif
 	&hs_device,
 #if defined(CONFIG_TSIF) || defined(CONFIG_TSIF_MODULE)
 	&msm_device_tsif,

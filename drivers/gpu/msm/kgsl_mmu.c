@@ -618,7 +618,9 @@ int kgsl_mmu_start(struct kgsl_device *device)
 		kgsl_regwrite(device, device->mmu.reg.tran_error,
 						mmu->dummyspace.physaddr + 32);
 
-		BUG_ON(mmu->defaultpagetable == NULL);
+		if (mmu->defaultpagetable == NULL)
+			mmu->defaultpagetable =
+				kgsl_mmu_getpagetable(KGSL_MMU_GLOBAL_PT);
 		mmu->hwpagetable = mmu->defaultpagetable;
 
 		kgsl_regwrite(device, device->mmu.reg.pt_page,
@@ -906,6 +908,9 @@ int kgsl_mmu_close(struct kgsl_device *device)
 
 	if (mmu->dummyspace.gpuaddr)
 		kgsl_sharedmem_free(&mmu->dummyspace);
+
+	if (mmu->defaultpagetable)
+		kgsl_mmu_putpagetable(mmu->defaultpagetable);
 
 	return 0;
 }

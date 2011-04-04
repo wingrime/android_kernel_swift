@@ -32,6 +32,9 @@
 #include "kgsl_drawctxt.h"
 #include "kgsl_ringbuffer.h"
 
+#define DEVICE_3D_NAME "kgsl-3d"
+#define DEVICE_3D0_NAME "kgsl-3d0"
+
 struct kgsl_yamato_device {
 	struct kgsl_device dev;    /* Must be first field in this struct */
 	struct kgsl_memregion gmemspace;
@@ -47,14 +50,10 @@ struct kgsl_yamato_device {
 
 irqreturn_t kgsl_yamato_isr(int irq, void *data);
 
-int __init kgsl_yamato_init(struct platform_device *pdev);
-int kgsl_yamato_close(void);
-
 int kgsl_yamato_idle(struct kgsl_device *device, unsigned int timeout);
 int kgsl_yamato_regread(struct kgsl_device *device, unsigned int offsetwords,
 				unsigned int *value);
 int kgsl_yamato_regwrite(struct kgsl_device *device, unsigned int offsetwords,
 				unsigned int value);
-void kgsl_yamato_getfunctable(struct kgsl_functable *ftbl);
 
 #endif /*_KGSL_YAMATO_H */

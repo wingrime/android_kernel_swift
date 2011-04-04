@@ -1005,40 +1005,30 @@ static void __init bt_power_init(void)
 #endif
 
 #ifdef CONFIG_ARCH_MSM7X27
-static struct resource kgsl_resources[] = {
+static struct resource kgsl_3d0_resources[] = {
 	{
-		.name = "kgsl_reg_memory",
+		.name  = KGSL_3D0_REG_MEMORY,
 		.start = 0xA0000000,
 		.end = 0xA001ffff,
 		.flags = IORESOURCE_MEM,
 	},
 	{
-		.name = "kgsl_yamato_irq",
+		.name = KGSL_3D0_IRQ,
 		.start = INT_GRAPHICS,
 		.end = INT_GRAPHICS,
 		.flags = IORESOURCE_IRQ,
 	},
 };
 
-static struct kgsl_core_platform_data kgsl_core_pdata;
 static struct kgsl_device_platform_data kgsl_3d0_pdata;
-static struct kgsl_device_platform_data kgsl_2d0_pdata;
-static struct kgsl_device_platform_data kgsl_2d1_pdata;
 
-static struct kgsl_platform_data kgsl_pdata = {
-	.core = &kgsl_core_pdata,
-	.dev_3d0 = &kgsl_3d0_pdata,
-	.dev_2d0 = &kgsl_2d0_pdata,
-	.dev_2d1 = &kgsl_2d1_pdata,
-};
-
-static struct platform_device msm_device_kgsl = {
-	.name = "kgsl",
-	.id = -1,
-	.num_resources = ARRAY_SIZE(kgsl_resources),
-	.resource = kgsl_resources,
+static struct platform_device msm_kgsl_3d0 = {
+	.name = "kgsl-3d0",
+	.id = 0,
+	.num_resources = ARRAY_SIZE(kgsl_3d0_resources),
+	.resource = kgsl_3d0_resources,
 	.dev = {
-		.platform_data = &kgsl_pdata,
+		.platform_data = &kgsl_3d0_pdata,
 	},
 };
 #endif
@@ -1513,7 +1503,7 @@ static struct platform_device *devices[] __initdata = {
 #endif
 	&msm_bluesleep_device,
 #ifdef CONFIG_ARCH_MSM7X27
-	&msm_device_kgsl,
+	&msm_kgsl_3d0,
 #endif
 #if defined(CONFIG_TSIF) || defined(CONFIG_TSIF_MODULE)
 	&msm_device_tsif,
@@ -1957,28 +1947,17 @@ static void __init msm7x2x_init(void)
 	/* OEMs may modify the value at their discretion for performance */
 	/* The appropriate maximum replacement for 160000 is: */
 	/* msm7x2x_clock_data.max_axi_khz */
-	kgsl_pdata.dev_3d0->pwr_data.pwrlevel[0].gpu_freq = 0;
-	kgsl_pdata.dev_3d0->pwr_data.pwrlevel[0].bus_freq = 160000000;
-	kgsl_pdata.dev_3d0->pwr_data.init_level = 0;
-	kgsl_pdata.dev_3d0->pwr_data.num_levels = 1;
+	kgsl_3d0_pdata.pwr_data.pwrlevel[0].gpu_freq = 0;
+	kgsl_3d0_pdata.pwr_data.pwrlevel[0].bus_freq = 160000000;
+	kgsl_3d0_pdata.pwr_data.init_level = 0;
+	kgsl_3d0_pdata.pwr_data.num_levels = 1;
 	/* 7x27 doesn't allow graphics clocks to be run asynchronously to */
 	/* the AXI bus */
-	kgsl_pdata.dev_3d0->pwr_data.set_grp_async = NULL;
-	kgsl_pdata.dev_3d0->pwr_data.idle_timeout = HZ/5;
-	kgsl_pdata.dev_3d0->clk.name.clk = "grp_clk";
-	kgsl_pdata.dev_3d0->clk.name.pclk = "grp_pclk";
-	kgsl_pdata.dev_3d0->imem_clk_name.clk = "imem_clk";
-
-	kgsl_pdata.dev_2d0->pwr_data.set_grp_async = NULL;
-	kgsl_pdata.dev_2d0->pwr_data.idle_timeout = 0;
-	kgsl_pdata.dev_2d0->clk.name.clk = NULL;
-
-	kgsl_pdata.core->pt_va_base = 0x66000000,
-#ifdef CONFIG_KGSL_PER_PROCESS_PAGE_TABLE
-	kgsl_pdata.core->pt_va_size = SZ_32M;
-#else
-	kgsl_pdata.core->pt_va_size = SZ_128M;
-#endif
+	kgsl_3d0_pdata.pwr_data.set_grp_async = NULL;
+	kgsl_3d0_pdata.pwr_data.idle_timeout = HZ/5;
+	kgsl_3d0_pdata.clk.name.clk = "grp_clk";
+	kgsl_3d0_pdata.clk.name.pclk = "grp_pclk";
+	kgsl_3d0_pdata.imem_clk_name.clk = "imem_clk";
 #endif
 	usb_mpp_init();
 

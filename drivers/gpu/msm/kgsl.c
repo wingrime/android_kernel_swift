@@ -24,6 +24,8 @@
 #include <linux/init.h>
 #include <linux/list.h>
 #include <linux/io.h>
+#include <linux/irq.h>
+#include <linux/interrupt.h>
 #include <linux/mm.h>
 #include <linux/android_pmem.h>
 #include <linux/highmem.h>
@@ -343,34 +345,27 @@ int kgsl_cleanup_pt(struct kgsl_pagetable *pt)
 	return 0;
 }
 
-/*Suspend function*/
-static int kgsl_suspend(struct platform_device *dev, pm_message_t state)
+int kgsl_suspend_device(struct kgsl_device *device, pm_message_t state)
 {
-	int i;
-	struct kgsl_device *device;
+	int status = -EINVAL;
 	unsigned int nap_allowed_saved;
 
+	KGSL_PWR_WARN(device, "suspend start\n");
 
-	for (i = 0; i < KGSL_DEVICE_MAX; i++) {
-		device = kgsl_driver.devp[i];
-		if (!device)
-			continue;
-		KGSL_PWR_WARN(device, "suspend start\n");
-
+	mutex_lock(&device->mutex);
+	nap_allowed_saved = device->pwrctrl.nap_allowed;
+	device->pwrctrl.nap_allowed = false;
+	device->requested_state = KGSL_STATE_SUSPEND;
+	/* Make sure no user process is waiting for a timestamp *
+	 * before supending */
+	if (device->active_cnt != 0) {
+		mutex_unlock(&device->mutex);
+		wait_for_completion(&device->suspend_gate);
 		mutex_lock(&device->mutex);
-		nap_allowed_saved = device->pwrctrl.nap_allowed;
-		device->pwrctrl.nap_allowed = false;
-		device->requested_state = KGSL_STATE_SUSPEND;
-		/* Make sure no user process is waiting for a timestamp *
-		 * before supending */
-		if (device->active_cnt != 0) {
-			mutex_unlock(&device->mutex);
-			wait_for_completion(&device->suspend_gate);
-			mutex_lock(&device->mutex);
-		}
-		/* Don't let the timer wake us during suspended sleep. */
-		del_timer(&device->idle_timer);
-		switch (device->state) {
+	}
+	/* Don't let the timer wake us during suspended sleep. */
+	del_timer(&device->idle_timer);
+	switch (device->state) {
 		case KGSL_STATE_INIT:
 			break;
 		case KGSL_STATE_ACTIVE:
@@ -389,56 +384,93 @@ static int kgsl_suspend(struct platform_device *dev, pm_message_t state)
 		default:
 			KGSL_PWR_ERR(device, "suspend fail, device %d\n",
 					device->id);
-			mutex_unlock(&device->mutex);
-			return -EINVAL;
-		}
-		device->requested_state = KGSL_STATE_NONE;
-		device->pwrctrl.nap_allowed = nap_allowed_saved;
-
-		mutex_unlock(&device->mutex);
-		KGSL_PWR_WARN(device, "suspend end\n");
+			goto end;
 	}
+	device->requested_state = KGSL_STATE_NONE;
+	device->pwrctrl.nap_allowed = nap_allowed_saved;
+	status = 0;
+
+end:
+	mutex_unlock(&device->mutex);
+	KGSL_PWR_WARN(device, "suspend end\n");
+	return status;
+}
+
+int kgsl_resume_device(struct kgsl_device *device)
+{
+	int status = -EINVAL;
+
+	KGSL_PWR_WARN(device, "resume start\n");
+	mutex_lock(&device->mutex);
+	if (device->state == KGSL_STATE_SUSPEND) {
+		device->requested_state = KGSL_STATE_ACTIVE;
+		status = device->ftbl.device_start(device, 0);
+		if (status == 0) {
+			device->state = KGSL_STATE_ACTIVE;
+			KGSL_PWR_WARN(device,
+					"state -> ACTIVE, device %d\n",
+					device->id);
+		} else {
+			KGSL_PWR_ERR(device,
+					"resume failed, device %d\n",
+					device->id);
+			device->state = KGSL_STATE_INIT;
+			goto end;
+		}
+		status = device->ftbl.device_resume_context(device);
+		complete_all(&device->hwaccess_gate);
+	}
+	device->requested_state = KGSL_STATE_NONE;
+
+end:
+	mutex_unlock(&device->mutex);
+	KGSL_PWR_WARN(device, "resume end\n");
+	return status;
+}
+
+int kgsl_suspend(struct device *dev)
+{
+
+	pm_message_t arg = {0};
+	struct kgsl_device *device = dev_get_drvdata(dev);
+	return kgsl_suspend_device(device, arg);
+}
+
+int kgsl_resume(struct device *dev)
+{
+	struct kgsl_device *device = dev_get_drvdata(dev);
+	return kgsl_resume_device(device);
+}
+
+int kgsl_runtime_suspend(struct device *dev)
+{
 	return 0;
 }
 
-/*Resume function*/
-static int kgsl_resume(struct platform_device *dev)
+int kgsl_runtime_resume(struct device *dev)
 {
-	int i, status = -EINVAL;
-	struct kgsl_device *device;
+	return 0;
+}
 
-	for (i = 0; i < KGSL_DEVICE_MAX; i++) {
-		device = kgsl_driver.devp[i];
-		if (!device)
-			continue;
+const struct dev_pm_ops kgsl_pm_ops = {
+	.suspend = kgsl_suspend,
+	.resume = kgsl_resume,
+	.runtime_suspend = kgsl_runtime_suspend,
+	.runtime_resume = kgsl_runtime_resume,
+};
 
-		KGSL_PWR_WARN(device, "resume start\n");
+int kgsl_suspend_driver(struct platform_device *pdev,
+					pm_message_t state)
+{
+	return kgsl_suspend_device(
+		(struct kgsl_device *)pdev->id_entry->driver_data,
+		state);
+}
 
-		mutex_lock(&device->mutex);
-		if (device->state == KGSL_STATE_SUSPEND) {
-			device->requested_state = KGSL_STATE_ACTIVE;
-			status = device->ftbl.device_start(device, 0);
-			if (status == 0) {
-				device->state = KGSL_STATE_ACTIVE;
-				KGSL_PWR_WARN(device,
-					"state -> ACTIVE, device %d\n",
-					device->id);
-			} else {
-				KGSL_PWR_ERR(device,
-					"resume failed, device %d\n",
-					device->id);
-				device->state = KGSL_STATE_INIT;
-				mutex_unlock(&device->mutex);
-				return status;
-			}
-			status = device->ftbl.device_resume_context(device);
-			complete_all(&device->hwaccess_gate);
-		}
-		device->requested_state = KGSL_STATE_NONE;
-		mutex_unlock(&device->mutex);
-		KGSL_PWR_WARN(device, "resume end\n");
-	}
-	return status;
+int kgsl_resume_driver(struct platform_device *pdev)
+{
+	return kgsl_resume_device(
+		(struct kgsl_device *)pdev->id_entry->driver_data);
 }
 
 /* file operations */
@@ -568,6 +600,7 @@ static int kgsl_release(struct inode *inodep, struct file *filep)
 
 	if (atomic_dec_return(&device->open_count) == -1) {
 		result = device->ftbl.device_stop(device);
+		kgsl_cmdstream_close(device);
 		device->state = KGSL_STATE_INIT;
 		KGSL_PWR_WARN(device, "state -> INIT, device %d\n", device->id);
 	}
@@ -605,7 +638,7 @@ static int kgsl_open(struct inode *inodep, struct file *filep)
 
 	result = pm_runtime_get_sync(dev);
 	if (result < 0) {
-		dev_err(dev,
+		KGSL_DRV_ERR(device,
 			"Runtime PM: Unable to wake up the device, rc = %d\n",
 			result);
 		return result;
@@ -1715,38 +1748,6 @@ done:
 	return result;
 }
 
-static int kgsl_pm_suspend(struct device *dev)
-{
-	pm_message_t arg = {0};
-	dev_dbg(dev, "pm: suspending...\n");
-	return kgsl_suspend(NULL, arg);
-}
-
-static int kgsl_pm_resume(struct device *dev)
-{
-	dev_dbg(dev, "pm: resuming...\n");
-	return kgsl_resume(NULL);
-}
-
-static int kgsl_runtime_suspend(struct device *dev)
-{
-	dev_dbg(dev, "pm_runtime: suspending...\n");
-	return 0;
-}
-
-static int kgsl_runtime_resume(struct device *dev)
-{
-	dev_dbg(dev, "pm_runtime: resuming...\n");
-	return 0;
-}
-
-static struct dev_pm_ops kgsl_dev_pm_ops = {
-	.suspend = kgsl_pm_suspend,
-	.resume = kgsl_pm_resume,
-	.runtime_suspend = kgsl_runtime_suspend,
-	.runtime_resume = kgsl_runtime_resume,
-};
-
 static const struct file_operations kgsl_fops = {
 	.owner = THIS_MODULE,
 	.release = kgsl_release,
@@ -1760,31 +1761,6 @@ struct kgsl_driver kgsl_driver  = {
 	.pt_mutex = __MUTEX_INITIALIZER(kgsl_driver.pt_mutex),
 	.devlock = __MUTEX_INITIALIZER(kgsl_driver.devlock),
 };
-
-void kgsl_unregister_device(struct kgsl_device *device)
-{
-	int minor;
-
-	mutex_lock(&kgsl_driver.devlock);
-	for (minor = 0; minor < KGSL_DEVICE_MAX; minor++) {
-		if (device == kgsl_driver.devp[minor])
-			break;
-	}
-
-	mutex_unlock(&kgsl_driver.devlock);
-
-	if (minor == KGSL_DEVICE_MAX)
-		return;
-
-	kgsl_pwrctrl_uninit_sysfs(device);
-
-	device_destroy(kgsl_driver.class,
-		       MKDEV(MAJOR(kgsl_driver.major), minor));
-
-	mutex_lock(&kgsl_driver.devlock);
-	kgsl_driver.devp[minor] = NULL;
-	mutex_unlock(&kgsl_driver.devlock);
-}
 
 static void
 kgsl_ptpool_cleanup(void)
@@ -1851,23 +1827,31 @@ kgsl_ptpool_init(void)
 	return 0;
 }
 
-static void kgsl_driver_cleanup(void)
+void kgsl_unregister_device(struct kgsl_device *device)
 {
-	if (kgsl_driver.global_pt) {
-		kgsl_mmu_putpagetable(kgsl_driver.global_pt);
-		kgsl_driver.global_pt = NULL;
+	int minor;
+
+	mutex_lock(&kgsl_driver.devlock);
+	for (minor = 0; minor < KGSL_DEVICE_MAX; minor++) {
+		if (device == kgsl_driver.devp[minor])
+			break;
 	}
 
-	kgsl_yamato_close();
-	kgsl_g12_close();
+	mutex_unlock(&kgsl_driver.devlock);
 
-	kgsl_ptpool_cleanup();
+	if (minor == KGSL_DEVICE_MAX)
+		return;
 
-	device_unregister(&kgsl_driver.virtdev);
-	class_destroy(kgsl_driver.class);
-	kgsl_driver.class = NULL;
+	kgsl_pwrctrl_uninit_sysfs(device);
 
-	kgsl_driver.pdev = NULL;
+	device_destroy(kgsl_driver.class,
+		       MKDEV(MAJOR(kgsl_driver.major), minor));
+
+	mutex_lock(&kgsl_driver.devlock);
+	kgsl_driver.devp[minor] = NULL;
+	mutex_unlock(&kgsl_driver.devlock);
+
+	atomic_dec(&kgsl_driver.device_count);
 }
 
 int
@@ -1897,7 +1881,7 @@ kgsl_register_device(struct kgsl_device *device)
 	dev = MKDEV(MAJOR(kgsl_driver.major), minor);
 	device->dev = device_create(kgsl_driver.class,
 				    &device->pdev->dev,
-				    dev, NULL,
+				    dev, device,
 				    device->name);
 
 	if (IS_ERR(device->dev)) {
@@ -1908,6 +1892,7 @@ kgsl_register_device(struct kgsl_device *device)
 
 	/* Generic device initialization */
 	atomic_set(&device->open_count, -1);
+	atomic_inc(&kgsl_driver.device_count);
 
 	/* sysfs and debugfs initalization - failure here is non fatal */
 
@@ -1932,11 +1917,157 @@ err_devlist:
 	return ret;
 }
 
+int kgsl_device_probe(struct kgsl_device *device,
+			irqreturn_t (*dev_isr) (int, void*))
+{
+	int status = -EINVAL;
+	struct kgsl_memregion *regspace = NULL;
+	struct resource *res;
+	struct platform_device *pdev = device->pdev;
+
+	pm_runtime_enable(&pdev->dev);
+
+	status = kgsl_pwrctrl_init(device);
+	if (status)
+		goto error;
+
+	/* initilization of timestamp wait */
+	init_waitqueue_head(&device->wait_queue);
+
+	res = platform_get_resource_byname(pdev, IORESOURCE_MEM,
+					   device->iomemname);
+	if (res == NULL) {
+		KGSL_DRV_ERR(device, "platform_get_resource_byname failed\n");
+		status = -EINVAL;
+		goto error_pwrctrl_close;
+	}
+	if (res->start == 0 || resource_size(res) == 0) {
+		KGSL_DRV_ERR(device, "dev %d invalid regspace\n", device->id);
+		status = -EINVAL;
+		goto error_pwrctrl_close;
+	}
+
+	regspace = &device->regspace;
+	regspace->mmio_phys_base = res->start;
+	regspace->sizebytes = resource_size(res);
+
+	if (!request_mem_region(regspace->mmio_phys_base,
+				regspace->sizebytes, device->name)) {
+		KGSL_DRV_ERR(device, "request_mem_region failed\n");
+		status = -ENODEV;
+		goto error_pwrctrl_close;
+	}
+
+	regspace->mmio_virt_base = ioremap(regspace->mmio_phys_base,
+					   regspace->sizebytes);
+
+	if (regspace->mmio_virt_base == NULL) {
+		KGSL_DRV_ERR(device, "ioremap failed\n");
+		status = -ENODEV;
+		goto error_release_mem;
+	}
+
+	status = request_irq(device->pwrctrl.interrupt_num, dev_isr,
+			     IRQF_TRIGGER_HIGH, device->name, device);
+	if (status) {
+		KGSL_DRV_ERR(device, "request_irq(%d) failed: %d\n",
+			      device->pwrctrl.interrupt_num, status);
+		goto error_iounmap;
+	}
+	device->pwrctrl.have_irq = 1;
+	disable_irq(device->pwrctrl.interrupt_num);
+
+	KGSL_DRV_INFO(device,
+		"dev_id %d regs phys 0x%08x size 0x%08x virt %p\n",
+		device->id, regspace->mmio_phys_base,
+		regspace->sizebytes, regspace->mmio_virt_base);
+
+	kgsl_cffdump_open(device->id);
+
+	init_completion(&device->hwaccess_gate);
+	init_completion(&device->suspend_gate);
+
+	ATOMIC_INIT_NOTIFIER_HEAD(&device->ts_notifier_list);
+
+	setup_timer(&device->idle_timer, kgsl_timer, (unsigned long) device);
+	status = kgsl_create_device_workqueue(device);
+	if (status)
+		goto error_free_irq;
+
+	INIT_WORK(&device->idle_check_ws, kgsl_idle_check);
+
+	INIT_LIST_HEAD(&device->memqueue);
+
+	status = kgsl_mmu_init(device);
+	if (status != 0)
+		goto error_dest_work_q;
+
+	status = kgsl_sharedmem_alloc_coherent(&device->memstore,
+					sizeof(struct kgsl_devmemstore));
+	if (status != 0)
+		goto error_close_mmu;
+
+	kgsl_sharedmem_set(&device->memstore, 0, 0, device->memstore.size);
+
+	status = kgsl_register_device(device);
+	if (status)
+		goto error_close_mmu;
+
+	wake_lock_init(&device->idle_wakelock, WAKE_LOCK_IDLE, device->name);
+	return status;
+
+error_close_mmu:
+	kgsl_mmu_close(device);
+error_dest_work_q:
+	destroy_workqueue(device->work_queue);
+	device->work_queue = NULL;
+error_free_irq:
+	free_irq(device->pwrctrl.interrupt_num, NULL);
+	device->pwrctrl.have_irq = 0;
+error_iounmap:
+	iounmap(regspace->mmio_virt_base);
+	regspace->mmio_virt_base = NULL;
+error_release_mem:
+	release_mem_region(regspace->mmio_phys_base, regspace->sizebytes);
+error_pwrctrl_close:
+	kgsl_pwrctrl_close(device);
+error:
+	return status;
+}
+
+void kgsl_device_remove(struct kgsl_device *device)
+{
+	struct kgsl_memregion *regspace = &device->regspace;
+
+	kgsl_unregister_device(device);
+
+	if (device->memstore.hostptr)
+		kgsl_sharedmem_free(&device->memstore);
+
+	kgsl_mmu_close(device);
+
+	if (regspace->mmio_virt_base != NULL) {
+		iounmap(regspace->mmio_virt_base);
+		regspace->mmio_virt_base = NULL;
+		release_mem_region(regspace->mmio_phys_base,
+					regspace->sizebytes);
+	}
+	kgsl_pwrctrl_close(device);
+	kgsl_cffdump_close(device->id);
+
+	if (device->work_queue) {
+		destroy_workqueue(device->work_queue);
+		device->work_queue = NULL;
+	}
+
+	pm_runtime_disable(&device->pdev->dev);
+
+	wake_lock_destroy(&device->idle_wakelock);
+}
+
 static int __devinit
 kgsl_ptdata_init(void)
 {
-	int ret = 0;
-
 	INIT_LIST_HEAD(&kgsl_driver.pagetable_list);
 
 	kgsl_driver.ptsize =
@@ -1944,39 +2075,55 @@ kgsl_ptdata_init(void)
 		KGSL_PAGETABLE_ENTRY_SIZE;
 	kgsl_driver.ptsize = ALIGN(kgsl_driver.ptsize, PAGE_SIZE);
 
-	ret = kgsl_ptpool_init();
-	return ret;
+	return kgsl_ptpool_init();
 }
 
-static int __devinit
-kgsl_core_init(void)
+static void kgsl_core_exit(void)
 {
-	int ret;
+	unregister_chrdev_region(kgsl_driver.major, KGSL_DEVICE_MAX);
+
+	kgsl_ptpool_cleanup();
+
+	device_unregister(&kgsl_driver.virtdev);
+
+	if (kgsl_driver.class) {
+		class_destroy(kgsl_driver.class);
+		kgsl_driver.class = NULL;
+	}
+
+	kgsl_drm_exit();
+	kgsl_cffdump_destroy();
+}
+
+static int __init kgsl_core_init(void)
+{
+	int result = 0;
 
 	/* alloc major and minor device numbers */
-	ret = alloc_chrdev_region(&kgsl_driver.major, 0, KGSL_DEVICE_MAX,
-				  DRIVER_NAME);
-	if (ret < 0) {
-		KGSL_CORE_ERR("alloc_chrdev_region failed: %d\n", ret);
-		return ret;
+	result = alloc_chrdev_region(&kgsl_driver.major, 0, KGSL_DEVICE_MAX,
+				  KGSL_NAME);
+	if (result < 0) {
+		KGSL_CORE_ERR("alloc_chrdev_region failed err = %d\n", result);
+		goto err;
 	}
 
 	cdev_init(&kgsl_driver.cdev, &kgsl_fops);
 	kgsl_driver.cdev.owner = THIS_MODULE;
 	kgsl_driver.cdev.ops = &kgsl_fops;
-	ret = cdev_add(&kgsl_driver.cdev, MKDEV(MAJOR(kgsl_driver.major), 0),
+	result = cdev_add(&kgsl_driver.cdev, MKDEV(MAJOR(kgsl_driver.major), 0),
 		       KGSL_DEVICE_MAX);
 
-	if (ret) {
-		KGSL_CORE_ERR("cdev_add failed: %d\n", ret);
+	if (result) {
+		KGSL_CORE_ERR("kgsl: cdev_add() failed, dev_num= %d,"
+			     " result= %d\n", kgsl_driver.major, result);
 		goto err;
 	}
 
-	kgsl_driver.class = class_create(THIS_MODULE, CLASS_NAME);
+	kgsl_driver.class = class_create(THIS_MODULE, KGSL_NAME);
 
 	if (IS_ERR(kgsl_driver.class)) {
-		ret = PTR_ERR(kgsl_driver.class);
-		KGSL_CORE_ERR("class_create failed: %d\n", ret);
+		result = PTR_ERR(kgsl_driver.class);
+		KGSL_CORE_ERR("failed to create class %s", KGSL_NAME);
 		goto err;
 	}
 
@@ -1984,10 +2131,10 @@ kgsl_core_init(void)
 	   in sysfs */
 	kgsl_driver.virtdev.class = kgsl_driver.class;
 	dev_set_name(&kgsl_driver.virtdev, "kgsl");
-	ret = device_register(&kgsl_driver.virtdev);
-	if (ret) {
+	result = device_register(&kgsl_driver.virtdev);
+	if (result) {
 		KGSL_CORE_ERR("driver_register failed\n");
-		goto err_class;
+		goto err;
 	}
 
 	/* Make kobjects in the virtual device for storing statistics */
@@ -2006,103 +2153,26 @@ kgsl_core_init(void)
 	kgsl_sharedmem_init_sysfs();
 	kgsl_cffdump_init();
 
+	/* Generic device initialization */
+	atomic_set(&kgsl_driver.device_count, -1);
+
 	INIT_LIST_HEAD(&kgsl_driver.process_list);
 
-	ret = kgsl_ptdata_init();
-	if (ret)
+	result = kgsl_ptdata_init();
+	if (result)
 		goto err;
 
-	ret = kgsl_drm_init(kgsl_driver.pdev);
+	result = kgsl_drm_init(NULL);
 
-	if (ret)
-		goto err_dev;
+	if (result)
+		goto err;
 
 	return 0;
 
-err_dev:
-	device_unregister(&kgsl_driver.virtdev);
-err_class:
-	class_destroy(kgsl_driver.class);
 err:
-	unregister_chrdev_region(kgsl_driver.major, KGSL_DEVICE_MAX);
-	return ret;
-}
-
-static int kgsl_platform_remove(struct platform_device *pdev)
-{
-	pm_runtime_disable(&pdev->dev);
-
-	kgsl_sharedmem_uninit_sysfs();
-	kgsl_driver_cleanup();
-	kgsl_drm_exit();
-	kgsl_cffdump_destroy();
-
-	return 0;
-}
-
-static int __devinit kgsl_platform_probe(struct platform_device *pdev)
-{
-	int result = 0;
-
-	kgsl_driver.pdev = pdev;
-	pm_runtime_enable(&pdev->dev);
-
-	result = kgsl_core_init();
-	if (result)
-		goto done;
-
-	result = kgsl_yamato_init(pdev);
-
-	if (result)
-		goto done;
-
-	result = kgsl_g12_init(pdev);
-	if (result)
-		goto done;
-
-	/* The global_pt needs to be setup after all devices are loaded */
-	kgsl_driver.global_pt = kgsl_mmu_getpagetable(KGSL_MMU_GLOBAL_PT);
-	if (kgsl_driver.global_pt == NULL) {
-		result = -ENOMEM;
-		goto done;
-	}
-done:
-	if (result)
-		kgsl_platform_remove(pdev);
-
+	kgsl_core_exit();
 	return result;
 }
 
-static struct platform_driver kgsl_platform_driver = {
-	.probe = kgsl_platform_probe,
-	.remove = __devexit_p(kgsl_platform_remove),
-	.suspend = kgsl_suspend,
-	.resume = kgsl_resume,
-	.driver = {
-		.owner = THIS_MODULE,
-		.name = DRIVER_NAME,
-		.pm = &kgsl_dev_pm_ops,
-	}
-};
+device_initcall(kgsl_core_init);
 
-static int __init kgsl_mod_init(void)
-{
-	return platform_driver_register(&kgsl_platform_driver);
-}
-
-static void __exit kgsl_mod_exit(void)
-{
-	platform_driver_unregister(&kgsl_platform_driver);
-}
-
-#ifdef MODULE
-module_init(kgsl_mod_init);
-#else
-late_initcall(kgsl_mod_init);
-#endif
-module_exit(kgsl_mod_exit);
-
-MODULE_DESCRIPTION("Graphics driver for QSD8x50, MSM7x27, and MSM7x30");
-MODULE_VERSION("1.1");
-MODULE_LICENSE("GPL v2");
-MODULE_ALIAS("platform:kgsl");

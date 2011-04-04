@@ -142,6 +142,7 @@ struct kgsl_device {
 	unsigned int      chip_id;
 	struct kgsl_memregion regspace;
 	struct kgsl_memdesc memstore;
+	const char *iomemname;
 
 	struct kgsl_mmu 	  mmu;
 	struct completion hwaccess_gate;
@@ -160,6 +161,7 @@ struct kgsl_device {
 	unsigned int active_cnt;
 	struct completion suspend_gate;
 
+	wait_queue_head_t wait_queue;
 	struct workqueue_struct *work_queue;
 	struct platform_device *pdev;
 	struct completion recovery_gate;

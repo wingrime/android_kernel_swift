@@ -19,12 +19,11 @@
 #include <linux/uaccess.h>
 #include <linux/fs.h>
 #include <linux/io.h>
-#include <linux/irq.h>
-#include <linux/interrupt.h>
 #include <linux/sched.h>
 #include <linux/timer.h>
 #include <linux/workqueue.h>
 #include <linux/notifier.h>
+#include <linux/pm_runtime.h>
 
 #include <mach/msm_bus.h>
 #include <linux/vmalloc.h>
@@ -85,7 +84,7 @@
 
 static struct kgsl_yamato_device yamato_device = {
 	.dev = {
-		.name = "kgsl-3d0",
+		.name = DEVICE_3D0_NAME,
 		.id = KGSL_DEVICE_YAMATO,
 		.ver_major = DRIVER_VERSION_MAJOR,
 		.ver_minor = DRIVER_VERSION_MINOR,
@@ -114,12 +113,13 @@ static struct kgsl_yamato_device yamato_device = {
 		.pwrctrl = {
 			.pwr_rail = PWR_RAIL_GRP_CLK,
 			.regulator_name = "fs_gfx3d",
-			.irq_name = "kgsl_yamato_irq",
+			.irq_name = KGSL_3D0_IRQ,
 			.src_clk_name = "grp_src_clk",
 		},
 		.mutex = __MUTEX_INITIALIZER(yamato_device.dev.mutex),
 		.state = KGSL_STATE_INIT,
 		.active_cnt = 0,
+		.iomemname = KGSL_3D0_REG_MEMORY,
 	},
 	.gmemspace = {
 		.gpu_base = 0,
@@ -274,8 +274,6 @@ static int kgsl_yamato_cleanup_pt(struct kgsl_device *device,
 {
 	struct kgsl_yamato_device *yamato_device = KGSL_YAMATO_DEVICE(device);
 	struct kgsl_ringbuffer *rb = &yamato_device->ringbuffer;
-	if (device->mmu.defaultpagetable == pagetable)
-		device->mmu.defaultpagetable = NULL;
 
 	kgsl_mmu_unmap(pagetable, rb->buffer_desc.gpuaddr,
 			rb->buffer_desc.size);
@@ -306,9 +304,6 @@ static int kgsl_yamato_setup_pt(struct kgsl_device *device,
 #ifdef CONFIG_MSM_KGSL_MMU
 	BUG_ON(device->mmu.dummyspace.physaddr == 0);
 #endif
-	if (device->mmu.defaultpagetable == NULL)
-		device->mmu.defaultpagetable = pagetable;
-
 	result = kgsl_mmu_map_global(pagetable, &rb->buffer_desc,
 				     GSL_PT_PAGE_RV, flags);
 	if (result)
@@ -484,167 +479,54 @@ kgsl_yamato_getchipid(struct kgsl_device *device)
 	return chipid;
 }
 
-int __init
-kgsl_yamato_init(struct platform_device *pdev)
+static void __devinit kgsl_yamato_getfunctable(struct kgsl_functable *ftbl);
+
+static int __devinit
+kgsl_3d_probe(struct platform_device *pdev)
 {
-	struct kgsl_device *device = &yamato_device.dev;
+	struct kgsl_device *device;
 	int status = -EINVAL;
-	struct kgsl_memregion *regspace = &device->regspace;
-	struct resource *res = NULL;
-	struct kgsl_platform_data *pdata = pdev->dev.platform_data;
-	struct kgsl_device_platform_data *pdata_dev = pdata->dev_3d0;
 
-	status = kgsl_pwrctrl_init(device, pdev, pdata_dev);
+	device = (struct kgsl_device *)pdev->id_entry->driver_data;
+	device->pdev = pdev;
 
-	if (status)
-		return status;
-
-	init_waitqueue_head(&yamato_device.ib1_wq);
-	setup_timer(&device->idle_timer, kgsl_timer, (unsigned long)device);
-	status = kgsl_create_device_workqueue(device);
-	if (status)
-		goto error;
-	INIT_WORK(&device->idle_check_ws, kgsl_idle_check);
-
-	res = platform_get_resource_byname(kgsl_driver.pdev,
-					   IORESOURCE_MEM,
-					   "kgsl_reg_memory");
-
-	if (res == NULL) {
-		KGSL_DRV_ERR(device, "platform_get_resource_byname failed\n");
-		goto error_dest_work_q;
-	}
-
-	if (res->start == 0 || resource_size(res) == 0) {
-		KGSL_DRV_ERR(device, "dev %d invalid regspace\n", device->id);
-		goto error_dest_work_q;
-	}
-
-	regspace->mmio_phys_base = res->start;
-	regspace->sizebytes = resource_size(res);
-
-	if (!request_mem_region(regspace->mmio_phys_base,
-				regspace->sizebytes, DRIVER_NAME)) {
-		KGSL_DRV_ERR(device, "request_mem_region failed\n");
-		status = -ENODEV;
-		goto error_dest_work_q;
-	}
-
-	regspace->mmio_virt_base = ioremap(regspace->mmio_phys_base,
-					   regspace->sizebytes);
-	if (regspace->mmio_virt_base == NULL) {
-		KGSL_DRV_ERR(device, "ioremap failed\n");
-		status = -ENODEV;
-		goto error_release_mem;
-	}
-
-	status = request_irq(device->pwrctrl.interrupt_num, kgsl_yamato_isr,
-			     IRQF_TRIGGER_HIGH, DRIVER_NAME, device);
-	if (status) {
-		KGSL_DRV_ERR(device, "request_irq(%d) failed: %d\n",
-			device->pwrctrl.interrupt_num, status);
-		goto error_iounmap;
-	}
-	device->pwrctrl.have_irq = 1;
-	disable_irq(device->pwrctrl.interrupt_num);
-
-	KGSL_DRV_INFO(device, "dev %d regs phys 0x%08x size 0x%08x virt %p\n",
-		device->id, regspace->mmio_phys_base,
-		regspace->sizebytes, regspace->mmio_virt_base);
-
-	kgsl_cffdump_open(device->id);
-
-	init_completion(&device->hwaccess_gate);
-	init_completion(&device->suspend_gate);
 	init_completion(&device->recovery_gate);
-
-	ATOMIC_INIT_NOTIFIER_HEAD(&device->ts_notifier_list);
-	INIT_LIST_HEAD(&device->memqueue);
 
 	kgsl_yamato_getfunctable(&device->ftbl);
 
-	status = kgsl_mmu_init(device);
-	if (status != 0) {
-		status = -ENODEV;
-		goto error_free_irq;
-	}
-
-	status = kgsl_sharedmem_alloc_coherent(&device->memstore,
-					       sizeof(struct kgsl_devmemstore));
-
-	if (status != 0)  {
-		status = -ENODEV;
-		goto error_close_mmu;
-	}
 	status = kgsl_ringbuffer_init(device);
 	if (status != 0)
-		goto error_free_memstore;
+		goto error;
 
-	/* Register the device with the KGSL core */
-	device->pdev = pdev;
-	status = kgsl_register_device(device);
-
-	if (status != 0)
+	status = kgsl_device_probe(device, kgsl_yamato_isr);
+	if (status)
 		goto error_close_rb;
 
 	kgsl_postmortem_init(device);
 	kgsl_yamato_debugfs_init(device);
 
 	device->flags &= ~KGSL_FLAGS_SOFT_RESET;
-	wake_lock_init(&device->idle_wakelock, WAKE_LOCK_IDLE, device->name);
 	return 0;
 
 error_close_rb:
 	kgsl_ringbuffer_close(&yamato_device.ringbuffer);
-error_free_memstore:
-	kgsl_sharedmem_free(&device->memstore);
-error_close_mmu:
-	kgsl_mmu_close(device);
-error_free_irq:
-	free_irq(device->pwrctrl.interrupt_num, NULL);
-	device->pwrctrl.have_irq = 0;
-error_iounmap:
-	iounmap(regspace->mmio_virt_base);
-	regspace->mmio_virt_base = NULL;
-error_release_mem:
-	release_mem_region(regspace->mmio_phys_base, regspace->sizebytes);
-error_dest_work_q:
-	destroy_workqueue(device->work_queue);
-	device->work_queue = NULL;
 error:
+	device->pdev = NULL;
 	return status;
 }
 
-int kgsl_yamato_close(void)
+static int __devexit kgsl_3d_remove(struct platform_device *pdev)
 {
-	struct kgsl_device *device = &yamato_device.dev;
-	struct kgsl_memregion *regspace = &device->regspace;
+	struct kgsl_device *device = NULL;
+	struct kgsl_yamato_device *device_3d = NULL;
 
-	kgsl_unregister_device(device);
+	device = (struct kgsl_device *)pdev->id_entry->driver_data;
+	device_3d = KGSL_YAMATO_DEVICE(device);
 
-	kgsl_ringbuffer_close(&yamato_device.ringbuffer);
-	if (device->memstore.hostptr)
-		kgsl_sharedmem_free(&device->memstore);
+	kgsl_device_remove(device);
 
-	kgsl_mmu_close(device);
+	kgsl_ringbuffer_close(&device_3d->ringbuffer);
 
-	kgsl_cmdstream_close(device);
-
-	if (regspace->mmio_virt_base != NULL) {
-		iounmap(regspace->mmio_virt_base);
-		regspace->mmio_virt_base = NULL;
-		release_mem_region(regspace->mmio_phys_base,
-					regspace->sizebytes);
-	}
-	kgsl_pwrctrl_close(device);
-	kgsl_cffdump_close(device->id);
-
-	if (device->work_queue) {
-		destroy_workqueue(device->work_queue);
-		device->work_queue = NULL;
-	}
-
-	wake_lock_destroy(&device->idle_wakelock);
 	return 0;
 }
 
@@ -718,9 +600,6 @@ static int kgsl_yamato_start(struct kgsl_device *device, unsigned int init_ram)
 		kgsl_yamato_regwrite(device, REG_RBBM_PM_OVERRIDE2, 0);
 	else
 		kgsl_yamato_regwrite(device, REG_RBBM_PM_OVERRIDE2, 0x80);
-
-	kgsl_sharedmem_set(&device->memstore, 0, 0,
-			   device->memstore.size);
 
 	kgsl_sharedmem_writel(&device->memstore,
 			      KGSL_DEVICE_MEMSTORE_OFFSET(ref_wait_ts),
@@ -1245,7 +1124,7 @@ static int kgsl_yamato_waittimestamp(struct kgsl_device *device,
 		/* We need to make sure that the process is placed in wait-q
 		 * before its condition is called */
 		status = kgsl_wait_io_event_interruptible_timeout(
-				yamato_device->ib1_wq,
+				device->wait_queue,
 				kgsl_check_interrupt_timestamp(device,
 					timestamp), msecs_to_jiffies(msecs));
 		mutex_lock(&device->mutex);
@@ -1314,7 +1193,7 @@ static long kgsl_yamato_ioctl(struct kgsl_device_private *dev_priv,
 
 }
 
-void kgsl_yamato_getfunctable(struct kgsl_functable *ftbl)
+static void __devinit kgsl_yamato_getfunctable(struct kgsl_functable *ftbl)
 {
 	if (ftbl == NULL)
 		return;
@@ -1337,3 +1216,40 @@ void kgsl_yamato_getfunctable(struct kgsl_functable *ftbl)
 	ftbl->device_setup_pt = kgsl_yamato_setup_pt;
 	ftbl->device_cleanup_pt = kgsl_yamato_cleanup_pt;
 }
+
+static struct platform_device_id kgsl_3d_id_table[] = {
+	{ DEVICE_3D0_NAME, (kernel_ulong_t)&yamato_device.dev, },
+	{ },
+};
+MODULE_DEVICE_TABLE(platform, kgsl_3d_id_table);
+
+static struct platform_driver kgsl_3d_platform_driver = {
+	.probe = kgsl_3d_probe,
+	.remove = __devexit_p(kgsl_3d_remove),
+	.suspend = kgsl_suspend_driver,
+	.resume = kgsl_resume_driver,
+	.id_table = kgsl_3d_id_table,
+	.driver = {
+		.owner = THIS_MODULE,
+		.name = DEVICE_3D_NAME,
+		.pm = &kgsl_pm_ops,
+	}
+};
+
+static int __init kgsl_3d_init(void)
+{
+	return platform_driver_register(&kgsl_3d_platform_driver);
+}
+
+static void __exit kgsl_3d_exit(void)
+{
+	platform_driver_unregister(&kgsl_3d_platform_driver);
+}
+
+module_init(kgsl_3d_init);
+module_exit(kgsl_3d_exit);
+
+MODULE_DESCRIPTION("3D Graphics driver");
+MODULE_VERSION("1.2");
+MODULE_LICENSE("GPL v2");
+MODULE_ALIAS("platform:kgsl_3d");

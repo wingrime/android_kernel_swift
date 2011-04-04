@@ -1,4 +1,4 @@
-/* Copyright (c) 2010, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2010-2011, Code Aurora Forum. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -83,6 +83,7 @@ struct msm_battery_gauge {
 	int (*is_battery_present) (void);
 	int (*is_battery_temp_within_range) (void);
 	int (*is_battery_id_valid) (void);
+	int (*get_batt_remaining_capacity) (void);
 };
 /**
  * struct msm_charger_platform_data

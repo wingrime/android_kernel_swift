@@ -90,7 +90,8 @@
 #define VPE_CGC_ENABLE_VALUE          0xffff
 #define VPE_DEFAULT_SCALE_CONFIG      0x3c
 
-#define VPE_CLOCK_RATE   160000000
+#define VPE_NORMAL_MODE_CLOCK_RATE   150000000
+#define VPE_TURBO_MODE_CLOCK_RATE   200000000
 /**************************************************/
 /*********** Start of command id ******************/
 /**************************************************/
@@ -108,6 +109,8 @@ enum VPE_CMD_ID_ENUM {
 	VPE_ROTATION_CFG_TYPE, /* 10 */
 	VPE_AXI_OUT_CFG,
 	VPE_CMD_DIS_OFFSET_CFG,
+	VPE_ENABLE,
+	VPE_DISABLE,
 };
 
 /* Length of each command.  In bytes.  (payload only) */
@@ -143,6 +146,12 @@ enum VPE_MESSAGE_ID {
 	MSG_ID_VPE_OUTPUT_ST_R,
 };
 
+enum vpe_state {
+	VPE_STATE_IDLE,
+	VPE_STATE_INIT,
+	VPE_STATE_ACTIVE,
+};
+
 struct vpe_device_type {
 	/* device related. */
 	int   vpeirq;
@@ -172,7 +181,6 @@ struct vpe_ctrl_type {
 	uint32_t          out_h;  /* this is BEFORE rotation. */
 	uint32_t          out_w;  /* this is BEFORE rotation. */
 	uint32_t          dis_en;
-	uint32_t          state;
 	struct timespec   ts;
 	struct dis_offset_type   dis_offset;
 	uint32_t          pcbcr_before_dis;
@@ -180,6 +188,9 @@ struct vpe_ctrl_type {
 	int               output_type;
 	int               frame_pack;
 	uint8_t           pad_2k_bool;
+	enum vpe_state    state;
+	unsigned long     out_y_addr;
+	unsigned long     out_cbcr_addr;
 };
 
 /*

@@ -21,15 +21,17 @@
 #include <asm/mach/arch.h>
 #include <mach/board.h>
 #include <mach/msm_iomap.h>
-#include "devices.h"
 #include <linux/platform_device.h>
 #include <linux/io.h>
 #include <asm/hardware/cache-l2x0.h>
-#include "timer.h"
+#include <mach/socinfo.h>
 #include <linux/mtd/nand.h>
 #include <linux/mtd/partitions.h>
 #include <asm/mach/mmc.h>
-#include <mach/socinfo.h>
+#include <linux/gpio.h>
+#include "devices.h"
+#include "timer.h"
+#include "devices-msm7x2xa.h"
 
 #define MSM_EBI2_PHYS 0xa0d00000
 
@@ -148,6 +150,14 @@ static struct platform_device *rumi_sim_devices[] __initdata = {
 	&msm_gsbi1_qup_i2c_device,
 };
 
+static struct platform_device *surf_ffa_devices[] __initdata = {
+	&msm_device_dmov,
+	&msm_device_smd,
+	&msm_device_uart1,
+	&msm_gsbi0_qup_i2c_device,
+	&msm_gsbi1_qup_i2c_device,
+};
+
 static void __init msm_device_i2c_init(void){
 
 	msm_gsbi0_qup_i2c_device.dev.platform_data = &msm_gsbi0_qup_i2c_pdata;
@@ -169,7 +179,6 @@ static void __init msm7x27a_init_ebi2(void)
 		writel(ebi2_cfg, ebi2_cfg_ptr);
 		iounmap(ebi2_cfg_ptr);
 	}
-
 }
 
 static void __init msm7x2x_init_irq(void)
@@ -183,14 +192,20 @@ static void __init msm7x2x_init(void)
 	if (socinfo_init() < 0)
 		printk(KERN_ERR "%s: socinfo_init() failed!\n",
 		       __func__);
+	/* Common functions for SURF/FFA/RUMI3 */
+	msm_device_i2c_init();
+	msm7x27a_init_mmc();
+	msm7x27a_init_ebi2();
 
 	if (machine_is_msm7x27a_rumi3()) {
-		msm7x27a_init_ebi2();
-		msm_device_i2c_init();
 		platform_add_devices(rumi_sim_devices,
 				ARRAY_SIZE(rumi_sim_devices));
-		msm7x27a_init_mmc();
 	}
+	if (machine_is_msm7x27a_surf() || machine_is_msm7x27a_ffa()) {
+		platform_add_devices(surf_ffa_devices,
+				ARRAY_SIZE(surf_ffa_devices));
+	}
+
 	msm_clock_init(msm_clocks_7x27a, msm_num_clocks_7x27a);
 }
 
@@ -217,6 +232,28 @@ static void __init msm7x2x_map_io(void)
 }
 
 MACHINE_START(MSM7X27A_RUMI3, "QCT MSM7x27a RUMI3")
+#ifdef CONFIG_MSM_DEBUG_UART
+	.phys_io        = MSM_DEBUG_UART_PHYS,
+	.io_pg_offst    = ((MSM_DEBUG_UART_BASE) >> 18) & 0xfffc,
+#endif
+	.boot_params	= PHYS_OFFSET + 0x100,
+	.map_io		= msm7x2x_map_io,
+	.init_irq	= msm7x2x_init_irq,
+	.init_machine	= msm7x2x_init,
+	.timer		= &msm_timer,
+MACHINE_END
+MACHINE_START(MSM7X27A_SURF, "QCT MSM7x27a SURF")
+#ifdef CONFIG_MSM_DEBUG_UART
+	.phys_io        = MSM_DEBUG_UART_PHYS,
+	.io_pg_offst    = ((MSM_DEBUG_UART_BASE) >> 18) & 0xfffc,
+#endif
+	.boot_params	= PHYS_OFFSET + 0x100,
+	.map_io		= msm7x2x_map_io,
+	.init_irq	= msm7x2x_init_irq,
+	.init_machine	= msm7x2x_init,
+	.timer		= &msm_timer,
+MACHINE_END
+MACHINE_START(MSM7X27A_FFA, "QCT MSM7x27a FFA")
 #ifdef CONFIG_MSM_DEBUG_UART
 	.phys_io        = MSM_DEBUG_UART_PHYS,
 	.io_pg_offst    = ((MSM_DEBUG_UART_BASE) >> 18) & 0xfffc,

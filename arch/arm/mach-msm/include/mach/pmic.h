@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2010, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2009-2011, Code Aurora Forum. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -31,6 +31,17 @@
 #define __ARCH_ARM_MACH_PMIC_H
 
 #include <linux/types.h>
+
+enum spkr_ldo_v_sel {
+	VOLT_LEVEL_1_1V,
+	VOLT_LEVEL_1_2V,
+	VOLT_LEVEL_2_0V,
+};
+
+enum hp_spkr_left_right {
+	LEFT_HP_SPKR,
+	RIGHT_HP_SPKR,
+};
 
 enum spkr_left_right {
 	LEFT_SPKR,
@@ -633,4 +644,16 @@ int pmic_low_current_led_set_ext_signal(enum low_current_led led,
 int pmic_low_current_led_set_current(enum low_current_led led,
 		uint16_t milliamps);
 
+int pmic_spkr_set_vsel_ldo(enum spkr_left_right left_right,
+					enum spkr_ldo_v_sel vlt_cntrl);
+int pmic_spkr_set_boost(enum spkr_left_right left_right, uint enable);
+int pmic_spkr_bypass_en(enum spkr_left_right left_right, uint enable);
+int pmic_hp_spkr_mstr_en(enum hp_spkr_left_right left_right, uint enable);
+int pmic_hp_spkr_mute_en(enum hp_spkr_left_right left_right, uint enable);
+int pmic_hp_spkr_prm_in_en(enum hp_spkr_left_right left_right, uint enable);
+int pmic_hp_spkr_aux_in_en(enum hp_spkr_left_right left_right, uint enable);
+int pmic_hp_spkr_ctrl_prm_gain_input(enum hp_spkr_left_right left_right,
+							uint prm_gain_ctl);
+int pmic_hp_spkr_ctrl_aux_gain_input(enum hp_spkr_left_right left_right,
+							uint aux_gain_ctl);
 #endif

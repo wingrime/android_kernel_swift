@@ -444,6 +444,12 @@ static struct gpiomux_setting cam_active_3_cfg = {
 	.pull = GPIOMUX_PULL_UP,
 };
 
+static struct gpiomux_setting cam_active_4_cfg = {
+	.func = GPIOMUX_FUNC_GPIO,
+	.drv = GPIOMUX_DRV_2MA,
+	.pull = GPIOMUX_PULL_DOWN,
+};
+
 #ifdef CONFIG_MSM_GSBI9_UART
 static struct gpiomux_setting uart9dm_active = {
 	.func = GPIOMUX_FUNC_1,
@@ -1691,14 +1697,14 @@ static struct msm_gpiomux_config msm8x60_cam_configs[] __initdata = {
 	{
 		.gpio = 105,
 		.settings = {
-			[GPIOMUX_ACTIVE]    = &cam_active_2_cfg,
+			[GPIOMUX_ACTIVE]    = &cam_active_4_cfg,
 			[GPIOMUX_SUSPENDED] = &cam_suspend_cfg,
 		},
 	},
 	{
 		.gpio = 106,
 		.settings = {
-			[GPIOMUX_ACTIVE]    = &cam_active_2_cfg,
+			[GPIOMUX_ACTIVE]    = &cam_active_4_cfg,
 			[GPIOMUX_SUSPENDED] = &cam_suspend_cfg,
 		},
 	},
@@ -1735,14 +1741,14 @@ static struct msm_gpiomux_config msm_qt_cam_configs[] __initdata = {
 	{
 		.gpio = 105,
 		.settings = {
-			[GPIOMUX_ACTIVE]    = &cam_active_2_cfg,
+			[GPIOMUX_ACTIVE]    = &cam_active_4_cfg,
 			[GPIOMUX_SUSPENDED] = &cam_suspend_cfg,
 		},
 	},
 	{
 		.gpio = 106,
 		.settings = {
-			[GPIOMUX_ACTIVE]    = &cam_active_2_cfg,
+			[GPIOMUX_ACTIVE]    = &cam_active_4_cfg,
 			[GPIOMUX_SUSPENDED] = &cam_suspend_cfg,
 		},
 	},

@@ -1273,17 +1273,16 @@ error:
 }
 
 static int kgsl_get_phys_file(int fd, unsigned long *start, unsigned long *len,
-			      struct file **filep)
+			      unsigned long *vstart, struct file **filep)
 {
 	struct file *fbfile;
 	int put_needed;
-	unsigned long vstart = 0;
 	int ret = 0;
 	dev_t rdev;
 	struct fb_info *info;
 
 	*filep = NULL;
-	if (!get_pmem_file(fd, start, &vstart, len, filep))
+	if (!get_pmem_file(fd, start, vstart, len, filep))
 		return 0;
 
 	fbfile = fget_light(fd, &put_needed);
@@ -1297,6 +1296,7 @@ static int kgsl_get_phys_file(int fd, unsigned long *start, unsigned long *len,
 	if (info) {
 		*start = info->fix.smem_start;
 		*len = info->fix.smem_len;
+		*vstart = (unsigned long)__va(info->fix.smem_start);
 		ret = 0;
 	} else {
 		KGSL_CORE_ERR("framebuffer minor %d not found\n",
@@ -1322,7 +1322,7 @@ static long kgsl_ioctl_map_user_mem(struct kgsl_device_private *dev_priv,
 	struct kgsl_map_user_mem *param = data;
 	struct kgsl_mem_entry *entry = NULL;
 	struct kgsl_process_private *private = dev_priv->process_priv;
-	unsigned long start = 0, len = 0;
+	unsigned long start = 0, len = 0, vstart = 0;
 	struct file *file_ptr = NULL;
 	uint64_t total_offset;
 
@@ -1331,7 +1331,7 @@ static long kgsl_ioctl_map_user_mem(struct kgsl_device_private *dev_priv,
 	switch (param->memtype) {
 	case KGSL_USER_MEM_TYPE_PMEM:
 		if (kgsl_get_phys_file(param->fd, &start,
-					&len, &file_ptr)) {
+					&len, &vstart, &file_ptr)) {
 			result = -EINVAL;
 			goto error;
 		}
@@ -1447,7 +1447,11 @@ static long kgsl_ioctl_map_user_mem(struct kgsl_device_private *dev_priv,
 	entry->memdesc.size = ALIGN(param->len, PAGE_SIZE);
 	/* ensure that MMU mappings are at page boundary */
 	entry->memdesc.physaddr = start + (param->offset & PAGE_MASK);
-	entry->memdesc.hostptr = __va(entry->memdesc.physaddr);
+	if (param->memtype == KGSL_USER_MEM_TYPE_PMEM)
+		entry->memdesc.hostptr =
+			(void *)(vstart + (param->offset & PAGE_MASK));
+	else
+		entry->memdesc.hostptr = __va(entry->memdesc.physaddr);
 	if (param->memtype != KGSL_USER_MEM_TYPE_PMEM) {
 		result = kgsl_mmu_map(private->pagetable,
 				entry->memdesc.physaddr, entry->memdesc.size,

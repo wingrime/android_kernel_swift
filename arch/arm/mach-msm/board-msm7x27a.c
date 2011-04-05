@@ -21,6 +21,12 @@
 #include <asm/mach/arch.h>
 #include <mach/board.h>
 #include <mach/msm_iomap.h>
+#include <mach/msm_hsusb.h>
+#include <mach/rpc_hsusb.h>
+#include <mach/rpc_pmapp.h>
+#include <mach/usbdiag.h>
+#include <mach/usb_gadget_fserial.h>
+#include <linux/usb/android_composite.h>
 #include <linux/platform_device.h>
 #include <linux/io.h>
 #include <asm/hardware/cache-l2x0.h>
@@ -52,6 +58,133 @@ static struct msm_i2c_platform_data msm_gsbi1_qup_i2c_pdata = {
 	.pclk			= "gsbi_qup_pclk",
 	.msm_i2c_config_gpio	= gsbi_qup_i2c_gpio_config,
 };
+
+static char *usb_functions_default[] = {
+	"diag",
+	"modem",
+	"nmea",
+	"rmnet",
+	"usb_mass_storage",
+};
+
+static char *usb_functions_default_adb[] = {
+	"diag",
+	"adb",
+	"modem",
+	"nmea",
+	"rmnet",
+	"usb_mass_storage",
+};
+
+static char *usb_functions_rndis[] = {
+	"rndis",
+};
+
+static char *usb_functions_rndis_adb[] = {
+	"rndis",
+	"adb",
+};
+
+static char *usb_functions_all[] = {
+#ifdef CONFIG_USB_ANDROID_RNDIS
+	"rndis",
+#endif
+#ifdef CONFIG_USB_ANDROID_DIAG
+	"diag",
+#endif
+	"adb",
+#ifdef CONFIG_USB_F_SERIAL
+	"modem",
+	"nmea",
+#endif
+#ifdef CONFIG_USB_ANDROID_RMNET
+	"rmnet",
+#endif
+	"usb_mass_storage",
+};
+
+static struct android_usb_product usb_products[] = {
+	{
+		.product_id     = 0x9026,
+		.num_functions	= ARRAY_SIZE(usb_functions_default),
+		.functions      = usb_functions_default,
+	},
+	{
+		.product_id	= 0x9025,
+		.num_functions	= ARRAY_SIZE(usb_functions_default_adb),
+		.functions	= usb_functions_default_adb,
+	},
+	{
+		.product_id	= 0xf00e,
+		.num_functions	= ARRAY_SIZE(usb_functions_rndis),
+		.functions	= usb_functions_rndis,
+	},
+	{
+		.product_id	= 0x9024,
+		.num_functions	= ARRAY_SIZE(usb_functions_rndis_adb),
+		.functions	= usb_functions_rndis_adb,
+	},
+};
+
+static struct usb_mass_storage_platform_data mass_storage_pdata = {
+	.nluns		= 1,
+	.vendor		= "Qualcomm Incorporated",
+	.product	= "Mass storage",
+	.release	= 0x0100,
+
+};
+
+static struct platform_device usb_mass_storage_device = {
+	.name	= "usb_mass_storage",
+	.id	= -1,
+	.dev	= {
+		.platform_data = &mass_storage_pdata,
+	},
+};
+
+static struct android_usb_platform_data android_usb_pdata = {
+	.vendor_id	= 0x05C6,
+	.product_id	= 0x9026,
+	.version	= 0x0100,
+	.product_name	= "Qualcomm HSUSB Device",
+	.manufacturer_name = "Qualcomm Incorporated",
+	.num_products = ARRAY_SIZE(usb_products),
+	.products = usb_products,
+	.num_functions = ARRAY_SIZE(usb_functions_all),
+	.functions = usb_functions_all,
+	.serial_number = "1234567890ABCDEF",
+};
+
+static struct platform_device android_usb_device = {
+	.name	= "android_usb",
+	.id	= -1,
+	.dev	= {
+		.platform_data = &android_usb_pdata,
+	},
+};
+
+static struct usb_ether_platform_data rndis_pdata = {
+	.vendorID	= 0x05C6,
+	.vendorDescr	= "Qualcomm Incorporated",
+};
+
+static struct platform_device rndis_device = {
+	.name	= "rndis",
+	.id	= -1,
+	.dev	= {
+		.platform_data = &rndis_pdata,
+	},
+};
+
+#ifdef CONFIG_USB_MSM_OTG_72K
+static struct msm_otg_platform_data msm_otg_pdata = {
+	.core_clk		 = 1,
+	.pemp_level		 = PRE_EMPHASIS_WITH_20_PERCENT,
+	.cdr_autoreset		 = CDR_AUTO_RESET_DISABLE,
+	.drv_ampl		 = HS_DRV_AMPLITUDE_DEFAULT,
+	.se1_gating		 = SE1_GATING_DISABLE,
+};
+#endif
 
 static struct resource smc91x_resources[] = {
 	[0] = {
@@ -156,6 +289,13 @@ static struct platform_device *surf_ffa_devices[] __initdata = {
 	&msm_device_uart1,
 	&msm_gsbi0_qup_i2c_device,
 	&msm_gsbi1_qup_i2c_device,
+	&msm_device_otg,
+	&msm_device_gadget_peripheral,
+	&android_usb_device,
+	&usb_mass_storage_device,
+	&rndis_device,
+	&usb_diag_device,
+	&usb_gadget_fserial_device,
 };
 
 static void __init msm_device_i2c_init(void){
@@ -202,6 +342,9 @@ static void __init msm7x2x_init(void)
 				ARRAY_SIZE(rumi_sim_devices));
 	}
 	if (machine_is_msm7x27a_surf() || machine_is_msm7x27a_ffa()) {
+#ifdef CONFIG_USB_MSM_OTG_72K
+		msm_device_otg.dev.platform_data = &msm_otg_pdata;
+#endif
 		platform_add_devices(surf_ffa_devices,
 				ARRAY_SIZE(surf_ffa_devices));
 	}

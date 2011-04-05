@@ -24,6 +24,8 @@
 #include <mach/dma.h>
 #include <asm/mach/flash.h>
 #include <asm/mach/mmc.h>
+#include <mach/usbdiag.h>
+#include <mach/usb_gadget_fserial.h>
 
 #include "clock.h"
 #include "clock-voter.h"
@@ -97,6 +99,77 @@ struct platform_device msm_gsbi1_qup_i2c_device = {
 	.resource	= gsbi1_qup_i2c_resources,
 };
 
+#define MSM_HSUSB_PHYS        0xA0800000
+static struct resource resources_hsusb_otg[] = {
+	{
+		.start	= MSM_HSUSB_PHYS,
+		.end	= MSM_HSUSB_PHYS + SZ_1K - 1,
+		.flags	= IORESOURCE_MEM,
+	},
+	{
+		.start	= INT_USB_HS,
+		.end	= INT_USB_HS,
+		.flags	= IORESOURCE_IRQ,
+	},
+};
+
+static u64 dma_mask = 0xffffffffULL;
+struct platform_device msm_device_otg = {
+	.name		= "msm_otg",
+	.id		= -1,
+	.num_resources	= ARRAY_SIZE(resources_hsusb_otg),
+	.resource	= resources_hsusb_otg,
+	.dev		= {
+		.dma_mask		= &dma_mask,
+		.coherent_dma_mask	= 0xffffffffULL,
+	},
+};
+
+static struct resource resources_gadget_peripheral[] = {
+	{
+		.start	= MSM_HSUSB_PHYS,
+		.end	= MSM_HSUSB_PHYS + SZ_1K - 1,
+		.flags	= IORESOURCE_MEM,
+	},
+	{
+		.start	= INT_USB_HS,
+		.end	= INT_USB_HS,
+		.flags	= IORESOURCE_IRQ,
+	},
+};
+
+struct platform_device msm_device_gadget_peripheral = {
+	.name		= "msm_hsusb",
+	.id		= -1,
+	.num_resources	= ARRAY_SIZE(resources_gadget_peripheral),
+	.resource	= resources_gadget_peripheral,
+	.dev		= {
+		.dma_mask		= &dma_mask,
+		.coherent_dma_mask	= 0xffffffffULL,
+	},
+};
+struct usb_diag_platform_data usb_diag_pdata = {
+	.ch_name = DIAG_LEGACY,
+};
+
+struct platform_device usb_diag_device = {
+	.name	= "usb_diag",
+	.id	= -1,
+	.dev	= {
+		.platform_data = &usb_diag_pdata,
+	},
+};
+static struct usb_gadget_fserial_platform_data fserial_pdata = {
+	.no_ports	= 2,
+};
+
+struct platform_device usb_gadget_fserial_device = {
+	.name	= "usb_fserial",
+	.id	= -1,
+	.dev	= {
+		.platform_data = &fserial_pdata,
+	},
+};
 static struct resource msm_dmov_resource[] = {
 	{
 		.start	= INT_ADM_AARM,

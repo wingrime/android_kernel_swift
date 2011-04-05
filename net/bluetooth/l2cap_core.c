@@ -5795,6 +5795,9 @@ void l2cap_amp_physical_complete(int result, u8 local_id, u8 remote_id,
 			l2cap_rmem_available(sk))
 			l2cap_ertm_tx(sk, 0, 0,
 					L2CAP_ERTM_EVENT_LOCAL_BUSY_CLEAR);
+
+		/* Restart data transmission */
+		l2cap_ertm_send_txq(sk);
 	}
 
 	release_sock(sk);

@@ -240,7 +240,7 @@ static struct msm_clock msm_clocks[] = {
 		.freq = DGT_HZ >> MSM_DGT_SHIFT,
 		.index = MSM_CLOCK_DGT,
 		.shift = MSM_DGT_SHIFT,
-		.write_delay = 2,
+		.write_delay = 9,
 	}
 };
 

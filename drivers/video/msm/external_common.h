@@ -218,6 +218,7 @@ struct external_common_state_type {
 	uint8 speaker_allocation_block;
 	uint16 video_latency, audio_latency;
 	uint8 audio_data_block_cnt;
+	boolean present_3d;
 	uint32 audio_data_blocks[16];
 	int (*read_edid_block)(int block, uint8 *edid_buf);
 	int (*hpd_feature)(int on);

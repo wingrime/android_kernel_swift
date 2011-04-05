@@ -362,6 +362,8 @@ void mdp4_overlay0_done_mddi(struct mdp_dma_data *dma)
 	if (busy_wait_cnt)
 		busy_wait_cnt--;
 
+	pr_debug("%s: ISR-done\n", __func__);
+
 	if (mddi_pipe->blt_addr) {
 		if (mddi_pipe->blt_cnt == 0) {
 			mdp4_overlayproc_cfg(mddi_pipe);
@@ -388,6 +390,8 @@ void mdp4_mddi_overlay_restore(void)
 	if (mddi_mfd == NULL)
 		return;
 
+	pr_debug("%s: resotre, pid=%d\n", __func__, current->pid);
+
 	if (mddi_mfd->panel_power_on == 0)
 		return;
 	if (mddi_mfd && mddi_pipe) {
@@ -411,6 +415,7 @@ void mdp4_mddi_dma_busy_wait(struct msm_fb_data_type *mfd)
 	unsigned long flag;
 	int need_wait = 0;
 
+	pr_debug("%s: START, pid=%d\n", __func__, current->pid);
 	spin_lock_irqsave(&mdp_spin_lock, flag);
 	if (mfd->dma->busy == TRUE) {
 		if (busy_wait_cnt == 0)
@@ -423,19 +428,23 @@ void mdp4_mddi_dma_busy_wait(struct msm_fb_data_type *mfd)
 
 	if (need_wait) {
 		/* wait until DMA finishes the current job */
+		pr_debug("%s: PENDING, pid=%d\n", __func__, current->pid);
 		wait_for_completion(&mfd->dma->comp);
 	}
+	pr_debug("%s: DONE, pid=%d\n", __func__, current->pid);
 }
 
 void mdp4_mddi_kickoff_video(struct msm_fb_data_type *mfd,
 				struct mdp4_overlay_pipe *pipe)
 {
+	pr_debug("%s: pid=%d\n", __func__, current->pid);
 	mdp4_mddi_overlay_kickoff(mfd, pipe);
 }
 
 void mdp4_mddi_kickoff_ui(struct msm_fb_data_type *mfd,
 				struct mdp4_overlay_pipe *pipe)
 {
+	pr_debug("%s: pid=%d\n", __func__, current->pid);
 	mdp4_mddi_overlay_kickoff(mfd, pipe);
 }
 

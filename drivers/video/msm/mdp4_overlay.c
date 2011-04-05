@@ -1890,6 +1890,7 @@ int mdp4_overlay_unset(struct fb_info *info, int ndx)
 {
 	struct msm_fb_data_type *mfd = (struct msm_fb_data_type *)info->par;
 	struct mdp4_overlay_pipe *pipe;
+	uint32 flags;
 
 	if (mfd == NULL)
 		return -ENODEV;
@@ -1938,10 +1939,21 @@ int mdp4_overlay_unset(struct fb_info *info, int ndx)
 				mdp4_mddi_overlay_restore();
 		}
 #endif
-		else	/* LCDC, MIPI_VIDEO panel */
-			mdp4_overlay_reg_flush(pipe, 0);
-	} else	/* mixer1, DTV, ATV */
-		mdp4_overlay_reg_flush(pipe, 0);
+		else {	/* LCDC, MIPI_VIDEO panel */
+			flags = pipe->flags;
+			pipe->flags &= ~MDP_OV_PLAY_NOWAIT;
+			mdp4_overlay_vsync_push(mfd, pipe);
+			pipe->flags = flags;
+		}
+	}
+#ifdef CONFIG_FB_MSM_DTV
+	else {	/* mixer1, DTV, ATV */
+		flags = pipe->flags;
+		pipe->flags &= ~MDP_OV_PLAY_NOWAIT;
+		mdp4_overlay_dtv_vsync_push(mfd, pipe);
+		pipe->flags = flags;
+	}
+#endif
 
 	mdp4_stat.overlay_unset[pipe->mixer_num]++;
 
@@ -2077,7 +2089,7 @@ int mdp4_overlay_play(struct fb_info *info, struct msmfb_overlay_data *req,
 		/* enternal interface */
 		if (ctrl->panel_mode & MDP4_PANEL_DTV)
 #ifdef CONFIG_FB_MSM_DTV
-			mdp4_overlay_dtv_vsync_push(mfd, pipe);
+			mdp4_overlay_dtv_ov_done_push(mfd, pipe);
 #else
 			mdp4_overlay_reg_flush(pipe, 1);
 #endif

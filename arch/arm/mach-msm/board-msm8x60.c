@@ -8080,22 +8080,6 @@ static struct msm_bus_vectors mdp_1080p_vectors[] = {
 	},
 };
 
-static struct msm_bus_vectors mdp_rgb_vectors[] = {
-	/* RGB playing on VG or RGB pipe, might be on SMI */
-	{
-		.src = MSM_BUS_MASTER_MDP_PORT0,
-		.dst = MSM_BUS_SLAVE_SMI,
-		.ab = 575424000,
-		.ib = 719280000,
-	},
-	/* FB on EBI, request for EBI too*/
-	{
-		.src = MSM_BUS_MASTER_MDP_PORT0,
-		.dst = MSM_BUS_SLAVE_EBI_CH0,
-		.ab = 575424000,
-		.ib = 719280000,
-	},
-};
 #else
 static struct msm_bus_vectors mdp_init_vectors[] = {
 	/* For now, 0th array entry is reserved.
@@ -8199,22 +8183,6 @@ static struct msm_bus_vectors mdp_1080p_vectors[] = {
 	},
 };
 
-static struct msm_bus_vectors mdp_rgb_vectors[] = {
-	/* RGB playing on VG or RGB pipe, might be on SMI */
-	{
-		.src = MSM_BUS_MASTER_MDP_PORT0,
-		.dst = MSM_BUS_SLAVE_SMI,
-		.ab = 334080000,
-		.ib = 417600000,
-	},
-	/* FB on EBI, request for EBI too*/
-	{
-		.src = MSM_BUS_MASTER_MDP_PORT0,
-		.dst = MSM_BUS_SLAVE_EBI_CH0,
-		.ab = 334080000,
-		.ib = 417600000,
-	},
-};
 #endif
 static struct msm_bus_paths mdp_bus_scale_usecases[] = {
 	{
@@ -8240,10 +8208,6 @@ static struct msm_bus_paths mdp_bus_scale_usecases[] = {
 	{
 		ARRAY_SIZE(mdp_1080p_vectors),
 		mdp_1080p_vectors,
-	},
-	{
-		ARRAY_SIZE(mdp_rgb_vectors),
-		mdp_rgb_vectors,
 	},
 };
 static struct msm_bus_scale_pdata mdp_bus_scale_pdata = {
@@ -8427,7 +8391,6 @@ int mdp_core_clk_rate_table[] = {
 	59080000,
 	59080000,
 	85330000,
-	200000000,
 	200000000,
 };
 static struct msm_panel_common_pdata mdp_pdata = {

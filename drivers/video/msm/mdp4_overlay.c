@@ -1750,17 +1750,17 @@ int mdp4_overlay_get(struct fb_info *info, struct mdp_overlay *req)
 
 #define OVERLAY_VGA_SIZE	0x04B000
 #define OVERLAY_720P_TILE_SIZE  0x0E6000
+#define OVERLAY_WSVGA_SIZE 0x98000 /* 1024x608, align 600 to 32bit */
 #define OVERLAY_PERF_LEVEL1	1
 #define OVERLAY_PERF_LEVEL2	2
 #define OVERLAY_PERF_LEVEL3	3
 #define OVERLAY_PERF_LEVEL4	4
 
 #ifdef CONFIG_MSM_BUS_SCALING
-#define OVERLAY_BUS_SCALE_TABLE_BASE	7
+#define OVERLAY_BUS_SCALE_TABLE_BASE	6
 #endif
 
-static uint32 mdp4_overlay_get_perf_level(uint32 width, uint32 height,
-					  uint32 format)
+static int mdp4_overlay_is_rgb_type(int format)
 {
 	switch (format) {
 	case MDP_RGB_565:
@@ -1771,25 +1771,37 @@ static uint32 mdp4_overlay_get_perf_level(uint32 width, uint32 height,
 	case MDP_RGBA_8888:
 	case MDP_BGRA_8888:
 	case MDP_RGBX_8888:
-		return OVERLAY_PERF_LEVEL1;
+		return 1;
+	default:
+		return 0;
 	}
+}
+
+static uint32 mdp4_overlay_get_perf_level(uint32 width, uint32 height,
+					  uint32 format, int is_fg)
+{
+	if (mdp4_overlay_is_rgb_type(format) && is_fg &&
+			((width * height) <= OVERLAY_WSVGA_SIZE))
+		return OVERLAY_PERF_LEVEL4;
+	else if (mdp4_overlay_is_rgb_type(format))
+		return OVERLAY_PERF_LEVEL1;
 
 	if (ctrl->ov_pipe[OVERLAY_PIPE_VG1].ref_cnt &&
 		ctrl->ov_pipe[OVERLAY_PIPE_VG2].ref_cnt)
 		return OVERLAY_PERF_LEVEL1;
 
 	if (width*height <= OVERLAY_VGA_SIZE)
-		return OVERLAY_PERF_LEVEL4;
-	else if (width*height <= OVERLAY_720P_TILE_SIZE)
 		return OVERLAY_PERF_LEVEL3;
-	else
+	else if (width*height <= OVERLAY_720P_TILE_SIZE)
 		return OVERLAY_PERF_LEVEL2;
+	else
+		return OVERLAY_PERF_LEVEL1;
 }
 
 int mdp4_overlay_set(struct fb_info *info, struct mdp_overlay *req)
 {
 	struct msm_fb_data_type *mfd = (struct msm_fb_data_type *)info->par;
-	int ret, mixer;
+	int ret, mixer, is_fg = 0;
 	struct mdp4_overlay_pipe *pipe;
 
 	if (mfd == NULL) {
@@ -1805,9 +1817,13 @@ int mdp4_overlay_set(struct fb_info *info, struct mdp_overlay *req)
 		return -EINTR;
 	}
 
+	if (req->is_fg &&
+			((req->alpha & 0x0ff) == 0xff))
+		is_fg = 1;
 	perf_level = mdp4_overlay_get_perf_level(req->src.width,
 						req->src.height,
-						req->src.format);
+						req->src.format,
+						is_fg);
 
 	if ((mfd->panel_info.type == LCDC_PANEL) && (req->src_rect.h >
 		req->dst_rect.h || req->src_rect.w > req->dst_rect.w)) {

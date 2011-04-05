@@ -19,7 +19,56 @@
 
 #include "qs_s5k4e1.h"
 
-struct qs_s5k4e1_i2c_reg_conf qs_s5k4e1_prev_settings_common[] = {
+struct qs_s5k4e1_i2c_reg_conf qs_s5k4e1_prev_settings_3d[] = {
+	{0x0100, 0x00},
+	/*Frame Length*/
+	{0x0340, 0x04},
+	{0x0341, 0xB4},
+	/*Line Length*/
+	{0x0342, 0x0A},
+	{0x0343, 0xB2},
+	{0x3030, 0x06},
+	{0x301B, 0x75},
+	{0x30BC, 0xB0},
+	{0x301C, 0x04},
+	{0x0202, 0x04},
+	{0x0203, 0x12},
+	{0x0204, 0x00},
+	{0x0205, 0x80},
+	{0x0306, 0x00},
+	{0x0307, 0x6b},
+	{0x30F1, 0x70},
+/*MIPI Size Setting*/
+	{0x30A9, 0x01},
+	{0x300E, 0xE9},
+	{0x0387, 0x01},
+	{0x0344, 0x03},
+	{0x0345, 0x38},
+	{0x0348, 0x06},
+	{0x0349, 0xf7},
+	{0x0346, 0x01},
+	{0x0347, 0xb8},
+	{0x034A, 0x05},
+	{0x034B, 0xef},
+	{0x0380, 0x00},
+	{0x0381, 0x01},
+	{0x0382, 0x00},
+	{0x0383, 0x01},
+	{0x0384, 0x00},
+	{0x0385, 0x01},
+	{0x0386, 0x00},
+	{0x0387, 0x01},
+	{0x034C, 0x03},
+	{0x034D, 0xc0},
+	{0x034E, 0x04},
+	{0x034F, 0x38},
+	{0x30BF, 0xAB},
+	{0x30C0, 0xc0},
+	{0x30C8, 0x04},
+	{0x30C9, 0xb0},
+};
+
+struct qs_s5k4e1_i2c_reg_conf qs_s5k4e1_prev_settings_2d[] = {
 	{0x0100, 0x00},
 	{0x0340, 0x03},
 	{0x0341, 0xe0},
@@ -217,17 +266,93 @@ struct qs_s5k4e1_i2c_reg_conf qs_s5k4e1_recommend_settings[] = {
 
 };
 
-struct qs_s5k4e1_i2c_reg_conf qs_s5k4e1_lenshading_settings[] = {
-	{0x3200, 0x00},
+const struct
+qs_s5k4e1_i2c_reg_conf qs_s5k4e1_lenshading_settings[4][LENS_SHADE_TABLE] = {
+	{/*2D Preview*/
+		{0x3097, 0x52},/*sh4ch_blk_width = 82*/
+		{0x3098, 0x3e},/*sh4ch_blk_height = 62*/
+		{0x3099, 0x03},/*sh4ch_step_x msb (sh4ch_step_x = 799)*/
+		{0x309a, 0x1f},/*sh4ch_step_x lsb*/
+		{0x309b, 0x04},/*sh4ch_step_y msb (sh4ch_step_y = 1057)*/
+		{0x309c, 0x21},/*sh4ch_step_y lsb*/
+		{0x309d, 0x00},/*sh4ch_start_blk_cnt_x = 0*/
+		{0x309e, 0x00},/*sh4ch_start_int_cnt_x = 0*/
+		{0x309f, 0x00},/*sh4ch_start_frac_cnt_x msb (0)*/
+		{0x30a0, 0x00},/*sh4ch_start_frac_cnt_x lsb*/
+		{0x30a1, 0x00},/*sh4ch_start_blk_cnt_y = 0*/
+		{0x30a2, 0x00},/*sh4ch_start_int_cnt_y = 0*/
+		{0x30a3, 0x00},/*sh4ch_start_frac_cnt_y msb (0)*/
+		{0x30a4, 0x00},/*sh4ch_start_frac_cnt_y lsb*/
+		{0x30a5, 0x01},
+		{0x30a6, 0x00},/*gs_pedestal	= 64*/
+	},
+	{/*2D Snapshot*/
+		{0x3097, 0x52},/*sh4ch_blk_width = 82*/
+		{0x3098, 0x7b},/*sh4ch_blk_height = 123*/
+		{0x3099, 0x03},/*sh4ch_step_x msb (sh4ch_step_x = 799)*/
+		{0x309a, 0x1f},/*sh4ch_step_x lsb*/
+		{0x309b, 0x02},/*sh4ch_step_y msb (sh4ch_step_y = 533)*/
+		{0x309c, 0x15},/*sh4ch_step_y lsb*/
+		{0x309d, 0x00},/*sh4ch_start_blk_cnt_x = 0*/
+		{0x309e, 0x00},/*sh4ch_start_int_cnt_x = 0*/
+		{0x309f, 0x00},/*sh4ch_start_frac_cnt_x msb (0)*/
+		{0x30a0, 0x00},/*sh4ch_start_frac_cnt_x lsb*/
+		{0x30a1, 0x00},/*sh4ch_start_blk_cnt_y = 0*/
+		{0x30a2, 0x00},/*sh4ch_start_int_cnt_y = 0*/
+		{0x30a3, 0x00},/*sh4ch_start_frac_cnt_y msb (0)*/
+		{0x30a4, 0x00},/*sh4ch_start_frac_cnt_y lsb*/
+		{0x30a5, 0x01},
+		{0x30a6, 0x00},/*gs_pedestal	= 64*/
+	},
+
+	{/*3D Preview*/
+		{0x3097, 0x52},/*sh4ch_blk_width = 82*/
+		{0x3098, 0x7b},/*sh4ch_blk_height = 123*/
+		{0x3099, 0x03},/*sh4ch_step_x msb (sh4ch_step_x = 799)*/
+		{0x309a, 0x1f},/*sh4ch_step_x lsb*/
+		{0x309b, 0x02},/*sh4ch_step_y msb (sh4ch_step_y = 533)*/
+		{0x309c, 0x15},/*sh4ch_step_y lsb*/
+		{0x309d, 0x02},/*sh4ch_start_blk_cnt_x = 2*/
+		{0x309e, 0x05},/*sh4ch_start_int_cnt_x = 5*/
+		{0x309f, 0x06},/*sh4ch_start_frac_cnt_x msb (1598)*/
+		{0x30a0, 0x3e},/*sh4ch_start_frac_cnt_x lsb*/
+		{0x30a1, 0x47},/*sh4ch_start_blk_cnt_y = 71*/
+		{0x30a2, 0x03},/*sh4ch_start_int_cnt_y = 3*/
+		{0x30a3, 0x93},/*sh4ch_start_frac_cnt_y msb (1598)*/
+		{0x30a4, 0xd3},/*sh4ch_start_frac_cnt_y lsb*/
+		{0x30a5, 0x01},
+		{0x30a6, 0x00},/*gs_pedestal	= 64*/
+	},
+
+	{/*3D Snapshot*/
+		{0x3097, 0x52},/*sh4ch_blk_width = 82*/
+		{0x3098, 0x7b},/*sh4ch_blk_height = 123*/
+		{0x3099, 0x03},/*sh4ch_step_x msb (sh4ch_step_x = 799)*/
+		{0x309a, 0x1f},/*sh4ch_step_x lsb*/
+		{0x309b, 0x02},/*sh4ch_step_y msb (sh4ch_step_y = 533)*/
+		{0x309c, 0x15},/*sh4ch_step_y lsb*/
+		{0x309d, 0x3c},/*sh4ch_start_blk_cnt_x = 60*/
+		{0x309e, 0x01},/*sh4ch_start_int_cnt_x = 1*/
+		{0x309f, 0xbb},/*sh4ch_start_frac_cnt_x msb (47940)*/
+		{0x30a0, 0x44},/*sh4ch_start_frac_cnt_x lsb*/
+		{0x30a1, 0x0f},/*sh4ch_start_blk_cnt_y = 15*/
+		{0x30a2, 0x03},/*sh4ch_start_int_cnt_y = 3*/
+		{0x30a3, 0x1f},/*sh4ch_start_frac_cnt_y msb (47940)*/
+		{0x30a4, 0x3b},/*sh4ch_start_frac_cnt_y lsb*/
+		{0x30a5, 0x01},
+		{0x30a6, 0x00},/*gs_pedestal	= 64*/
+	},
+
 };
 
+
 struct qs_s5k4e1_i2c_conf_array qs_s5k4e1_confs[] = {
-	{&qs_s5k4e1_prev_settings_common[0], \
-		ARRAY_SIZE(qs_s5k4e1_prev_settings_common)},
+	{&qs_s5k4e1_prev_settings_2d[0], \
+		ARRAY_SIZE(qs_s5k4e1_prev_settings_2d)},
 	{&qs_s5k4e1_snap_settings_2d[0], \
 		ARRAY_SIZE(qs_s5k4e1_snap_settings_2d)},
-	{&qs_s5k4e1_prev_settings_common[0], \
-		ARRAY_SIZE(qs_s5k4e1_prev_settings_common)},
+	{&qs_s5k4e1_prev_settings_3d[0], \
+		ARRAY_SIZE(qs_s5k4e1_prev_settings_3d)},
 	{&qs_s5k4e1_snap_settings_3d[0], \
 		ARRAY_SIZE(qs_s5k4e1_snap_settings_3d)},
 };
@@ -235,6 +360,6 @@ struct qs_s5k4e1_reg qs_s5k4e1_regs = {
 	.rec_settings = &qs_s5k4e1_recommend_settings[0],
 	.rec_size = ARRAY_SIZE(qs_s5k4e1_recommend_settings),
 	.reg_lens = &qs_s5k4e1_lenshading_settings[0],
-	.reg_lens_size = ARRAY_SIZE(qs_s5k4e1_lenshading_settings),
+	.reg_lens_size = ARRAY_SIZE(qs_s5k4e1_lenshading_settings[0]),
 	.conf_array = &qs_s5k4e1_confs[0],
 };

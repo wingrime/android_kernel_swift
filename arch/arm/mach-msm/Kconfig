@@ -88,6 +88,7 @@ config ARCH_MSM8960
 	select MSM_GPIOMUX
 	select MSM_SCM if SMP
 	select MSM_DIRECT_SCLK_ACCESS
+	select REGULATOR
 
 endchoice
 

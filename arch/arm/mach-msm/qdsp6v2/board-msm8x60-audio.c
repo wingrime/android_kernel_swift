@@ -41,6 +41,7 @@
 #include "timpani_profile_8x60.h"
 #include "snddev_hdmi.h"
 #include "snddev_mi2s.h"
+#include "snddev_virtual.h"
 
 #ifdef CONFIG_DEBUG_FS
 static struct dentry *debugfs_hsed_config;
@@ -1236,6 +1237,17 @@ static struct platform_device msm_auxpga_lb_hs_device = {
 	.dev = { .platform_data = &snddev_auxpga_lb_hs_data },
 };
 
+static struct snddev_virtual_data snddev_uplink_rx_data = {
+	.capability = SNDDEV_CAP_RX,
+	.name = "uplink_rx",
+	.copp_id = VOICE_PLAYBACK_TX,
+};
+
+static struct platform_device msm_uplink_rx_device = {
+	.name = "snddev_virtual",
+	.dev = { .platform_data = &snddev_uplink_rx_data },
+};
+
 #ifdef CONFIG_DEBUG_FS
 static struct adie_codec_action_unit
 	ihs_stereo_rx_class_d_legacy_48KHz_osr256_actions[] =
@@ -1432,6 +1444,7 @@ static struct platform_device *snd_devices_common[] __initdata = {
 	&msm_aux_pcm_device,
 	&msm_cdcclk_ctl_device,
 	&msm_mi2s_device,
+	&msm_uplink_rx_device,
 };
 
 void __init msm_snddev_init(void)

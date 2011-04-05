@@ -702,7 +702,7 @@ kgsl_ringbuffer_issueibcmds(struct kgsl_device_private *dev_priv,
 		KGSL_CTXT_WARN(device, "Context %p caused a gpu hang.."
 			" will not accept commands for this context\n",
 			drawctxt);
-		return -EINVAL;
+		return -EDEADLK;
 	}
 	link = kzalloc(sizeof(unsigned int) * numibs * 3, GFP_KERNEL);
 	cmds = link;

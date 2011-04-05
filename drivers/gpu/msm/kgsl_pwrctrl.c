@@ -220,17 +220,22 @@ void kgsl_pwrctrl_clk(struct kgsl_device *device, unsigned int pwrflag)
 		if (pwr->power_flags & KGSL_PWRFLAGS_CLK_OFF) {
 			KGSL_PWR_INFO(device,
 				"clocks on, device %d\n", device->id);
+
+			pwr->power_flags &=
+				~(KGSL_PWRFLAGS_CLK_OFF);
+			pwr->power_flags |= KGSL_PWRFLAGS_CLK_ON;
+
 			if ((pwr->pwrlevels[0].gpu_freq > 0) &&
 				(device->state != KGSL_STATE_NAP))
 				clk_set_rate(pwr->grp_clks[0],
 					pwr->pwrlevels[pwr->active_pwrlevel].
 						gpu_freq);
+
+			/* as last step, enable grp_clk
+			   this is to let GPU interrupt to come */
 			for (i = KGSL_MAX_CLKS - 1; i > 0; i--)
 				if (pwr->grp_clks[i])
 					clk_enable(pwr->grp_clks[i]);
-			pwr->power_flags &=
-				~(KGSL_PWRFLAGS_CLK_OFF);
-			pwr->power_flags |= KGSL_PWRFLAGS_CLK_ON;
 		}
 		return;
 	default:

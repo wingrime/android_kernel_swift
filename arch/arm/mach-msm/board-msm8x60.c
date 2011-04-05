@@ -1447,12 +1447,24 @@ static char *usb_functions_rndis_adb[] = {
 	"adb",
 };
 
+static char *usb_functions_mtp[] = {
+	"mtp",
+};
+
+static char *usb_functions_mtp_adb[] = {
+	"mtp",
+	"adb",
+};
+
 static char *usb_functions_all[] = {
 #ifdef CONFIG_USB_ANDROID_RNDIS
 	"rndis",
 #endif
 #ifdef CONFIG_USB_ANDROID_DIAG
 	"diag",
+#endif
+#ifdef CONFIG_USB_ANDROID_MTP
+	"mtp",
 #endif
 	"adb",
 #ifdef CONFIG_USB_F_SERIAL
@@ -1476,6 +1488,9 @@ static char *svlte2_usb_functions_all[] = {
 	"diag",
 	"diag_mdm",
 #endif
+#ifdef CONFIG_USB_ANDROID_MTP
+	"mtp",
+#endif
 	"adb",
 #ifdef CONFIG_USB_F_SERIAL
 	"modem",
@@ -1497,6 +1512,9 @@ static char *charm_usb_functions_all[] = {
 #ifdef CONFIG_USB_ANDROID_DIAG
 	"diag",
 	"diag_mdm",
+#endif
+#ifdef CONFIG_USB_ANDROID_MTP
+	"mtp",
 #endif
 	"adb",
 #ifdef CONFIG_USB_F_SERIAL
@@ -1533,6 +1551,16 @@ static struct android_usb_product usb_products[] = {
 		.num_functions	= ARRAY_SIZE(usb_functions_rndis_adb),
 		.functions	= usb_functions_rndis_adb,
 	},
+	{
+		.product_id	= 0xF003,
+		.num_functions	= ARRAY_SIZE(usb_functions_mtp),
+		.functions	= usb_functions_mtp,
+	},
+	{
+		.product_id	= 0x9039,
+		.num_functions	= ARRAY_SIZE(usb_functions_mtp_adb),
+		.functions	= usb_functions_mtp_adb,
+	},
 };
 
 static struct android_usb_product svlte2_usb_products[] = {
@@ -1556,6 +1584,16 @@ static struct android_usb_product svlte2_usb_products[] = {
 		.num_functions	= ARRAY_SIZE(usb_functions_rndis_adb),
 		.functions	= usb_functions_rndis_adb,
 	},
+	{
+		.product_id	= 0xF003,
+		.num_functions	= ARRAY_SIZE(usb_functions_mtp),
+		.functions	= usb_functions_mtp,
+	},
+	{
+		.product_id	= 0x9039,
+		.num_functions	= ARRAY_SIZE(usb_functions_mtp_adb),
+		.functions	= usb_functions_mtp_adb,
+	},
 };
 
 static struct android_usb_product charm_usb_products[] = {
@@ -1578,6 +1616,16 @@ static struct android_usb_product charm_usb_products[] = {
 		.product_id	= 0x9024,
 		.num_functions	= ARRAY_SIZE(usb_functions_rndis_adb),
 		.functions	= usb_functions_rndis_adb,
+	},
+	{
+		.product_id	= 0xF003,
+		.num_functions	= ARRAY_SIZE(usb_functions_mtp),
+		.functions	= usb_functions_mtp,
+	},
+	{
+		.product_id	= 0x9039,
+		.num_functions	= ARRAY_SIZE(usb_functions_mtp_adb),
+		.functions	= usb_functions_mtp_adb,
 	},
 };
 

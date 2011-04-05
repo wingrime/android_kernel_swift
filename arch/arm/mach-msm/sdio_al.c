@@ -3189,6 +3189,14 @@ static int sdio_al_sdio_suspend(struct device *dev)
 		return ret;
 	}
 
+	ret = sdio_set_host_pm_flags(func, MMC_PM_WAKE_SDIO_IRQ);
+	if (ret) {
+		pr_err(MODULE_NAME ":Host doesn't support the wakeup "
+				"capability\n");
+		sdio_release_host(sdio_al_dev->card->sdio_func[0]);
+		return ret;
+	}
+
 	/* Check if we can get into suspend */
 	if (!sdio_al_dev->is_ok_to_sleep) {
 		pr_err(MODULE_NAME ":Cannot suspend due to pending data\n");

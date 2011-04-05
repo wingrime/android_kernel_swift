@@ -2,7 +2,7 @@
  * Diag Function Device - Route ARM9 and ARM11 DIAG messages
  * between HOST and DEVICE.
  * Copyright (C) 2007 Google, Inc.
- * Copyright (c) 2008-2010, Code Aurora Forum. All rights reserved.
+ * Copyright (c) 2008-2011, Code Aurora Forum. All rights reserved.
  * Author: Brian Swetland <swetland@google.com>
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -26,6 +26,7 @@
 #include <linux/usb/gadget.h>
 #include <linux/usb/android_composite.h>
 #include <linux/workqueue.h>
+#include <linux/debugfs.h>
 
 static DEFINE_SPINLOCK(ch_lock);
 static LIST_HEAD(usb_diag_ch_list);
@@ -123,6 +124,11 @@ struct diag_context {
 	struct usb_composite_dev *cdev;
 	struct usb_diag_platform_data *pdata;
 	struct usb_diag_ch ch;
+
+	/* pkt counters */
+	unsigned long dpkts_tolaptop;
+	unsigned long dpkts_tomodem;
+	unsigned dpkts_tolaptop_pending;
 };
 
 static inline struct diag_context *func_to_dev(struct usb_function *f)
@@ -172,9 +178,12 @@ static void diag_write_complete(struct usb_ep *ep,
 	struct diag_request *d_req = req->context;
 	unsigned long flags;
 
+	ctxt->dpkts_tolaptop_pending--;
+
 	if (!req->status) {
 		if ((req->length >= ep->maxpacket) &&
 				((req->length % ep->maxpacket) == 0)) {
+			ctxt->dpkts_tolaptop_pending++;
 			req->length = 0;
 			d_req->actual = req->actual;
 			d_req->status = req->status;
@@ -209,6 +218,8 @@ static void diag_read_complete(struct usb_ep *ep,
 	spin_lock_irqsave(&ctxt->lock, flags);
 	list_add_tail(&req->list, &ctxt->read_pool);
 	spin_unlock_irqrestore(&ctxt->lock, flags);
+
+	ctxt->dpkts_tomodem++;
 
 	if (ctxt->ch.notify)
 		ctxt->ch.notify(ctxt->ch.priv, USB_DIAG_READ_DONE, d_req);
@@ -453,6 +464,9 @@ int usb_diag_write(struct usb_diag_ch *ch, struct diag_request *d_req)
 		return -EIO;
 	}
 
+	ctxt->dpkts_tolaptop++;
+	ctxt->dpkts_tolaptop_pending++;
+
 	return 0;
 }
 EXPORT_SYMBOL(usb_diag_write);
@@ -485,6 +499,7 @@ static int diag_function_set_alt(struct usb_function *f,
 	struct diag_context  *dev = func_to_dev(f);
 	struct usb_composite_dev *cdev = f->config->cdev;
 	unsigned long flags;
+	struct usb_diag_ch *ch;
 	int rc = 0;
 
 	dev->in_desc = ep_choose(cdev->gadget,
@@ -507,6 +522,15 @@ static int diag_function_set_alt(struct usb_function *f,
 		return rc;
 	}
 	schedule_work(&dev->config_work);
+
+	list_for_each_entry(ch, &usb_diag_ch_list, list) {
+		struct diag_context *ctxt;
+
+		ctxt = ch->priv_usb;
+		ctxt->dpkts_tolaptop = 0;
+		ctxt->dpkts_tomodem = 0;
+		ctxt->dpkts_tolaptop_pending = 0;
+	}
 
 	spin_lock_irqsave(&dev->lock, flags);
 	dev->configured = 1;
@@ -615,12 +639,88 @@ int diag_function_add(struct usb_configuration *c)
 	return ret;
 }
 
+
+#if defined(CONFIG_DEBUG_FS)
+static char debug_buffer[PAGE_SIZE];
+
+static ssize_t debug_read_stats(struct file *file, char __user *ubuf,
+		size_t count, loff_t *ppos)
+{
+	char *buf = debug_buffer;
+	int temp = 0;
+	struct usb_diag_ch *ch;
+
+	list_for_each_entry(ch, &usb_diag_ch_list, list) {
+		struct diag_context *ctxt;
+
+		ctxt = ch->priv_usb;
+
+		temp += scnprintf(buf + temp, PAGE_SIZE - temp,
+				"---Name: %s---\n"
+				"dpkts_tolaptop: %lu\n"
+				"dpkts_tomodem:  %lu\n"
+				"pkts_tolaptop_pending: %u\n",
+				ch->name, ctxt->dpkts_tolaptop,
+				ctxt->dpkts_tomodem,
+				ctxt->dpkts_tolaptop_pending);
+	}
+
+	return simple_read_from_buffer(ubuf, count, ppos, buf, temp);
+}
+
+static ssize_t debug_reset_stats(struct file *file, const char __user *buf,
+				 size_t count, loff_t *ppos)
+{
+	struct usb_diag_ch *ch;
+
+	list_for_each_entry(ch, &usb_diag_ch_list, list) {
+		struct diag_context *ctxt;
+
+		ctxt = ch->priv_usb;
+
+		ctxt->dpkts_tolaptop = 0;
+		ctxt->dpkts_tomodem = 0;
+		ctxt->dpkts_tolaptop_pending = 0;
+	}
+
+	return count;
+}
+
+static int debug_open(struct inode *inode, struct file *file)
+{
+	return 0;
+}
+
+static const struct file_operations debug_fdiag_ops = {
+	.open = debug_open,
+	.read = debug_read_stats,
+	.write = debug_reset_stats,
+};
+
+static void fdiag_debugfs_init(void)
+{
+	struct dentry *dent;
+
+	dent = debugfs_create_dir("usb_diag", 0);
+	if (IS_ERR(dent))
+		return;
+
+	debugfs_create_file("status", 0444, dent, 0, &debug_fdiag_ops);
+}
+#else
+static void fdiag_debugfs_init(void)
+{
+	return;
+}
+#endif
+
 static struct
 usb_diag_ch *diag_setup(struct usb_diag_platform_data *pdata)
 {
 	struct usb_diag_ch *ch;
 	struct diag_context *ctxt;
 	unsigned long flags;
+	static int debugfs_init;
 
 	ctxt = kzalloc(sizeof(*ctxt), GFP_KERNEL);
 	if (!ctxt)
@@ -633,6 +733,11 @@ usb_diag_ch *diag_setup(struct usb_diag_platform_data *pdata)
 	ch->name = pdata->ch_name;
 	list_add_tail(&ch->list, &usb_diag_ch_list);
 	spin_unlock_irqrestore(&ch_lock, flags);
+
+	if (!debugfs_init) {
+		debugfs_init = 1;
+		fdiag_debugfs_init();
+	}
 
 	return ch;
 }

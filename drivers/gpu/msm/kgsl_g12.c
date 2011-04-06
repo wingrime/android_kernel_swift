@@ -492,7 +492,7 @@ static int kgsl_g12_suspend_context(struct kgsl_device *device)
 	return 0;
 }
 
-int kgsl_g12_regread(struct kgsl_device *device, unsigned int offsetwords,
+void kgsl_g12_regread(struct kgsl_device *device, unsigned int offsetwords,
 				unsigned int *value)
 {
 	unsigned int *reg;
@@ -506,23 +506,16 @@ int kgsl_g12_regread(struct kgsl_device *device, unsigned int offsetwords,
 		reg = (unsigned int *)(device->regspace.mmio_virt_base
 				+ ADDR_VGC_MH_DATA_ADDR);
 	} else {
-		if (offsetwords * sizeof(uint32_t) >=
-				device->regspace.sizebytes) {
-			KGSL_DRV_ERR(device, "invalid offset %d\n",
-				offsetwords);
-			return -ERANGE;
-		}
-
+		BUG_ON(offsetwords * sizeof(uint32_t)
+			>= device->regspace.sizebytes);
 		reg = (unsigned int *)(device->regspace.mmio_virt_base
 				+ (offsetwords << 2));
 	}
 
 	*value = readl(reg);
-
-	return 0;
 }
 
-int kgsl_g12_regwrite(struct kgsl_device *device, unsigned int offsetwords,
+void kgsl_g12_regwrite(struct kgsl_device *device, unsigned int offsetwords,
 				unsigned int value)
 {
 	unsigned int *reg;
@@ -535,12 +528,8 @@ int kgsl_g12_regwrite(struct kgsl_device *device, unsigned int offsetwords,
 		kgsl_g12_cmdwindow_write(device, KGSL_CMDWINDOW_MMU,
 					 offsetwords, value);
 	} else {
-		if (offsetwords*sizeof(uint32_t) >=
-				device->regspace.sizebytes) {
-			KGSL_DRV_ERR(device,
-				"invalid offset %d\n", offsetwords);
-			return -ERANGE;
-		}
+		BUG_ON(offsetwords*sizeof(uint32_t) >=
+				device->regspace.sizebytes);
 
 		reg = (unsigned int *)(device->regspace.mmio_virt_base
 				+ (offsetwords << 2));
@@ -555,8 +544,6 @@ int kgsl_g12_regwrite(struct kgsl_device *device, unsigned int offsetwords,
 		 * during ringbuffer submits.*/
 		mb();
 	}
-
-	return 0;
 }
 
 static int kgsl_g12_waittimestamp(struct kgsl_device *device,

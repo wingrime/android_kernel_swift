@@ -595,15 +595,15 @@ static int mipi_dsi_on(struct platform_device *pdev)
 	mipi  = &mfd->panel_info.mipi;
 	if (mfd->panel_info.type == MIPI_VIDEO_PANEL) {
 		MIPI_OUTP(MIPI_DSI_BASE + 0x20,
-			((hbp + width - 1) << 16 | (hbp - 1)));
+			((hspw + hbp + width) << 16 | (hspw + hbp)));
 		MIPI_OUTP(MIPI_DSI_BASE + 0x24,
-			((vbp + height - 1) << 16 | (vbp - 1)));
+			((vspw + vbp + height) << 16 | (vspw + vbp)));
 		MIPI_OUTP(MIPI_DSI_BASE + 0x28,
-			(vbp + height + vfp - 1) << 16 |
-				(hbp + width + hfp - 1));
-		MIPI_OUTP(MIPI_DSI_BASE + 0x2c, (hspw - 1) << 16);
+			(vspw + vbp + height + vfp - 1) << 16 |
+				(hspw + hbp + width + hfp - 1));
+		MIPI_OUTP(MIPI_DSI_BASE + 0x2c, (hspw << 16));
 		MIPI_OUTP(MIPI_DSI_BASE + 0x30, 0);
-		MIPI_OUTP(MIPI_DSI_BASE + 0x34, (vspw - 1) << 16);
+		MIPI_OUTP(MIPI_DSI_BASE + 0x34, (vspw << 16));
 
 	} else {		/* command mode */
 		if (mipi->dst_format == DSI_CMD_DST_FORMAT_RGB888)

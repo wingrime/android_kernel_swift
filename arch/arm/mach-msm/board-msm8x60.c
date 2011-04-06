@@ -798,12 +798,13 @@ static struct i2c_board_info msm_isa1200_board_info[] = {
 #if defined(CONFIG_BATTERY_BQ27520) || \
 		defined(CONFIG_BATTERY_BQ27520_MODULE)
 static struct bq27520_platform_data bq27520_pdata = {
-	.name = "fuel-gauge",
-	.vreg_name = "8058_s3",
-	.vreg_value = 1800000,
-	.soc_int = GPIO_BATT_GAUGE_INT_N,
-	.bi_tout = GPIO_CAP_GAUGE_BI_TOUT,
-	.chip_en = GPIO_BATT_GAUGE_EN,
+	.name		= "fuel-gauge",
+	.vreg_name	= "8058_s3",
+	.vreg_value	= 1800000,
+	.soc_int	= GPIO_BATT_GAUGE_INT_N,
+	.bi_tout	= GPIO_CAP_GAUGE_BI_TOUT,
+	.chip_en	= GPIO_BATT_GAUGE_EN,
+	.enable_dlog	= 0, /* if enable coulomb counter logger */
 };
 
 static struct i2c_board_info msm_bq27520_board_info[] = {

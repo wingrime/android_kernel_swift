@@ -505,6 +505,7 @@ rmnet_setup(struct usb_function *f, const struct usb_ctrlrequest *ctrl)
 			len = min_t(unsigned, w_length, resp->len);
 			memcpy(req->buf, resp->buf, len);
 			ret = len;
+			req->context = dev;
 			req->complete = rmnet_response_complete;
 			rmnet_free_qmi(resp);
 

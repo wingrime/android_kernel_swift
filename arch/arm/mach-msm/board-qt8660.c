@@ -5205,6 +5205,8 @@ static struct msm_rpm_platform_data msm_rpm_data = {
 	.irq_ack = RPM_SCSS_CPU0_GP_HIGH_IRQ,
 	.irq_err = RPM_SCSS_CPU0_GP_LOW_IRQ,
 	.irq_vmpm = RPM_SCSS_CPU0_GP_MEDIUM_IRQ,
+	.msm_apps_ipc_rpm_reg = MSM_GCC_BASE + 0x008,
+	.msm_apps_ipc_rpm_val = 4,
 };
 #endif
 

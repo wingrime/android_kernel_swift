@@ -244,6 +244,14 @@ static int get_prop_batt_status(void)
 {
 	int status = 0;
 
+	if (msm_batt_gauge && msm_batt_gauge->get_battery_status) {
+		status = msm_batt_gauge->get_battery_status();
+		if (status == POWER_SUPPLY_STATUS_CHARGING ||
+			status == POWER_SUPPLY_STATUS_FULL ||
+			status == POWER_SUPPLY_STATUS_DISCHARGING)
+			return status;
+	}
+
 	if (is_batt_status_charging())
 		status = POWER_SUPPLY_STATUS_CHARGING;
 	else if (msm_chg.batt_status ==
@@ -799,14 +807,15 @@ static void handle_charger_removed(struct msm_hardware_charger_priv
 
 static void handle_event(struct msm_hardware_charger *hw_chg, int event)
 {
-	struct msm_hardware_charger_priv *priv;
+	struct msm_hardware_charger_priv *priv = NULL;
 
-	if (hw_chg == NULL)
-		return;
+	/*
+	 * if hw_chg is NULL then this event comes from non-charger
+	 * parties like battery gauge
+	 */
+	if (hw_chg)
+		priv = hw_chg->charger_private;
 
-	priv = hw_chg->charger_private;
-
-	dev_info(msm_chg.dev, "%s %d from %s\n", __func__, event, hw_chg->name);
 	mutex_lock(&msm_chg.status_lock);
 
 	switch (event) {
@@ -920,6 +929,10 @@ static void handle_event(struct msm_hardware_charger *hw_chg, int event)
 		msm_chg.batt_status = BATT_STATUS_ABSENT;
 		handle_battery_removed();
 		break;
+	case CHG_BATT_STATUS_CHANGE:
+		/* TODO  battery SOC like battery-alarm/charging-full features
+		can be added here for future improvement */
+		break;
 	}
 	dev_dbg(msm_chg.dev, "%s %d done batt_status=%d\n", __func__,
 		event, msm_chg.batt_status);
@@ -927,7 +940,8 @@ static void handle_event(struct msm_hardware_charger *hw_chg, int event)
 	/* update userspace */
 	if (msm_batt_gauge)
 		power_supply_changed(&msm_psy_batt);
-	power_supply_changed(&priv->psy);
+	if (priv)
+		power_supply_changed(&priv->psy);
 
 	mutex_unlock(&msm_chg.status_lock);
 }
@@ -943,8 +957,7 @@ static int msm_chg_dequeue_event(struct msm_charger_event **event)
 	}
 	*event = &msm_chg.queue[msm_chg.head];
 	msm_chg.head = (msm_chg.head + 1) % MSM_CHG_MAX_EVENTS;
-	pr_debug("%s dequeueing %d from %s\n", __func__,
-				(*event)->event, (*event)->hw_chg->name);
+	pr_debug("%s dequeueing %d\n", __func__, (*event)->event);
 	msm_chg.queue_count--;
 	spin_unlock_irqrestore(&msm_chg.queue_lock, flags);
 	return 0;
@@ -958,11 +971,11 @@ static int msm_chg_enqueue_event(struct msm_hardware_charger *hw_chg,
 	spin_lock_irqsave(&msm_chg.queue_lock, flags);
 	if (msm_chg.queue_count == MSM_CHG_MAX_EVENTS) {
 		spin_unlock_irqrestore(&msm_chg.queue_lock, flags);
-		pr_err("%s: queue full cannot enqueue %d from %s\n",
-				__func__, event, hw_chg->name);
+		pr_err("%s: queue full cannot enqueue %d\n",
+				__func__, event);
 		return -EAGAIN;
 	}
-	pr_debug("%s queueing %d from %s\n", __func__, event, hw_chg->name);
+	pr_debug("%s queueing %d\n", __func__, event);
 	msm_chg.queue[msm_chg.tail].event = event;
 	msm_chg.queue[msm_chg.tail].hw_chg = hw_chg;
 	msm_chg.tail = (msm_chg.tail + 1)%MSM_CHG_MAX_EVENTS;

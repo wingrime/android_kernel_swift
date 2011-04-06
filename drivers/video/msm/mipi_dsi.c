@@ -78,9 +78,6 @@ static struct platform_driver mipi_dsi_driver = {
 
 struct device dsi_dev;
 
-/* MIPI_DSI_MRPS, Maximum Return Packet Size */
-char max_pktsize[2] = {MIPI_DSI_MRPS, 0x00}; /* LSB tx first, 16 bytes */
-
 static void mipi_dsi_clk(struct dsi_clk_desc *clk, int clk_en)
 {
 	char	*cc, *ns, *md;

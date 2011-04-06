@@ -147,7 +147,7 @@ struct dsi_clk_desc {
 #define DSI_BUF_SIZE	1024
 #define MIPI_DSI_MRPS	0x04  /* Maximum Return Packet Size */
 
-#define MIPI_DSI_REG_LEN 16 /* 4 x 4 bytes register */
+#define MIPI_DSI_LEN 8 /* 4 x 4 - 6 - 2, bytes dcs header+crc-align  */
 
 struct dsi_buf {
 	uint32 *hdr;	/* dsi host header */
@@ -195,9 +195,6 @@ struct dsi_cmd_desc {
 	char *payload;
 };
 
-
-/* MIPI_DSI_MRPS, Maximum Return Packet Size */
-extern char max_pktsize[2]; /* defined at mipi_dsi.c */
 
 char *mipi_dsi_buf_reserve_hdr(struct dsi_buf *dp, int hlen);
 char *mipi_dsi_buf_init(struct dsi_buf *dp);

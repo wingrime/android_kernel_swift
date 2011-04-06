@@ -83,6 +83,7 @@
 #define NR_GPIO_IRQS 133
 #define NR_MSM_IRQS 64
 #define NR_BOARD_IRQS 64
+#define NR_MSM_GPIOS NR_GPIO_IRQS
 
 #define INT_ADSP_A11_SMSM    INT_ADSP_A11
 #endif

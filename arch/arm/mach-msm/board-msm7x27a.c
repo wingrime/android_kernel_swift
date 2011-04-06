@@ -8,13 +8,7 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
- * 02110-1301, USA.
  */
-
 #include <linux/kernel.h>
 #include <linux/init.h>
 #include <asm/mach-types.h>
@@ -41,8 +35,42 @@
 
 #define MSM_EBI2_PHYS 0xa0d00000
 
+static struct msm_gpio qup_i2c_gpios_io[] = {
+	{ GPIO_CFG(60, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_8MA),
+		"qup_scl" },
+	{ GPIO_CFG(61, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_8MA),
+		"qup_sda" },
+	{ GPIO_CFG(131, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_8MA),
+		"qup_scl" },
+	{ GPIO_CFG(132, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_8MA),
+		"qup_sda" },
+};
+
+static struct msm_gpio qup_i2c_gpios_hw[] = {
+	{ GPIO_CFG(60, 1, GPIO_CFG_INPUT, GPIO_CFG_NO_PULL, GPIO_CFG_8MA),
+		"qup_scl" },
+	{ GPIO_CFG(61, 1, GPIO_CFG_INPUT, GPIO_CFG_NO_PULL, GPIO_CFG_8MA),
+		"qup_sda" },
+	{ GPIO_CFG(131, 2, GPIO_CFG_INPUT, GPIO_CFG_NO_PULL, GPIO_CFG_8MA),
+		"qup_scl" },
+	{ GPIO_CFG(132, 2, GPIO_CFG_INPUT, GPIO_CFG_NO_PULL, GPIO_CFG_8MA),
+		"qup_sda" },
+};
+
 static void gsbi_qup_i2c_gpio_config(int adap_id, int config_type)
 {
+	int rc;
+
+	if (adap_id < 0 || adap_id > 1)
+		return;
+
+	/* Each adapter gets 2 lines from the table */
+	if (config_type)
+		rc = msm_gpios_request_enable(&qup_i2c_gpios_hw[adap_id*2], 2);
+	else
+		rc = msm_gpios_request_enable(&qup_i2c_gpios_io[adap_id*2], 2);
+	if (rc < 0)
+		pr_err("QUP GPIO request/enable failed: %d\n", rc);
 }
 
 static struct msm_i2c_platform_data msm_gsbi0_qup_i2c_pdata = {
@@ -298,8 +326,8 @@ static struct platform_device *surf_ffa_devices[] __initdata = {
 	&usb_gadget_fserial_device,
 };
 
-static void __init msm_device_i2c_init(void){
-
+static void __init msm_device_i2c_init(void)
+{
 	msm_gsbi0_qup_i2c_device.dev.platform_data = &msm_gsbi0_qup_i2c_pdata;
 	msm_gsbi1_qup_i2c_device.dev.platform_data = &msm_gsbi1_qup_i2c_pdata;
 }

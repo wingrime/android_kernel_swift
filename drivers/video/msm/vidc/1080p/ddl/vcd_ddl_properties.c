@@ -979,9 +979,18 @@ static u32 ddl_get_dec_property(struct ddl_client_context *ddl,
 	break;
 	case DDL_I_FRAME_PROC_UNITS:
 		if (sizeof(u32) == property_hdr->sz) {
-			*(u32 *) property_value = DDL_NO_OF_MB(
-				decoder->client_frame_size.width,
-				decoder->client_frame_size.height);
+			if (!decoder->progressive_only &&
+				(decoder->client_frame_size.width *
+				 decoder->client_frame_size.height) <=
+				DDL_FRAME_VGA_SIZE) {
+				*(u32 *) property_value = DDL_NO_OF_MB(
+					DDL_FRAME_720P_WIDTH,
+					DDL_FRAME_720P_HEIGHT);
+			} else {
+				*(u32 *) property_value = DDL_NO_OF_MB(
+					decoder->client_frame_size.width,
+					decoder->client_frame_size.height);
+			}
 			vcd_status = VCD_S_SUCCESS;
 		}
 	break;

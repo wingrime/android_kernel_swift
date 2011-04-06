@@ -88,9 +88,6 @@ static long charm_modem_ioctl(struct file *filp, unsigned int cmd,
 		return -EINVAL;
 	}
 
-	gpio_request(MDM2AP_STATUS, "MDM2AP_STATUS");
-	gpio_direction_input(MDM2AP_STATUS);
-
 	CHARM_DBG("%s: Entering ioctl cmd = %d\n", __func__, _IOC_NR(cmd));
 	switch (cmd) {
 	case WAKE_CHARM:
@@ -125,8 +122,6 @@ static long charm_modem_ioctl(struct file *filp, unsigned int cmd,
 	default:
 		ret = -EINVAL;
 	}
-
-	gpio_free(MDM2AP_STATUS);
 
 	return ret;
 }
@@ -231,15 +226,17 @@ static int __init charm_modem_probe(struct platform_device *pdev)
 	gpio_request(AP2MDM_ERRFATAL, "AP2MDM_ERRFATAL");
 	gpio_request(AP2MDM_KPDPWR_N, "AP2MDM_KPDPWR_N");
 	gpio_request(AP2MDM_PMIC_RESET_N, "AP2MDM_PMIC_RESET_N");
+	gpio_request(MDM2AP_STATUS, "MDM2AP_STATUS");
+	gpio_request(MDM2AP_ERRFATAL, "MDM2AP_ERRFATAL");
 
 	gpio_direction_output(AP2MDM_STATUS, 1);
 	gpio_direction_output(AP2MDM_ERRFATAL, 0);
+	gpio_direction_input(MDM2AP_STATUS);
+	gpio_direction_input(MDM2AP_ERRFATAL);
 
 	power_on_charm = d->charm_modem_on;
 	power_down_charm = d->charm_modem_off;
 
-	gpio_request(MDM2AP_ERRFATAL, "MDM2AP_ERRFATAL");
-	gpio_direction_input(MDM2AP_ERRFATAL);
 
 	atomic_notifier_chain_register(&panic_notifier_list, &charm_panic_blk);
 	charm_debugfs_init();
@@ -293,6 +290,12 @@ status_err:
 
 static int __devexit charm_modem_remove(struct platform_device *pdev)
 {
+	gpio_free(AP2MDM_STATUS);
+	gpio_free(AP2MDM_ERRFATAL);
+	gpio_free(AP2MDM_KPDPWR_N);
+	gpio_free(AP2MDM_PMIC_RESET_N);
+	gpio_free(MDM2AP_STATUS);
+	gpio_free(MDM2AP_ERRFATAL);
 
 	return misc_deregister(&charm_modem_misc);
 }

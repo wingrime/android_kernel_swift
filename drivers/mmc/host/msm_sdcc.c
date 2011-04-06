@@ -1109,15 +1109,20 @@ msmsdcc_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 				clk_enable(host->pclk);
 			clk_enable(host->clk);
 			host->clks_on = 1;
-			if (mmc->card && mmc->card->type == MMC_TYPE_SDIO &&
-					!host->plat->sdiowakeup_irq) {
-				writel(host->mci_irqenable,
-					host->base + MMCIMASK0);
-			if (host->plat->cfg_mpm_sdiowakeup &&
+			if (mmc->card && mmc->card->type == MMC_TYPE_SDIO) {
+				if (!host->plat->sdiowakeup_irq) {
+					writel(host->mci_irqenable,
+							host->base + MMCIMASK0);
+					if (host->plat->cfg_mpm_sdiowakeup &&
 					(mmc->pm_flags & MMC_PM_WAKE_SDIO_IRQ))
-				host->plat->cfg_mpm_sdiowakeup(
-						mmc_dev(mmc), 0);
-				disable_irq_wake(host->irqres->start);
+						host->plat->cfg_mpm_sdiowakeup(
+							mmc_dev(mmc), 0);
+					disable_irq_wake(host->irqres->start);
+				} else if (!(mmc->pm_flags &
+							MMC_PM_WAKE_SDIO_IRQ)) {
+					writel(host->mci_irqenable,
+							host->base + MMCIMASK0);
+				}
 			}
 		}
 		spin_unlock_irqrestore(&host->lock, flags);
@@ -1196,8 +1201,10 @@ msmsdcc_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 					host->plat->cfg_mpm_sdiowakeup(
 							mmc_dev(mmc), 1);
 				enable_irq_wake(host->irqres->start);
-			} else {
+			} else if (mmc->pm_flags & MMC_PM_WAKE_SDIO_IRQ) {
 				writel(0, host->base + MMCIMASK0);
+			} else {
+				writel(MCI_SDIOINTMASK, host->base + MMCIMASK0);
 			}
 			msmsdcc_delay(host);
 		}
@@ -1646,7 +1653,7 @@ msmsdcc_probe(struct platform_device *pdev)
 	mmc->f_min = plat->msmsdcc_fmin;
 	mmc->f_max = plat->msmsdcc_fmax;
 	mmc->ocr_avail = plat->ocr_mask;
-	mmc->pm_caps |= MMC_PM_KEEP_POWER;
+	mmc->pm_caps |= MMC_PM_KEEP_POWER | MMC_PM_WAKE_SDIO_IRQ;
 	mmc->caps |= plat->mmc_bus_width;
 
 	mmc->caps |= MMC_CAP_MMC_HIGHSPEED | MMC_CAP_SD_HIGHSPEED;
@@ -1706,7 +1713,6 @@ msmsdcc_probe(struct platform_device *pdev)
 				plat->sdiowakeup_irq, ret);
 			goto pio_irq_free;
 		} else {
-			mmc->pm_caps |= MMC_PM_WAKE_SDIO_IRQ;
 			spin_lock_irqsave(&host->lock, flags);
 			if (!host->sdio_irq_disabled) {
 				disable_irq_nosync(plat->sdiowakeup_irq);
@@ -1719,7 +1725,6 @@ msmsdcc_probe(struct platform_device *pdev)
 	if (plat->cfg_mpm_sdiowakeup) {
 		wake_lock_init(&host->sdio_wlock, WAKE_LOCK_SUSPEND,
 				mmc_hostname(mmc));
-		mmc->pm_caps |= MMC_PM_WAKE_SDIO_IRQ;
 	}
 
 	wake_lock_init(&host->sdio_suspend_wlock, WAKE_LOCK_SUSPEND,
@@ -2037,13 +2042,22 @@ msmsdcc_runtime_resume(struct device *dev)
 		mmc_resume_host(mmc);
 
 		/*
+		 * FIXME: Clearing of flags must be handled in clients
+		 * resume handler.
+		 */
+		spin_lock_irqsave(&host->lock, flags);
+		mmc->pm_flags = 0;
+		spin_unlock_irqrestore(&host->lock, flags);
+
+		/*
 		 * After resuming the host wait for sometime so that
 		 * the SDIO work will be processed.
 		 */
-		if ((mmc->pm_flags & MMC_PM_WAKE_SDIO_IRQ) && release_lock)
+		if (mmc->card && (mmc->card->type == MMC_TYPE_SDIO) &&
+					release_lock)
 			wake_lock_timeout(&host->sdio_wlock, 1);
 
-		 wake_unlock(&host->sdio_suspend_wlock);
+		wake_unlock(&host->sdio_suspend_wlock);
 	}
 	return 0;
 }

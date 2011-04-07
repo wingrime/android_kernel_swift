@@ -1589,10 +1589,8 @@ int qce_aead_req(void *handle, struct qce_req *q_req)
 
 	/* set up crypto device */
 	rc = _ce_setup(pce_dev, q_req, totallen, ivsize + areq->assoclen);
-	if (rc < 0) {
-		clk_disable(pce_dev->ce_clk);
+	if (rc < 0)
 		goto bad;
-	}
 
 	/* setup for callback, and issue command to adm */
 	pce_dev->areq = q_req->areq;
@@ -1697,10 +1695,8 @@ int qce_ablk_cipher_req(void *handle, struct qce_req *c_req)
 #endif
 	/* set up crypto device */
 	rc = _ce_setup(pce_dev, c_req, areq->nbytes, 0);
-	if (rc < 0) {
-		clk_disable(pce_dev->ce_clk);
+	if (rc < 0)
 		goto bad;
-	}
 
 	/* setup for callback, and issue command to adm */
 	pce_dev->areq = areq;
@@ -1765,10 +1761,8 @@ int qce_process_sha_req(void *handle, struct qce_sha_req *sreq)
 
 	rc =  _sha_ce_setup(pce_dev, sreq);
 
-	if (rc < 0) {
-		clk_disable(pce_dev->ce_clk);
+	if (rc < 0)
 		goto bad;
-	}
 
 	pce_dev->areq = areq;
 	pce_dev->qce_cb = sreq->qce_cb;
@@ -1949,7 +1943,7 @@ static void __exit _qce_exit(void)
 MODULE_LICENSE("GPL v2");
 MODULE_AUTHOR("Mona Hossain <mhossain@codeaurora.org>");
 MODULE_DESCRIPTION("Crypto Engine driver");
-MODULE_VERSION("1.05");
+MODULE_VERSION("1.06");
 
 module_init(_qce_init);
 module_exit(_qce_exit);

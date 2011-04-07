@@ -55,5 +55,11 @@ void kgsl_yamato_regread(struct kgsl_device *device, unsigned int offsetwords,
 				unsigned int *value);
 void kgsl_yamato_regwrite(struct kgsl_device *device, unsigned int offsetwords,
 				unsigned int value);
+void kgsl_yamato_regread_isr(struct kgsl_device *device,
+			     unsigned int offsetwords,
+			     unsigned int *value);
+void kgsl_yamato_regwrite_isr(struct kgsl_device *device,
+			      unsigned int offsetwords,
+			      unsigned int value);
 
 #endif /*_KGSL_YAMATO_H */

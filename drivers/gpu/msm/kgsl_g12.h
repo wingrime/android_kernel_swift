@@ -55,5 +55,9 @@ void kgsl_g12_regread(struct kgsl_device *device, unsigned int offsetwords,
 				unsigned int *value);
 void kgsl_g12_regwrite(struct kgsl_device *device, unsigned int offsetwords,
 			unsigned int value);
+void kgsl_g12_regread_isr(struct kgsl_device *device, unsigned int offsetwords,
+				unsigned int *value);
+void kgsl_g12_regwrite_isr(struct kgsl_device *device, unsigned int offsetwords,
+			unsigned int value);
 
 #endif /* _KGSL_G12_H */

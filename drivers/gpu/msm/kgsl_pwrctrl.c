@@ -539,6 +539,7 @@ void kgsl_timer(unsigned long data)
 
 void kgsl_pre_hwaccess(struct kgsl_device *device)
 {
+	BUG_ON(!mutex_is_locked(&device->mutex));
 	if (device->state & (KGSL_STATE_SLEEP | KGSL_STATE_NAP))
 		kgsl_pwrctrl_wake(device);
 }

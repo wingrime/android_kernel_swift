@@ -269,23 +269,23 @@ void kgsl_mh_intrcallback(struct kgsl_device *device)
 	unsigned int status = 0;
 	unsigned int reg;
 
-	kgsl_regread(device, device->mmu.reg.interrupt_status, &status);
+	kgsl_regread_isr(device, device->mmu.reg.interrupt_status, &status);
 
 	if (status & MH_INTERRUPT_MASK__AXI_READ_ERROR) {
-		kgsl_regread(device, device->mmu.reg.axi_error, &reg);
+		kgsl_regread_isr(device, device->mmu.reg.axi_error, &reg);
 		KGSL_MEM_CRIT(device, "axi read error interrupt: %08x\n", reg);
 	} else if (status & MH_INTERRUPT_MASK__AXI_WRITE_ERROR) {
-		kgsl_regread(device, device->mmu.reg.axi_error, &reg);
+		kgsl_regread_isr(device, device->mmu.reg.axi_error, &reg);
 		KGSL_MEM_CRIT(device, "axi write error interrupt: %08x\n", reg);
 	} else if (status & MH_INTERRUPT_MASK__MMU_PAGE_FAULT) {
-		kgsl_regread(device, device->mmu.reg.page_fault, &reg);
+		kgsl_regread_isr(device, device->mmu.reg.page_fault, &reg);
 		KGSL_MEM_CRIT(device, "mmu page fault interrupt: %08x\n", reg);
 	} else {
 		KGSL_MEM_WARN(device,
 			"bad bits in REG_MH_INTERRUPT_STATUS %08x\n", status);
 	}
 
-	kgsl_regwrite(device, device->mmu.reg.interrupt_clear, status);
+	kgsl_regwrite_isr(device, device->mmu.reg.interrupt_clear, status);
 
 	/*TODO: figure out how to handle errror interupts.
 	* specifically, page faults should probably nuke the client that

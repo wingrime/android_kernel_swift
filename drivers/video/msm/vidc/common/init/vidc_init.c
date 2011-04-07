@@ -94,7 +94,7 @@ static void vidc_timer_fn(unsigned long data)
 {
 	unsigned long flag;
 	struct vidc_timer *hw_timer = NULL;
-	DBG("%s() Timer expired\n", __func__);
+	ERR("%s() Timer expired\n", __func__);
 	spin_lock_irqsave(&vidc_spin_lock, flag);
 	hw_timer = (struct vidc_timer *)data;
 	list_add_tail(&hw_timer->list, &vidc_device_p->vidc_timer_queue);
@@ -109,7 +109,7 @@ static void vidc_timer_handler(struct work_struct *work)
 	u32 islist_empty = 0;
 	struct vidc_timer *hw_timer = NULL;
 
-	DBG("%s() Timer expired\n", __func__);
+	ERR("%s() Timer expired\n", __func__);
 	do {
 		spin_lock_irqsave(&vidc_spin_lock, flag);
 		islist_empty = list_empty(&vidc_device_p->vidc_timer_queue);

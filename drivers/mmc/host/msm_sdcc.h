@@ -202,12 +202,6 @@ struct msmsdcc_dma_data {
 	struct msm_dmov_errdata		err;
 };
 
-struct msmsdcc_pio_data {
-	struct scatterlist	*sg;
-	unsigned int		sg_len;
-	unsigned int		sg_off;
-};
-
 struct msmsdcc_curr_req {
 	struct mmc_request	*mrq;
 	struct mmc_command	*cmd;
@@ -247,7 +241,7 @@ struct msmsdcc_host {
 	unsigned int		oldstat;
 
 	struct msmsdcc_dma_data	dma;
-	struct msmsdcc_pio_data	pio;
+	struct sg_mapping_iter	sg_miter;
 
 #ifdef CONFIG_HAS_EARLYSUSPEND
 	struct early_suspend early_suspend;

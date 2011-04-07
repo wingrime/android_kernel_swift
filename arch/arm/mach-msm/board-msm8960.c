@@ -309,11 +309,19 @@ static struct pm8xxx_rtc_platform_data pm8xxx_rtc_pdata __devinitdata = {
 	.rtc_write_enable       = false,
 };
 
+static struct pm8xxx_pwrkey_platform_data pm8xxx_pwrkey_pdata = {
+	.pull_up		= 1,
+	.kpd_trigger_delay_us	= 970,
+	.wakeup			= 1,
+	.pwrkey_time_ms		= 500,
+};
+
 static struct pm8921_platform_data pm8921_platform_data __devinitdata = {
 	.irq_pdata		= &pm8xxx_irq_pdata,
 	.gpio_pdata		= &pm8xxx_gpio_pdata,
 	.mpp_pdata		= &pm8xxx_mpp_pdata,
 	.rtc_pdata              = &pm8xxx_rtc_pdata,
+	.pwrkey_pdata		= &pm8xxx_pwrkey_pdata,
 };
 
 static struct msm_ssbi_platform_data msm8960_ssbi_pm8921_pdata __devinitdata = {

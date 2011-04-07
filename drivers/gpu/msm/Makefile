@@ -16,7 +16,6 @@ msm_kgsl_a200-$(CONFIG_MSM_KGSL) += \
 
 msm_kgsl_z180-$(CONFIG_MSM_KGSL_2D) += \
 	kgsl_g12_drawctxt.o \
-	kgsl_g12_cmdwindow.o \
 	kgsl_g12_cmdstream.o \
 	kgsl_g12.o
 

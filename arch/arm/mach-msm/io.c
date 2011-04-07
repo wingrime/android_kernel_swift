@@ -176,6 +176,7 @@ static struct map_desc msm8960_io_desc[] __initdata = {
 	MSM_DEVICE(TMR),
 	MSM_DEVICE(TMR0),
 	MSM_DEVICE(DMOV),
+	MSM_DEVICE(TLMM),
 	MSM_DEVICE(SIC_NON_SECURE),
 	MSM_DEVICE(APCS_GCC),
 	{

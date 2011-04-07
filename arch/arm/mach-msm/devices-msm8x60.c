@@ -1643,7 +1643,7 @@ static uint16_t msm_mpm_irqs_m2a[MSM_MPM_NR_MPM_IRQS] = {
 };
 
 static uint16_t msm_mpm_bypassed_apps_irqs[] = {
-	TLMM_SCSS_SUMMARY_IRQ,
+	TLMM_MSM_SUMMARY_IRQ,
 	RPM_SCSS_CPU0_GP_HIGH_IRQ,
 	RPM_SCSS_CPU0_GP_MEDIUM_IRQ,
 	RPM_SCSS_CPU0_GP_LOW_IRQ,

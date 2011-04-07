@@ -40,6 +40,25 @@
 
 #include "timer.h"
 #include "devices.h"
+#include "gpiomux.h"
+
+struct msm_gpiomux_config msm8960_gpiomux_configs[NR_GPIO_IRQS] = {};
+
+static int __init gpiomux_init(void)
+{
+	int rc;
+
+	rc = msm_gpiomux_init(NR_GPIO_IRQS);
+	if (rc) {
+		pr_err(KERN_ERR "msm_gpiomux_init failed %d\n", rc);
+		return rc;
+	}
+
+	msm_gpiomux_install(msm8960_gpiomux_configs,
+			ARRAY_SIZE(msm8960_gpiomux_configs));
+
+	return 0;
+}
 
 #define MSM_SHARED_RAM_PHYS 0x40000000
 
@@ -303,6 +322,7 @@ static void __init msm8960_sim_init(void)
 	msm8960_device_qup_spi_gsbi1.dev.platform_data =
 				&msm8960_qup_spi_gsbi1_pdata;
 	msm_device_otg.dev.platform_data = &msm_otg_pdata;
+	gpiomux_init();
 	msm8960_i2c_init();
 	platform_add_devices(sim_devices, ARRAY_SIZE(sim_devices));
 	msm8960_init_mmc();
@@ -313,6 +333,7 @@ static void __init msm8960_rumi3_init(void)
 	if (socinfo_init() < 0)
 		pr_err("socinfo_init() failed!\n");
 	msm_clock_init(msm_clocks_8960, msm_num_clocks_8960);
+	gpiomux_init();
 	msm8960_device_ssbi_pm8921.dev.platform_data =
 				&msm8960_ssbi_pm8921_pdata;
 	msm8960_device_qup_spi_gsbi1.dev.platform_data =

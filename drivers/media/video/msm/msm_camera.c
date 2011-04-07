@@ -2194,7 +2194,8 @@ static int __msm_get_pic(struct msm_sync *sync,
 	frame->y_off = pmem_info.y_off;
 	frame->cbcr_off = pmem_info.cbcr_off;
 	frame->fd = pmem_info.fd;
-	if (sync->stereocam_enabled) {
+	if (sync->stereocam_enabled &&
+		sync->stereo_state != STEREO_RAW_SNAP_STARTED) {
 		if (pmem_info.type == MSM_PMEM_THUMBNAIL_VPE)
 			frame->path = OUTPUT_TYPE_T;
 		else
@@ -3228,7 +3229,8 @@ static void msm_vfe_sync(struct msm_vfe_resp *vdata,
 		}
 
 	case VFE_MSG_OUTPUT_S:
-		if (sync->stereocam_enabled) {
+		if (sync->stereocam_enabled &&
+			sync->stereo_state != STEREO_RAW_SNAP_STARTED) {
 			spin_lock_irqsave(&pp_stereocam_spinlock, flags);
 
 			/* if out1/2 is currently in progress, save the qcmd
@@ -3281,6 +3283,7 @@ static void msm_vfe_sync(struct msm_vfe_resp *vdata,
 			}
 			break;
 		} else {
+			CDBG("%s: enqueue to picture queue\n", __func__);
 			msm_enqueue(&sync->pict_q, &qcmd->list_pict);
 			return;
 		}
@@ -3391,7 +3394,8 @@ static void msm_vfe_sync(struct msm_vfe_resp *vdata,
 				atomic_add(1, &qcmd->on_heap);
 			CDBG("%s: VFE_MSG_SNAPSHOT store\n",
 				__func__);
-			if (sync->stereocam_enabled) {
+			if (sync->stereocam_enabled &&
+				sync->stereo_state != STEREO_RAW_SNAP_STARTED) {
 				sync->pp_stereosnap = qcmd;
 				return;
 			}

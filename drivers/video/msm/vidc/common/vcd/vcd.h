@@ -246,7 +246,7 @@ void vcd_handle_input_done_with_codec_config
 	struct ddl_frame_data_tag *frm);
 
 void vcd_handle_input_done_for_interlacing
-    (struct vcd_clnt_ctxt *cctxt, struct vcd_transc *transc);
+    (struct vcd_clnt_ctxt *cctxt);
 
 void vcd_handle_input_done_with_trans_end
     (struct vcd_clnt_ctxt *cctxt);

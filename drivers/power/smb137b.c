@@ -660,6 +660,13 @@ static int __devinit smb137b_probe(struct i2c_client *client,
 		goto free_valid_gpio;
 	}
 
+	ret = set_irq_wake(client->irq, 1);
+	if (ret) {
+		dev_err(&client->dev, "%s failed for set_irq_wake %d ret =%d\n",
+			 __func__, client->irq, ret);
+		goto unregister_charger;
+	}
+
 	ret = request_threaded_irq(client->irq, NULL,
 				   smb137b_valid_handler,
 				   IRQF_TRIGGER_FALLING | IRQF_TRIGGER_RISING,
@@ -668,7 +675,7 @@ static int __devinit smb137b_probe(struct i2c_client *client,
 		dev_err(&client->dev,
 			"%s request_threaded_irq failed for %d ret =%d\n",
 			__func__, client->irq, ret);
-		goto unregister_charger;
+		goto disable_irq_wake;
 	}
 
 	ret = gpio_get_value_cansleep(smb137b_chg->valid_n_gpio);
@@ -704,6 +711,8 @@ static int __devinit smb137b_probe(struct i2c_client *client,
 	smb137b_chg->batt_status = POWER_SUPPLY_STATUS_DISCHARGING;
 	smb137b_chg->batt_chg_type = POWER_SUPPLY_CHARGE_TYPE_NONE;
 
+	device_init_wakeup(&client->dev, 1);
+
 	usb_smb137b_chg = smb137b_chg;
 	smb137b_create_debugfs_entries(smb137b_chg);
 	dev_dbg(&client->dev,
@@ -711,6 +720,8 @@ static int __devinit smb137b_probe(struct i2c_client *client,
 		smb137b_chg->dev_id_reg, smb137b_chg->usb_status);
 	return 0;
 
+disable_irq_wake:
+	set_irq_wake(client->irq, 0);
 unregister_charger:
 	msm_charger_unregister(&smb137b_chg->adapter_hw_chg);
 free_valid_gpio:
@@ -764,6 +775,8 @@ static int __devexit smb137b_remove(struct i2c_client *client)
 	struct smb137b_data *smb137b_chg = i2c_get_clientdata(client);
 
 	pdata = client->dev.platform_data;
+	device_init_wakeup(&client->dev, 0);
+	set_irq_wake(client->irq, 0);
 	free_irq(client->irq, client);
 	gpio_free(pdata->valid_n_gpio);
 	cancel_delayed_work_sync(&smb137b_chg->charge_work);

@@ -14,6 +14,24 @@
 #ifndef _MSM_SDCC_H
 #define _MSM_SDCC_H
 
+#include <linux/types.h>
+
+#include <linux/ioport.h>
+#include <linux/interrupt.h>
+#include <linux/mmc/host.h>
+#include <linux/mmc/card.h>
+#include <linux/mmc/mmc.h>
+#include <linux/mmc/sdio.h>
+#include <linux/scatterlist.h>
+#include <linux/dma-mapping.h>
+#include <linux/wakelock.h>
+#include <linux/earlysuspend.h>
+#include <mach/sps.h>
+
+#include <asm/sizes.h>
+#include <asm/mach/mmc.h>
+#include <mach/dma.h>
+
 #define MMCIPOWER		0x000
 #define MCI_PWR_OFF		0x00
 #define MCI_PWR_UP		0x02
@@ -213,11 +231,39 @@ struct msmsdcc_curr_req {
 	int			user_pages;
 };
 
+struct msmsdcc_sps_ep_conn_data {
+	struct sps_pipe			*pipe_handle;
+	struct sps_connect		config;
+	struct sps_register_event	event;
+};
+
+struct msmsdcc_sps_data {
+	struct msmsdcc_sps_ep_conn_data	prod;
+	struct msmsdcc_sps_ep_conn_data	cons;
+	struct sps_event_notify		notify;
+	enum dma_data_direction		dir;
+	struct scatterlist		*sg;
+	int				num_ents;
+	u32				bam_handle;
+	unsigned int			src_pipe_index;
+	unsigned int			dest_pipe_index;
+	unsigned int			busy;
+	unsigned int			xfer_req_cnt;
+	struct tasklet_struct		tlet;
+
+};
+
 struct msmsdcc_host {
-	struct resource		*irqres;
-	struct resource		*memres;
+	struct resource		*core_irqres;
+	struct resource		*bam_irqres;
+	struct resource		*core_memres;
+	struct resource		*bam_memres;
+	struct resource		*dml_memres;
 	struct resource		*dmares;
 	void __iomem		*base;
+	void __iomem		*dml_base;
+	void __iomem		*bam_base;
+
 	int			pdev_id;
 
 	struct msmsdcc_curr_req	curr;
@@ -242,6 +288,9 @@ struct msmsdcc_host {
 
 	struct msmsdcc_dma_data	dma;
 	struct sg_mapping_iter	sg_miter;
+	struct msmsdcc_sps_data sps;
+	bool			is_dma_mode;
+	bool			is_sps_mode;
 
 #ifdef CONFIG_HAS_EARLYSUSPEND
 	struct early_suspend early_suspend;

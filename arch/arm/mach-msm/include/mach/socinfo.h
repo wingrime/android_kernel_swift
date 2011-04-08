@@ -88,6 +88,14 @@ static inline int cpu_is_msm7x27(void)
 	return cpu == MSM_CPU_7X27;
 }
 
+static inline int cpu_is_msm7x27a(void)
+{
+	enum msm_cpu cpu = socinfo_get_msm_cpu();
+
+	BUG_ON(cpu == MSM_CPU_UNKNOWN);
+	return cpu == MSM_CPU_7X27A;
+}
+
 static inline int cpu_is_msm7x30(void)
 {
 	enum msm_cpu cpu = socinfo_get_msm_cpu();

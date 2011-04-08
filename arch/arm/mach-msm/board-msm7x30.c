@@ -3453,7 +3453,7 @@ static void __init msm_qsd_spi_init(void)
 	qsd_device_spi.dev.platform_data = &qsd_spi_pdata;
 }
 
-#ifdef CONFIG_USB_EHCI_MSM
+#ifdef CONFIG_USB_EHCI_MSM_72K
 static void msm_hsusb_vbus_power(unsigned phy_info, int on)
 {
         int rc;
@@ -3565,13 +3565,13 @@ static int msm_hsusb_ldo_set_voltage(int mV)
 }
 #endif
 
-#ifndef CONFIG_USB_EHCI_MSM
+#ifndef CONFIG_USB_EHCI_MSM_72K
 static int msm_hsusb_pmic_notif_init(void (*callback)(int online), int init);
 #endif
 static struct msm_otg_platform_data msm_otg_pdata = {
 	.rpc_connect	= hsusb_rpc_connect,
 
-#ifndef CONFIG_USB_EHCI_MSM
+#ifndef CONFIG_USB_EHCI_MSM_72K
 	.pmic_vbus_notif_init         = msm_hsusb_pmic_notif_init,
 #else
 	.vbus_power = msm_hsusb_vbus_power,
@@ -3594,7 +3594,7 @@ static struct msm_hsusb_gadget_platform_data msm_gadget_pdata = {
 	.is_phy_status_timer_on = 1,
 };
 #endif
-#ifndef CONFIG_USB_EHCI_MSM
+#ifndef CONFIG_USB_EHCI_MSM_72K
 typedef void (*notify_vbus_state) (int);
 notify_vbus_state notify_vbus_state_func_ptr;
 int vbus_on_irq;
@@ -7361,7 +7361,7 @@ static void __init msm7x30_init(void)
 #endif
 
 	platform_add_devices(devices, ARRAY_SIZE(devices));
-#ifdef CONFIG_USB_EHCI_MSM
+#ifdef CONFIG_USB_EHCI_MSM_72K
 	msm_add_host(0, &msm_usb_host_pdata);
 #endif
 	msm7x30_init_mmc();

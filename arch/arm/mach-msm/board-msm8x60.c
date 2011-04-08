@@ -956,14 +956,14 @@ static struct platform_device isp1763_device = {
 };
 #endif
 
-#if defined(CONFIG_USB_GADGET_MSM_72K) || defined(CONFIG_USB_EHCI_MSM)
+#if defined(CONFIG_USB_GADGET_MSM_72K) || defined(CONFIG_USB_EHCI_MSM_72K)
 static struct regulator *ldo6_3p3;
 static struct regulator *ldo7_1p8;
 static struct regulator *vdd_cx;
 #define PMICID_INT		PM8058_GPIO_IRQ(PM8058_IRQ_BASE, 36)
 notify_vbus_state notify_vbus_state_func_ptr;
 
-#ifdef CONFIG_USB_EHCI_MSM
+#ifdef CONFIG_USB_EHCI_MSM_72K
 #define USB_PMIC_ID_DET_DELAY	msecs_to_jiffies(100)
 struct delayed_work pmic_id_det;
 static int pmic_id_notif_supported;
@@ -1237,7 +1237,7 @@ static int msm_hsusb_ldo_enable(int on)
 	return ret < 0 ? ret : 0;
  }
 #endif
-#ifdef CONFIG_USB_EHCI_MSM
+#ifdef CONFIG_USB_EHCI_MSM_72K
 #if defined(CONFIG_SMB137B_CHARGER) || defined(CONFIG_SMB137B_CHARGER_MODULE)
 static void msm_hsusb_smb137b_vbus_power(unsigned phy_info, int on)
 {
@@ -1333,7 +1333,7 @@ static int msm_hsusb_pmic_vbus_notif_init(void (*callback)(int online),
 			ret = 0;
 		}
 	} else {
-#if !defined(CONFIG_USB_EHCI_MSM)
+#if !defined(CONFIG_USB_EHCI_MSM_72K)
 	if (init)
 		ret = msm_charger_register_vbus_sn(callback);
 	else {
@@ -1346,7 +1346,7 @@ static int msm_hsusb_pmic_vbus_notif_init(void (*callback)(int online),
 }
 #endif
 
-#if defined(CONFIG_USB_GADGET_MSM_72K) || defined(CONFIG_USB_EHCI_MSM)
+#if defined(CONFIG_USB_GADGET_MSM_72K) || defined(CONFIG_USB_EHCI_MSM_72K)
 static struct msm_otg_platform_data msm_otg_pdata = {
 	/* if usb link is in sps there is no need for
 	 * usb pclk as dayatona fabric clock will be
@@ -1356,10 +1356,10 @@ static struct msm_otg_platform_data msm_otg_pdata = {
 	.pemp_level		 = PRE_EMPHASIS_WITH_20_PERCENT,
 	.cdr_autoreset		 = CDR_AUTO_RESET_DISABLE,
 	.se1_gating		 = SE1_GATING_DISABLE,
-#ifdef CONFIG_USB_EHCI_MSM
+#ifdef CONFIG_USB_EHCI_MSM_72K
 	.pmic_id_notif_init = msm_hsusb_pmic_id_notif_init,
 #endif
-#ifdef CONFIG_USB_EHCI_MSM
+#ifdef CONFIG_USB_EHCI_MSM_72K
 	.vbus_power = msm_hsusb_vbus_power,
 #endif
 #ifdef CONFIG_BATTERY_MSM8X60
@@ -9099,7 +9099,7 @@ static void __init msm8x60_init(struct msm_board_data *board_data)
 					     msm_num_footswitch_devices);
 		platform_add_devices(surf_devices,
 				     ARRAY_SIZE(surf_devices));
-#ifdef CONFIG_USB_EHCI_MSM
+#ifdef CONFIG_USB_EHCI_MSM_72K
 	/*
 	 * Drive MPP2 pin HIGH for PHY to generate ID interrupts on 8660
 	 * fluid

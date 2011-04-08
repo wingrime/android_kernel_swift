@@ -353,7 +353,7 @@ static struct msm_hsusb_platform_data msm_hsusb_pdata = {
 };
 #endif
 
-#ifdef CONFIG_USB_EHCI_MSM
+#ifdef CONFIG_USB_EHCI_MSM_72K
 static void msm_hsusb_vbus_power(unsigned phy_info, int on)
 {
 	if (on)
@@ -433,7 +433,7 @@ static struct msm_otg_platform_data msm_otg_pdata = {
 	.chg_vbus_draw		 = hsusb_chg_vbus_draw,
 	.chg_connected		 = hsusb_chg_connected,
 	.chg_init		 = hsusb_chg_init,
-#ifdef CONFIG_USB_EHCI_MSM
+#ifdef CONFIG_USB_EHCI_MSM_72K
 	.vbus_power = msm_hsusb_vbus_power,
 #endif
 	.ldo_init		= msm_hsusb_ldo_init,
@@ -2034,7 +2034,7 @@ static void __init msm7x2x_init(void)
 #endif
 	lcdc_gordon_gpio_init();
 	msm_fb_add_devices();
-#ifdef CONFIG_USB_EHCI_MSM
+#ifdef CONFIG_USB_EHCI_MSM_72K
 	msm7x2x_init_host();
 #endif
 	msm7x2x_init_mmc();

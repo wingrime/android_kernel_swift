@@ -163,16 +163,16 @@ config USB_OXU210HP_HCD
 	  To compile this driver as a module, choose M here: the
 	  module will be called oxu210hp-hcd.
 
-config USB_EHCI_MSM
+config USB_EHCI_MSM_72K
 	bool "Support for Qualcomm on-chip EHCI USB controller"
 	depends on USB_EHCI_HCD && USB_MSM_OTG_72K && ARCH_MSM
 	---help---
-	  Enables support for the USB controller present on the
-	  Qualcomm chipsets.
+	  This driver enables support for USB host controller
+	  in pre 8660 qualcomm chipsets(8660, 7X30, 8X50 and 7X27).
 
 config USB_FS_HOST
 	bool "Support for Full Speed Host Mode"
-	depends on USB_EHCI_MSM && ARCH_QSD8X50
+	depends on USB_EHCI_MSM_72K && ARCH_QSD8X50
 	default n
 	---help---
 	  Enables support for the full speed USB controller core present

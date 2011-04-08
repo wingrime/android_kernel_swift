@@ -350,7 +350,7 @@ static struct msm_cpuidle_state msm_cstates[] __initdata = {
 		MSM_PM_SLEEP_MODE_POWER_COLLAPSE_STANDALONE},
 };
 
-#if defined(CONFIG_USB_GADGET_MSM_72K) || defined(CONFIG_USB_EHCI_MSM)
+#if defined(CONFIG_USB_GADGET_MSM_72K) || defined(CONFIG_USB_EHCI_MSM_72K)
 static struct regulator *ldo6_3p3;
 static struct regulator *ldo7_1p8;
 static struct regulator *vdd_cx;
@@ -532,7 +532,7 @@ static int msm_hsusb_ldo_enable(int on)
 	return ret < 0 ? ret : 0;
  }
 #endif
-#ifdef CONFIG_USB_EHCI_MSM
+#ifdef CONFIG_USB_EHCI_MSM_72K
 static void msm_hsusb_vbus_power(unsigned phy_info, int on)
 {
 	static struct regulator *votg_5v_switch;
@@ -586,7 +586,7 @@ static struct msm_usb_host_platform_data msm_usb_host_pdata = {
 };
 #endif
 
-#if defined(CONFIG_USB_GADGET_MSM_72K) || defined(CONFIG_USB_EHCI_MSM)
+#if defined(CONFIG_USB_GADGET_MSM_72K) || defined(CONFIG_USB_EHCI_MSM_72K)
 
 #define USB_SWITCH_EN_GPIO	132		/* !CS of analog switch */
 #define USB_SWITCH_CNTL_GPIO	131		/* 0: Host, 1: Peripheral */
@@ -688,7 +688,7 @@ static struct msm_otg_platform_data msm_otg_pdata = {
 	.pemp_level		 = PRE_EMPHASIS_WITH_20_PERCENT,
 	.cdr_autoreset		 = CDR_AUTO_RESET_DISABLE,
 	.se1_gating		 = SE1_GATING_DISABLE,
-#ifdef CONFIG_USB_EHCI_MSM
+#ifdef CONFIG_USB_EHCI_MSM_72K
 	.vbus_power = msm_hsusb_vbus_power,
 #endif
 	.ldo_init		 = msm_hsusb_ldo_init,
@@ -5297,7 +5297,7 @@ static void __init msm8x60_init(struct msm_board_data *board_data)
 				     msm_num_footswitch_devices);
 	platform_add_devices(qt_devices,
 			     ARRAY_SIZE(qt_devices));
-#ifdef CONFIG_USB_EHCI_MSM
+#ifdef CONFIG_USB_EHCI_MSM_72K
 		msm_add_host(0, &msm_usb_host_pdata);
 #endif
 

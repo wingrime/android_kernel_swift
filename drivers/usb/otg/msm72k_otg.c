@@ -137,7 +137,7 @@ static int usb_ulpi_read(struct otg_transceiver *xceiv, u32 reg)
 	return ulpi_read(dev, reg);
 }
 
-#ifdef CONFIG_USB_EHCI_MSM
+#ifdef CONFIG_USB_EHCI_MSM_72K
 static void enable_idgnd(struct msm_otg *dev)
 {
 	/* Do nothing if instead of ID pin, USER controls mode switch */
@@ -983,7 +983,7 @@ static int msm_otg_set_peripheral(struct otg_transceiver *xceiv,
 	return 0;
 }
 
-#ifdef CONFIG_USB_EHCI_MSM
+#ifdef CONFIG_USB_EHCI_MSM_72K
 static int usbdev_notify(struct notifier_block *self,
 			unsigned long action, void *device)
 {
@@ -1487,7 +1487,7 @@ reset_link:
 		}
 	}
 
-#ifdef CONFIG_USB_EHCI_MSM
+#ifdef CONFIG_USB_EHCI_MSM_72K
 	if (dev->otg.host && !dev->pmic_id_notif_supp) {
 		enable_idgnd(dev);
 		/* Handle missing ID_GND interrupts during fast PIPO */
@@ -2387,7 +2387,7 @@ static int __init msm_otg_probe(struct platform_device *pdev)
 		goto free_dev;
 	}
 
-#ifdef CONFIG_USB_EHCI_MSM
+#ifdef CONFIG_USB_EHCI_MSM_72K
 	if (!dev->pdata->vbus_power) {
 		ret = -ENODEV;
 		goto free_dev;
@@ -2586,7 +2586,7 @@ static int __init msm_otg_probe(struct platform_device *pdev)
 	}
 
 	dev->otg.set_peripheral = msm_otg_set_peripheral;
-#ifdef CONFIG_USB_EHCI_MSM
+#ifdef CONFIG_USB_EHCI_MSM_72K
 	dev->otg.set_host = msm_otg_set_host;
 #endif
 	dev->otg.set_suspend = msm_otg_set_suspend;

@@ -298,8 +298,40 @@ static struct platform_device rndis_device = {
 	},
 };
 
+#ifdef CONFIG_USB_EHCI_MSM
+static int  msm_hsusb_vbus_init(int on)
+{
+	int rc = 0;
+	rc = gpio_request(GPIO_HOST_VBUS_EN, "i2c_host_vbus_en");
+	if (rc < 0) {
+		pr_err("failed to request %d GPIO\n", GPIO_HOST_VBUS_EN);
+		return rc;
+	}
+	gpio_direction_output(GPIO_HOST_VBUS_EN, 1);
+	return rc;
+}
+static void msm_hsusb_vbus_power(unsigned phy_info, int on)
+{
+	gpio_set_value(GPIO_HOST_VBUS_EN, !!on);
+}
+
+static struct msm_usb_host_platform_data msm_usb_host_pdata = {
+	.phy_info       = (USB_PHY_INTEGRATED | USB_PHY_MODEL_45NM),
+	.vbus_init	= msm_hsusb_vbus_init,
+	.vbus_power	= msm_hsusb_vbus_power,
+};
+
+static void __init msm7x2x_init_host(void)
+{
+	msm_add_host(0, &msm_usb_host_pdata);
+}
+#endif
+
 #ifdef CONFIG_USB_MSM_OTG_72K
 static struct msm_otg_platform_data msm_otg_pdata = {
+#ifdef CONFIG_USB_EHCI_MSM
+	.vbus_power		= msm_hsusb_vbus_power,
+#endif
 	.core_clk		 = 1,
 	.pemp_level		 = PRE_EMPHASIS_WITH_20_PERCENT,
 	.cdr_autoreset		 = CDR_AUTO_RESET_DISABLE,
@@ -469,6 +501,9 @@ static void __init msm7x2x_init(void)
 #endif
 		platform_add_devices(surf_ffa_devices,
 				ARRAY_SIZE(surf_ffa_devices));
+#ifdef CONFIG_USB_EHCI_MSM
+		msm7x2x_init_host();
+#endif
 	}
 
 	msm_clock_init(msm_clocks_7x27a, msm_num_clocks_7x27a);

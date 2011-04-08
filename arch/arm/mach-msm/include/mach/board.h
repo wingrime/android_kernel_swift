@@ -155,6 +155,10 @@ struct msm_camera_sensor_strobe_flash_data {
 	int state;
 };
 
+struct msm_camera_sensor_platform_info {
+	int mount_angle;
+};
+
 struct msm_camera_sensor_info {
 	const char *sensor_name;
 	int sensor_reset;
@@ -163,6 +167,7 @@ struct msm_camera_sensor_info {
 	int vcm_enable;
 	int mclk;
 	int flash_type;
+	struct msm_camera_sensor_platform_info *sensor_platform_info;
 	struct msm_camera_device_platform_data *pdata;
 	struct resource *resource;
 	uint8_t num_resources;

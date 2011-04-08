@@ -1778,11 +1778,18 @@ static int config_gpio_table(enum msm_cam_stat stat)
 	return rc;
 }
 
+static struct msm_camera_sensor_platform_info sensor_board_info = {
+	.mount_angle = 0
+};
+
 #define CAM_BOOSTER_MPP	(0)
 static int config_camera_on_gpios_fluid(void)
 {
 	int rc = 0;
 
+#ifdef CONFIG_IMX074
+	sensor_board_info.mount_angle = 90;
+#endif
 	rc = config_gpio_table(MSM_CAM_ON);
 	if (rc < 0) {
 		printk(KERN_ERR "%s: CAMSENSOR gpio table request"
@@ -1995,6 +2002,7 @@ static struct msm_camera_sensor_info msm_camera_sensor_imx074_data = {
 	.num_resources		= ARRAY_SIZE(msm_camera_resources),
 	.flash_data		= &flash_imx074,
 	.strobe_flash_data	= &strobe_flash_xenon,
+	.sensor_platform_info = &sensor_board_info,
 	.csi_if			= 1
 };
 struct platform_device msm_camera_sensor_imx074 = {
@@ -2005,6 +2013,11 @@ struct platform_device msm_camera_sensor_imx074 = {
 };
 #endif
 #ifdef CONFIG_WEBCAM_OV9726
+
+static struct msm_camera_sensor_platform_info ov9726_sensor_8660_info = {
+	.mount_angle = 0
+};
+
 static struct msm_camera_sensor_flash_data flash_ov9726 = {
 	.flash_type	= MSM_CAMERA_FLASH_LED,
 	.flash_src	= &msm_flash_src
@@ -2019,6 +2032,7 @@ static struct msm_camera_sensor_info msm_camera_sensor_ov9726_data = {
 	.resource	= msm_camera_resources,
 	.num_resources	= ARRAY_SIZE(msm_camera_resources),
 	.flash_data	= &flash_ov9726,
+	.sensor_platform_info = &ov9726_sensor_8660_info,
 	.csi_if		= 1
 };
 struct platform_device msm_camera_sensor_webcam_ov9726 = {

@@ -1,4 +1,4 @@
-/* Copyright (c) 2010, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2010-2011, Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -63,9 +63,26 @@ static int rpcrouter_smd_remote_close(void)
 
 static void rpcrouter_smd_remote_notify(void *_dev, unsigned event)
 {
-	if (event == SMD_EVENT_DATA)
+	switch (event) {
+	case SMD_EVENT_DATA:
 		msm_rpcrouter_xprt_notify(&smd_remote_xprt.xprt,
 					  RPCROUTER_XPRT_EVENT_DATA);
+		break;
+
+	case SMD_EVENT_OPEN:
+		pr_info("%s: smd opened 0x%p\n", __func__, _dev);
+
+		msm_rpcrouter_xprt_notify(&smd_remote_xprt.xprt,
+			RPCROUTER_XPRT_EVENT_OPEN);
+		break;
+
+	case SMD_EVENT_CLOSE:
+		pr_info("%s: smd closed 0x%p\n", __func__, _dev);
+
+		msm_rpcrouter_xprt_notify(&smd_remote_xprt.xprt,
+				RPCROUTER_XPRT_EVENT_CLOSE);
+		break;
+    }
 }
 
 #if defined(CONFIG_MSM_RPC_LOOPBACK_XPRT)
@@ -99,9 +116,26 @@ static int rpcrouter_smd_loopback_close(void)
 
 static void rpcrouter_smd_loopback_notify(void *_dev, unsigned event)
 {
-	if (event == SMD_EVENT_DATA)
+	switch (event) {
+	case SMD_EVENT_DATA:
 		msm_rpcrouter_xprt_notify(&smd_loopback_xprt.xprt,
 					  RPCROUTER_XPRT_EVENT_DATA);
+		break;
+
+	case SMD_EVENT_OPEN:
+		pr_debug("%s: smd loopback opened 0x%p\n", __func__, _dev);
+
+		msm_rpcrouter_xprt_notify(&smd_loopback_xprt.xprt,
+			RPCROUTER_XPRT_EVENT_OPEN);
+		break;
+
+	case SMD_EVENT_CLOSE:
+		pr_debug("%s: smd loopback closed 0x%p\n", __func__, _dev);
+
+		msm_rpcrouter_xprt_notify(&smd_loopback_xprt.xprt,
+				RPCROUTER_XPRT_EVENT_CLOSE);
+		break;
+    }
 }
 
 static int rpcrouter_smd_loopback_probe(struct platform_device *pdev)
@@ -124,9 +158,6 @@ static int rpcrouter_smd_loopback_probe(struct platform_device *pdev)
 		return rc;
 
 	smd_disable_read_intr(smd_remote_xprt.channel);
-
-	msm_rpcrouter_xprt_notify(&smd_loopback_xprt.xprt,
-				  RPCROUTER_XPRT_EVENT_OPEN);
 	return 0;
 }
 
@@ -159,11 +190,6 @@ static int rpcrouter_smd_remote_probe(struct platform_device *pdev)
 		return rc;
 
 	smd_disable_read_intr(smd_remote_xprt.channel);
-
-	msm_rpcrouter_xprt_notify(&smd_remote_xprt.xprt,
-				  RPCROUTER_XPRT_EVENT_OPEN);
-
-	smsm_change_state(SMSM_APPS_STATE, 0, SMSM_RPCINIT);
 
 	return 0;
 }

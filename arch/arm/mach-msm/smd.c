@@ -34,6 +34,7 @@
 #include <mach/msm_smd.h>
 #include <mach/msm_iomap.h>
 #include <mach/system.h>
+#include <mach/subsystem_notif.h>
 
 #include "smd_private.h"
 #include "proc_comm.h"
@@ -396,6 +397,7 @@ void smd_channel_reset(void)
 	struct smd_shared_v1 *shared1;
 	struct smd_shared_v2 *shared2;
 	uint32_t type;
+	uint32_t *smem_lock;
 
 	SMD_DBG("%s: starting reset\n", __func__);
 	shared = smem_find(ID_CH_ALLOC_TBL, sizeof(*shared) * 64);
@@ -404,6 +406,17 @@ void smd_channel_reset(void)
 		return;
 	}
 
+	/* This code has a race condition with non-RPC clients that
+	 * could result in clients attempting to read or write at the
+	 * same time that this code is clearing out the data
+	 * structures.
+	 *
+	 * Since this code is not yet active in the mainline, a
+	 * follow-up changelist will be done that will address
+	 * this issue, but it's important to get the RPC API
+	 * out to clients for integration while this effort is
+	 * done in parallel.
+	 */
 	mutex_lock(&smd_probe_lock);
 	for (n = 0; n < 64; n++) {
 
@@ -449,6 +462,16 @@ void smd_channel_reset(void)
 	if (smsm_info.state)
 		memset(smsm_info.state, 0,
 		       sizeof(*smsm_info.state) * SMSM_NUM_ENTRIES);
+
+	smem_lock = smem_alloc(SMEM_SPINLOCK_ARRAY, 8 * sizeof(uint32_t));
+	if (smem_lock) {
+		for (n = 0; n < 8; n++) {
+			uint32_t pid = readl_relaxed(smem_lock);
+			if (pid && (pid != 1))
+				writel_relaxed(0, smem_lock);
+			smem_lock++;
+		}
+	}
 
 	/* notify clients of state change */
 	smd_fake_irq_handler(0);
@@ -1940,6 +1963,37 @@ static int __devinit msm_smd_probe(struct platform_device *pdev)
 
 	return 0;
 }
+
+static int modem_restart_notifier_cb(struct notifier_block *this,
+				  unsigned long code,
+				  void *data);
+
+static struct notifier_block nb = {
+	.notifier_call = modem_restart_notifier_cb,
+};
+
+static int modem_restart_notifier_cb(struct notifier_block *this,
+				  unsigned long code,
+				  void *data)
+{
+	switch (code) {
+
+	case SUBSYS_AFTER_SHUTDOWN:
+		SMD_INFO("%s: Modem reset - resetting channel\n", __func__);
+		smd_channel_reset();
+		break;
+	}
+
+	return NOTIFY_DONE;
+}
+
+static void *restart_notifier_handle;
+static __init int modem_restart_late_init(void)
+{
+	restart_notifier_handle = subsys_notif_register_notifier("modem", &nb);
+	return 0;
+}
+late_initcall(modem_restart_late_init);
 
 static struct platform_driver msm_smd_driver = {
 	.probe = msm_smd_probe,

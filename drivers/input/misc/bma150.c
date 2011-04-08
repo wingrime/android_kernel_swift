@@ -715,12 +715,18 @@ static int bma150_suspend(struct i2c_client *client, pm_message_t mesg)
 
 	bma150_set_mode(client, BMA150_MODE_SLEEP);
 
+	if ((data->platform_data) && (data->platform_data->power_off))
+		data->platform_data->power_off();
+
 	return 0;
 }
 
 static int bma150_resume(struct i2c_client *client)
 {
 	struct bma150_data *data = i2c_get_clientdata(client);
+
+	if ((data->platform_data) && (data->platform_data->power_on))
+		data->platform_data->power_on();
 
 	bma150_set_mode(client, BMA150_MODE_NORMAL);
 

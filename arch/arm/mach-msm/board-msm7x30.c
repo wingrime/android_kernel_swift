@@ -3132,7 +3132,7 @@ static int sensors_ldo_enable(void)
 		goto fail_gp6_get;
 	}
 
-	rc = vreg_set_level(vreg_gp6, 2800);
+	rc = vreg_set_level(vreg_gp6, 3050);
 	if (rc) {
 		pr_err("%s: vreg_set_level gp6 failed\n", __func__);
 		goto fail_gp6_level;

@@ -586,8 +586,10 @@ sleep:
 		clk_set_rate(pwr->grp_clks[0],
 				pwr->pwrlevels[pwr->num_pwrlevels - 1].
 				gpu_freq);
-
+	goto clk_off;
 nap:
+	kgsl_pwrctrl_irq(device, KGSL_PWRFLAGS_IRQ_OFF);
+clk_off:
 	kgsl_pwrctrl_clk(device, KGSL_PWRFLAGS_CLK_OFF);
 
 	device->state = device->requested_state;
@@ -611,12 +613,13 @@ void kgsl_pwrctrl_wake(struct kgsl_device *device)
 	kgsl_pwrctrl_clk(device, KGSL_PWRFLAGS_CLK_ON);
 	if (device->state != KGSL_STATE_NAP) {
 		kgsl_pwrctrl_axi(device, KGSL_PWRFLAGS_AXI_ON);
-		kgsl_pwrctrl_irq(device, KGSL_PWRFLAGS_IRQ_ON);
 	}
-
-	/* Re-enable HW access */
+	/* Enable state before turning on irq */
 	device->state = KGSL_STATE_ACTIVE;
 	KGSL_PWR_WARN(device, "state -> ACTIVE, device %d\n", device->id);
+	kgsl_pwrctrl_irq(device, KGSL_PWRFLAGS_IRQ_ON);
+
+	/* Re-enable HW access */
 	mod_timer(&device->idle_timer,
 				jiffies + device->pwrctrl.interval_timeout);
 

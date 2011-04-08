@@ -193,10 +193,21 @@ struct platform_device msm_device_wcnss_wlan = {
 };
 
 #define MSM_SDC1_BASE         0x12400000
+#define MSM_SDC1_DML_BASE     (MSM_SDC1_BASE + 0x800)
+#define MSM_SDC1_BAM_BASE     (MSM_SDC1_BASE + 0x2000)
+#define MSM_SDC2_BASE         0x12140000
+#define MSM_SDC2_DML_BASE     (MSM_SDC2_BASE + 0x800)
+#define MSM_SDC2_BAM_BASE     (MSM_SDC2_BASE + 0x2000)
 #define MSM_SDC2_BASE         0x12140000
 #define MSM_SDC3_BASE         0x12180000
+#define MSM_SDC3_DML_BASE     (MSM_SDC3_BASE + 0x800)
+#define MSM_SDC3_BAM_BASE     (MSM_SDC3_BASE + 0x2000)
 #define MSM_SDC4_BASE         0x121C0000
+#define MSM_SDC4_DML_BASE     (MSM_SDC4_BASE + 0x800)
+#define MSM_SDC4_BAM_BASE     (MSM_SDC4_BASE + 0x2000)
 #define MSM_SDC5_BASE         0x12200000
+#define MSM_SDC5_DML_BASE     (MSM_SDC5_BASE + 0x800)
+#define MSM_SDC5_BAM_BASE     (MSM_SDC5_BASE + 0x2000)
 
 static struct resource resources_sdc1[] = {
 	{
@@ -210,7 +221,27 @@ static struct resource resources_sdc1[] = {
 		.flags	= IORESOURCE_IRQ,
 		.start	= SDC1_IRQ_0,
 		.end	= SDC1_IRQ_0
-	}
+	},
+#ifdef CONFIG_MMC_MSM_SPS_SUPPORT
+	{
+		.name   = "sdcc_dml_addr",
+		.start	= MSM_SDC1_DML_BASE,
+		.end	= MSM_SDC1_BAM_BASE - 1,
+		.flags	= IORESOURCE_MEM,
+	},
+	{
+		.name   = "sdcc_bam_addr",
+		.start	= MSM_SDC1_BAM_BASE,
+		.end	= MSM_SDC1_BAM_BASE + (2 * SZ_4K) - 1,
+		.flags	= IORESOURCE_MEM,
+	},
+	{
+		.name   = "sdcc_bam_irq",
+		.start	= SDC1_BAM_IRQ,
+		.end	= SDC1_BAM_IRQ,
+		.flags	= IORESOURCE_IRQ,
+	},
+#endif
 };
 
 static struct resource resources_sdc2[] = {
@@ -225,7 +256,27 @@ static struct resource resources_sdc2[] = {
 		.flags	= IORESOURCE_IRQ,
 		.start	= SDC2_IRQ_0,
 		.end	= SDC2_IRQ_0
-	}
+	},
+#ifdef CONFIG_MMC_MSM_SPS_SUPPORT
+	{
+		.name   = "sdcc_dml_addr",
+		.start	= MSM_SDC2_DML_BASE,
+		.end	= MSM_SDC2_BAM_BASE - 1,
+		.flags	= IORESOURCE_MEM,
+	},
+	{
+		.name   = "sdcc_bam_addr",
+		.start	= MSM_SDC2_BAM_BASE,
+		.end	= MSM_SDC2_BAM_BASE + (2 * SZ_4K) - 1,
+		.flags	= IORESOURCE_MEM,
+	},
+	{
+		.name   = "sdcc_bam_irq",
+		.start	= SDC2_BAM_IRQ,
+		.end	= SDC2_BAM_IRQ,
+		.flags	= IORESOURCE_IRQ,
+	},
+#endif
 };
 
 static struct resource resources_sdc3[] = {
@@ -240,7 +291,27 @@ static struct resource resources_sdc3[] = {
 		.flags	= IORESOURCE_IRQ,
 		.start	= SDC3_IRQ_0,
 		.end	= SDC3_IRQ_0
-	}
+	},
+#ifdef CONFIG_MMC_MSM_SPS_SUPPORT
+	{
+		.name   = "sdcc_dml_addr",
+		.start	= MSM_SDC3_DML_BASE,
+		.end	= MSM_SDC3_BAM_BASE - 1,
+		.flags	= IORESOURCE_MEM,
+	},
+	{
+		.name   = "sdcc_bam_addr",
+		.start	= MSM_SDC3_BAM_BASE,
+		.end	= MSM_SDC3_BAM_BASE + (2 * SZ_4K) - 1,
+		.flags	= IORESOURCE_MEM,
+	},
+	{
+		.name   = "sdcc_bam_irq",
+		.start	= SDC3_BAM_IRQ,
+		.end	= SDC3_BAM_IRQ,
+		.flags	= IORESOURCE_IRQ,
+	},
+#endif
 };
 
 static struct resource resources_sdc4[] = {
@@ -255,7 +326,27 @@ static struct resource resources_sdc4[] = {
 		.flags	= IORESOURCE_IRQ,
 		.start	= SDC4_IRQ_0,
 		.end	= SDC4_IRQ_0
-	}
+	},
+#ifdef CONFIG_MMC_MSM_SPS_SUPPORT
+	{
+		.name   = "sdcc_dml_addr",
+		.start	= MSM_SDC4_DML_BASE,
+		.end	= MSM_SDC4_BAM_BASE - 1,
+		.flags	= IORESOURCE_MEM,
+	},
+	{
+		.name   = "sdcc_bam_addr",
+		.start	= MSM_SDC4_BAM_BASE,
+		.end	= MSM_SDC4_BAM_BASE + (2 * SZ_4K) - 1,
+		.flags	= IORESOURCE_MEM,
+	},
+	{
+		.name   = "sdcc_bam_irq",
+		.start	= SDC4_BAM_IRQ,
+		.end	= SDC4_BAM_IRQ,
+		.flags	= IORESOURCE_IRQ,
+	},
+#endif
 };
 
 static struct resource resources_sdc5[] = {
@@ -270,7 +361,27 @@ static struct resource resources_sdc5[] = {
 		.flags	= IORESOURCE_IRQ,
 		.start	= SDC5_IRQ_0,
 		.end	= SDC5_IRQ_0
-	}
+	},
+#ifdef CONFIG_MMC_MSM_SPS_SUPPORT
+	{
+		.name   = "sdcc_dml_addr",
+		.start	= MSM_SDC5_DML_BASE,
+		.end	= MSM_SDC5_BAM_BASE - 1,
+		.flags	= IORESOURCE_MEM,
+	},
+	{
+		.name   = "sdcc_bam_addr",
+		.start	= MSM_SDC5_BAM_BASE,
+		.end	= MSM_SDC5_BAM_BASE + (2 * SZ_4K) - 1,
+		.flags	= IORESOURCE_MEM,
+	},
+	{
+		.name   = "sdcc_bam_irq",
+		.start	= SDC5_BAM_IRQ,
+		.end	= SDC5_BAM_IRQ,
+		.flags	= IORESOURCE_IRQ,
+	},
+#endif
 };
 
 struct platform_device msm_device_sdc1 = {

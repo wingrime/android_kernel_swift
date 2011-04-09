@@ -328,10 +328,19 @@ static void __init msm7x2x_init_host(void)
 #endif
 
 #ifdef CONFIG_USB_MSM_OTG_72K
+static int hsusb_rpc_connect(int connect)
+{
+	if (connect)
+		return msm_hsusb_rpc_connect();
+	else
+		return msm_hsusb_rpc_close();
+}
+
 static struct msm_otg_platform_data msm_otg_pdata = {
 #ifdef CONFIG_USB_EHCI_MSM
 	.vbus_power		= msm_hsusb_vbus_power,
 #endif
+	.rpc_connect		 = hsusb_rpc_connect,
 	.core_clk		 = 1,
 	.pemp_level		 = PRE_EMPHASIS_WITH_20_PERCENT,
 	.cdr_autoreset		 = CDR_AUTO_RESET_DISABLE,

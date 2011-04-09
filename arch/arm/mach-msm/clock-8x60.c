@@ -610,6 +610,7 @@ static void set_rate_div_banked(struct clk_local *clk, struct clk_freq_tbl *nf)
 	}
 static struct clk_freq_tbl clk_tbl_gsbi_uart[] = {
 	F_GSBI_UART(       0, BB_GND,  1,  0,   0, NONE),
+	F_GSBI_UART( 1843200, BB_PLL8, 1,  3, 625, LOW),
 	F_GSBI_UART( 3686400, BB_PLL8, 1,  6, 625, LOW),
 	F_GSBI_UART( 7372800, BB_PLL8, 1, 12, 625, LOW),
 	F_GSBI_UART(14745600, BB_PLL8, 1, 24, 625, LOW),

@@ -648,6 +648,7 @@ static int vfe31_config_axi(int mode, struct axidata *ad, uint32_t *ao)
 	struct msm_pmem_region *regp2 = NULL;
 	struct msm_pmem_region *regp3 = NULL;
 	int ret;
+	struct msm_sync* p_sync = (struct msm_sync *)vfe_syncdata;
 
 	outp1 = NULL;
 	outp2 = NULL;
@@ -913,7 +914,9 @@ static int vfe31_config_axi(int mode, struct axidata *ad, uint32_t *ao)
 		vfe31_ctrl->outpath.output_mode |= VFE31_OUTPUT_MODE_S;
 		p1 = ao + 6;    /* wm0 for y  */
 		*p1 = (regp1->paddr + regp1->info.y_off);
-		}
+		if (p_sync->stereocam_enabled)
+			p_sync->stereo_state = STEREO_RAW_SNAP_IDLE;
+	}
 		break;
 	default:
 		break;
@@ -958,6 +961,7 @@ static void vfe31_reset_internal_variables(void)
 	vfe31_ctrl->vfeFrameSkipCount   = 0;
 	vfe31_ctrl->vfeFrameSkipPeriod  = 31;
 	vfe31_ctrl->rolloff_update = false;
+
 	/* Stats control variables. */
 	memset(&(vfe31_ctrl->afStatsControl), 0,
 		sizeof(struct vfe_stats_control));
@@ -2976,6 +2980,11 @@ static void vfe31_process_raw_snapshot_frame(void)
 	uint32_t ping_pong;
 	uint32_t pyaddr, pcbcraddr;
 	struct vfe31_free_buf *free_buf = NULL;
+	struct msm_sync* p_sync = (struct msm_sync *)vfe_syncdata;
+
+	if (p_sync->stereocam_enabled)
+		p_sync->stereo_state = STEREO_RAW_SNAP_STARTED;
+
 	ping_pong = msm_io_r(vfe31_ctrl->vfebase +
 		VFE_BUS_PING_PONG_STATUS);
 

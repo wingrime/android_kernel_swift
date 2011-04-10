@@ -37,6 +37,7 @@
 #include <linux/kthread.h>
 #include <linux/version.h>
 #include <linux/errno.h>
+#include <linux/debugfs.h>
 
 /* DEFINES AND MACROS */
 #define MAX_NUM_DEVICES		1
@@ -74,9 +75,7 @@
 #define SDIO_DLD_BOOT_TEST_MODE_NAME	"SDIO DLD BOOT TEST MODE"
 #define SDIO_DLD_AMSS_TEST_MODE_NAME	"SDIO DLD AMSS TEST MODE"
 #define TEST_NAME_MAX_SIZE		30
-
 #define PUSH_STRING
-#define DLOADER_DBG
 
 /* FORWARD DECLARATIONS */
 static int sdio_dld_open(struct tty_struct *tty, struct file *file);
@@ -84,6 +83,13 @@ static void sdio_dld_close(struct tty_struct *tty, struct file *file);
 static int sdio_dld_write_callback(struct tty_struct *tty,
 				   const unsigned char *buf, int count);
 static int sdio_dld_main_task(void *card);
+static void sdio_dld_print_info(void);
+#ifdef CONFIG_DEBUG_FS
+static int sdio_dld_debug_info_open(struct inode *inode, struct file *file);
+static ssize_t sdio_dld_debug_info_write(struct file *file,
+		const char __user *buf, size_t count, loff_t *ppos);
+#endif
+
 
 /* STRUCTURES AND TYPES */
 enum sdio_dld_op_mode {
@@ -151,6 +157,18 @@ struct sdio_dld_task {
 	atomic_t please_close;
 };
 
+#ifdef CONFIG_DEBUG_FS
+struct sdio_dloader_debug {
+	struct dentry *sdio_dld_debug_root;
+	struct dentry *sdio_al_dloader;
+};
+
+const struct file_operations sdio_dld_debug_info_ops = {
+	.open = sdio_dld_debug_info_open,
+	.write = sdio_dld_debug_info_write,
+};
+#endif
+
 struct sdio_downloader {
 	int sdioc_boot_func;
 	struct sdio_dld_wait_event write_callback_event;
@@ -177,6 +195,17 @@ struct sdio_dld_global_info {
 	u64 delta_jiffies;
 	unsigned int time_msec;
 	unsigned int throughput;
+	int cl_dl_wr_ptr;
+	int cl_dl_rd_ptr;
+	int cl_up_wr_ptr;
+	int cl_up_rd_ptr;
+	int host_read_ptr;
+	int host_write_ptr;
+	int cl_dl_buffer_size;
+	int cl_up_buffer_size;
+	int host_outgoing_buffer_size;
+	int cl_dl_buffer_address;
+	int cl_up_buffer_address;
 };
 
 static const struct tty_operations sdio_dloader_tty_ops = {
@@ -201,9 +230,9 @@ static unsigned long lock_flags2;
 static int sdio_op_mode = (int)SDIO_DLD_NORMAL_MODE;
 module_param(sdio_op_mode, int, 0);
 
-#ifdef DLOADER_DBG
-#include <linux/debugfs.h>
-#include <linux/uaccess.h>
+#ifdef CONFIG_DEBUG_FS
+
+struct sdio_dloader_debug sdio_dld_debug;
 
 #define ARR_SIZE 30000
 #define SDIO_DLD_DEBUGFS_INIT_VALUE	87654321
@@ -505,7 +534,7 @@ static int __init bootloader_debugfs_init(void)
 	/* /sys/kernel/debug/bootloader there will be dld_arr file */
 	root = debugfs_create_dir("bootloader", NULL);
 	if (!root) {
-		pr_info(MODULE_NAME ": %s - DLOADER_DBG - creating root dir "
+		pr_info(MODULE_NAME ": %s - creating root dir "
 			"failed\n", __func__);
 		return -ENODEV;
 	}
@@ -522,7 +551,132 @@ static int __init bootloader_debugfs_init(void)
 
 	return 0;
 }
-#endif /* DLOADER_DBG */
+
+/*
+* for triggering the sdio_dld info use:
+* echo 1 > /sys/kernel/debug/sdio_al_dld/sdio_al_dloader_info
+*/
+static int sdio_dld_debug_init(void)
+{
+	sdio_dld_debug.sdio_dld_debug_root =
+				debugfs_create_dir("sdio_al_dld", NULL);
+	if (!sdio_dld_debug.sdio_dld_debug_root) {
+		pr_err(MODULE_NAME ": %s - Failed to create folder. "
+		       "sdio_dld_debug_root is NULL",
+		       __func__);
+		return -ENOENT;
+	}
+
+	sdio_dld_debug.sdio_al_dloader = debugfs_create_file(
+					"sdio_al_dloader_info",
+					S_IRUGO | S_IWUGO,
+					sdio_dld_debug.sdio_dld_debug_root,
+					NULL,
+					&sdio_dld_debug_info_ops);
+
+	if (!sdio_dld_debug.sdio_al_dloader) {
+		pr_err(MODULE_NAME ": %s - Failed to create a file. "
+		       "sdio_al_dloader is NULL",
+		       __func__);
+		debugfs_remove(sdio_dld_debug.sdio_dld_debug_root);
+		sdio_dld_debug.sdio_dld_debug_root = NULL;
+		return -ENOENT;
+	}
+
+	return 0;
+}
+
+static int sdio_dld_debug_info_open(struct inode *inode, struct file *file)
+{
+	file->private_data = inode->i_private;
+	return 0;
+}
+
+static ssize_t sdio_dld_debug_info_write(struct file *file,
+		const char __user *buf, size_t count, loff_t *ppos)
+{
+	sdio_dld_print_info();
+	return count;
+}
+#endif /* CONFIG_DEBUG_FS */
+
+static void sdio_dld_print_info(void)
+{
+
+	sdio_dld_info.end_time = get_jiffies_64(); /* read the current time */
+	sdio_dld_info.delta_jiffies =
+		sdio_dld_info.end_time - sdio_dld_info.start_time;
+	sdio_dld_info.time_msec = jiffies_to_msecs(sdio_dld_info.delta_jiffies);
+
+	sdio_dld_info.throughput = sdio_dld_info.global_bytes_write_toio *
+		BITS_IN_BYTE / sdio_dld_info.time_msec;
+	sdio_dld_info.throughput /= MS_IN_SEC;
+
+	pr_info(MODULE_NAME ": %s, FLASHLESS BOOT - DURATION IN MSEC = %d\n",
+		__func__,
+		sdio_dld_info.time_msec);
+
+	pr_info(MODULE_NAME ": %s, FLASHLESS BOOT - BYTES WRITTEN ON SDIO BUS "
+			    "= %d...BYTES SENT BY TTY = %d",
+		__func__,
+	       sdio_dld_info.global_bytes_write_toio,
+	       sdio_dld_info.global_bytes_write_tty);
+
+	pr_info(MODULE_NAME ": %s, FLASHLESS BOOT - BYTES RECEIVED ON SDIO BUS "
+			    "= %d...BYTES SENT TO TTY = %d",
+		__func__,
+		sdio_dld_info.global_bytes_read_fromio,
+		sdio_dld_info.global_bytes_push_tty);
+
+	pr_info(MODULE_NAME ": %s, FLASHLESS BOOT - THROUGHPUT=%d Mbit/Sec",
+		__func__, sdio_dld_info.throughput);
+
+	pr_info(MODULE_NAME ": %s, FLASHLESS BOOT - CLIENT DL_BUFFER_SIZE=%d"
+		" KB..CLIENT UL_BUFFER=%d KB\n",
+		__func__,
+		sdio_dld_info.cl_dl_buffer_size/BYTES_IN_KB,
+		sdio_dld_info.cl_up_buffer_size/BYTES_IN_KB);
+
+	pr_info(MODULE_NAME ": %s, FLASHLESS BOOT - HOST OUTGOING BUFFER_SIZE"
+			    "=%d KB",
+		__func__,
+		sdio_dld_info.host_outgoing_buffer_size/BYTES_IN_KB);
+
+	pr_info(MODULE_NAME ": %s, FLASHLESS BOOT - CLIENT DL BUFFER "
+		 "ADDRESS = 0x%x", __func__,
+		sdio_dld_info.cl_dl_buffer_address);
+
+	pr_info(MODULE_NAME ": %s, FLASHLESS BOOT - CLIENT UP BUFFER "
+		"ADDRESS = 0x%x",
+		__func__,
+		sdio_dld_info.cl_up_buffer_address);
+
+	pr_info(MODULE_NAME ": %s, FLASHLESS BOOT - CLIENT - UPLINK BUFFER - "
+		"READ POINTER = %d", __func__,
+		sdio_dld_info.cl_up_rd_ptr);
+
+	pr_info(MODULE_NAME ": %s, FLASHLESS BOOT - CLIENT - UPLINK BUFFER - "
+		"WRITE POINTER = %d", __func__,
+		sdio_dld_info.cl_up_wr_ptr);
+
+	pr_info(MODULE_NAME ": %s, FLASHLESS BOOT - CLIENT - DOWNLINK BUFFER - "
+		"READ POINTER = %d", __func__,
+		sdio_dld_info.cl_dl_rd_ptr);
+
+	pr_info(MODULE_NAME ": %s, FLASHLESS BOOT - CLIENT - DOWNLINK BUFFER - "
+		"WRITE POINTER = %d", __func__,
+		sdio_dld_info.cl_dl_wr_ptr);
+
+	pr_info(MODULE_NAME ": %s, FLASHLESS BOOT - HOST - OUTGOING BUFFER - "
+		"READ POINTER = %d", __func__,
+		sdio_dld_info.host_read_ptr);
+
+	pr_info(MODULE_NAME ": %s, FLASHLESS BOOT - HOST - OUTGOING BUFFER - "
+		"WRITE POINTER = %d", __func__,
+		sdio_dld_info.host_write_ptr);
+
+	pr_info(MODULE_NAME ": %s, FLASHLESS BOOT - END DEBUG INFO", __func__);
+}
 
 /**
   * sdio_dld_set_op_mode
@@ -610,6 +764,9 @@ static int sdio_dld_allocate_local_buffers(void)
 	outgoing->buffer_size =
 		reg_str->ul_buff_size.reg_val*MULTIPLE_RATIO;
 
+	/* keep sdio_dld_info up to date */
+	sdio_dld_info.host_outgoing_buffer_size = outgoing->buffer_size;
+
 	return 0;
 }
 
@@ -666,6 +823,12 @@ static int mailbox_to_seq_chunk_read_cfg(struct sdio_func *str_func)
 	reg->dl_buff_size.reg_val = seq_chunk.dl_buff_size;
 	reg->ul_buff_size.reg_val = seq_chunk.ul_buff_size;
 
+	/* keep sdio_dld_info up to date */
+	sdio_dld_info.cl_dl_buffer_size = seq_chunk.dl_buff_size;
+	sdio_dld_info.cl_up_buffer_size = seq_chunk.ul_buff_size;
+	sdio_dld_info.cl_dl_buffer_address = seq_chunk.dl_buff_address;
+	sdio_dld_info.cl_up_buffer_address = seq_chunk.up_buff_address;
+
 	return status;
 }
 
@@ -719,6 +882,13 @@ static int mailbox_to_seq_chunk_read_ptrs(struct sdio_func *str_func)
 	reg->up_rd_ptr.reg_val = seq_chunk.up_rd_ptr;
 	reg->up_wr_ptr.reg_val = seq_chunk.up_wr_ptr;
 
+	/* keeping sdio_dld_info up to date */
+	sdio_dld_info.cl_dl_rd_ptr = seq_chunk.dl_rd_ptr;
+	sdio_dld_info.cl_dl_wr_ptr = seq_chunk.dl_wr_ptr;
+	sdio_dld_info.cl_up_rd_ptr = seq_chunk.up_rd_ptr;
+	sdio_dld_info.cl_up_wr_ptr = seq_chunk.up_wr_ptr;
+
+
 	/* DEBUG - if there was a change in value */
 	if ((offset_write_p != outgoing->offset_write_p) ||
 	    (offset_read_p != outgoing->offset_read_p) ||
@@ -739,7 +909,7 @@ static int mailbox_to_seq_chunk_read_ptrs(struct sdio_func *str_func)
 			 reg->dl_wr_ptr.reg_val,
 			 reg->dl_rd_ptr.reg_val);
 
-#ifdef DLOADER_DBG
+#ifdef CONFIG_DEBUG_FS
 		update_gd(SDIO_DLD_DEBUGFS_CASE_1_CODE);
 #endif
 		/* update static variables */
@@ -1016,58 +1186,7 @@ static void sdio_dld_close(struct tty_struct *tty, struct file *file)
 		       __func__);
 	}
 
-	sdio_dld_info.end_time = get_jiffies_64(); /* read the current time */
-	sdio_dld_info.delta_jiffies =
-		sdio_dld_info.end_time - sdio_dld_info.start_time;
-	sdio_dld_info.time_msec = jiffies_to_msecs(sdio_dld_info.delta_jiffies);
-
-	sdio_dld_info.throughput = sdio_dld_info.global_bytes_write_toio *
-		BITS_IN_BYTE / sdio_dld_info.time_msec;
-	sdio_dld_info.throughput /= MS_IN_SEC;
-
-	pr_info(MODULE_NAME ": %s, FLASHLESS BOOT - DURATION IN MSEC = %d\n",
-		__func__,
-		sdio_dld_info.time_msec);
-
-	pr_info(MODULE_NAME ": %s, FLASHLESS BOOT - BYTES WRITTEN ON SDIO BUS "
-			    "= %d...BYTES SENT BY TTY = %d",
-		__func__,
-	       sdio_dld_info.global_bytes_write_toio,
-	       sdio_dld_info.global_bytes_write_tty);
-
-	pr_info(MODULE_NAME ": %s, FLASHLESS BOOT - BYTES RECEIVED ON SDIO BUS "
-			    "= %d...BYTES SENT TO TTY = %d",
-		__func__,
-		sdio_dld_info.global_bytes_read_fromio,
-		sdio_dld_info.global_bytes_push_tty);
-
-	pr_info(MODULE_NAME ": %s, FLASHLESS BOOT - THROUGHPUT=%d Mbit/Sec",
-		__func__,
-	       sdio_dld_info.throughput);
-
-	pr_debug(MODULE_NAME ": %s, FLASHLESS BOOT - CLIENT DL_BUFFER_SIZE=%d"
-		" KB..CLIENT UL_BUFFER=%d KB\n",
-		__func__,
-		reg->dl_buff_size.reg_val/BYTES_IN_KB,
-		reg->ul_buff_size.reg_val/BYTES_IN_KB);
-
-	pr_debug(MODULE_NAME ": %s, FLASHLESS BOOT - HOST OUTGOING BUFFER=%d "
-		 "KB",
-		 __func__,
-		 sdio_dld->sdio_dloader_data.
-		 outgoing_data.buffer_size/BYTES_IN_KB);
-
-	pr_debug(MODULE_NAME ": %s, FLASHLESS BOOT - CLIENT DL BUFFER "
-		 "ADDRESS = 0x%x",
-		 __func__,
-		 reg->dl_buff_address.reg_val);
-
-	pr_debug(MODULE_NAME ": %s, FLASHLESS BOOT - CLIENT UP BUFFER "
-		 "ADDRESS = 0x%x",
-		 __func__,
-		 reg->up_buff_address.reg_val);
-
-#ifdef DLOADER_DBG
+#ifdef CONFIG_DEBUG_FS
 	gd.curr_i = curr_index;
 	gd.duration_ms = sdio_dld_info.time_msec;
 	gd.global_bytes_sent = sdio_dld_info.global_bytes_write_toio;
@@ -1082,6 +1201,36 @@ static void sdio_dld_close(struct tty_struct *tty, struct file *file)
 	gd.global_bytes_received = sdio_dld_info.global_bytes_read_fromio;
 	gd.global_bytes_pushed = sdio_dld_info.global_bytes_push_tty;
 #endif
+
+	/* saving register values before deallocating sdio_dld
+	   in order to use it in sdio_dld_print_info() through shell command */
+	sdio_dld_info.cl_dl_rd_ptr = reg->dl_rd_ptr.reg_val;
+	sdio_dld_info.cl_dl_wr_ptr = reg->dl_wr_ptr.reg_val;
+	sdio_dld_info.cl_up_rd_ptr = reg->up_rd_ptr.reg_val;
+	sdio_dld_info.cl_up_wr_ptr = reg->up_wr_ptr.reg_val;
+
+	sdio_dld_info.host_read_ptr =
+		sdio_dld->sdio_dloader_data.outgoing_data.offset_read_p;
+
+	sdio_dld_info.host_write_ptr =
+		sdio_dld->sdio_dloader_data.outgoing_data.offset_write_p;
+
+	sdio_dld_info.cl_dl_buffer_size =
+		sdio_dld->sdio_dloader_data.sdioc_reg.dl_buff_size.reg_val;
+
+	sdio_dld_info.cl_up_buffer_size =
+		sdio_dld->sdio_dloader_data.sdioc_reg.ul_buff_size.reg_val;
+
+	sdio_dld_info.host_outgoing_buffer_size =
+		sdio_dld->sdio_dloader_data.outgoing_data.buffer_size;
+
+	sdio_dld_info.cl_dl_buffer_address =
+		sdio_dld->sdio_dloader_data.sdioc_reg.dl_buff_address.reg_val;
+
+	sdio_dld_info.cl_up_buffer_address =
+		sdio_dld->sdio_dloader_data.sdioc_reg.up_buff_address.reg_val;
+
+	sdio_dld_print_info();
 
 	if (sdio_dld->done_callback)
 		sdio_dld->done_callback();
@@ -1267,7 +1416,7 @@ static int sdio_dld_write_callback(struct tty_struct *tty,
 	static int write_retry;
 	int pending_to_write = count;
 
-#ifdef DLOADER_DBG
+#ifdef CONFIG_DEBUG_FS
 	debugfs_glob.global_count = count;
 	update_gd(SDIO_DLD_DEBUGFS_CASE_5_CODE);
 #endif
@@ -1339,7 +1488,13 @@ static int sdio_dld_write_callback(struct tty_struct *tty,
 						    outgoing->buffer_size,
 						    outgoing->offset_read_p,
 						    bytes_to_write);
-#ifdef DLOADER_DBG
+
+			/* keeping sdio_dld_info up to date */
+			sdio_dld_info.host_write_ptr =
+				sdio_dld->sdio_dloader_data.
+					    outgoing_data.offset_write_p;
+
+#ifdef CONFIG_DEBUG_FS
 			debugfs_glob.global_write_tty = bytes_written;
 			update_gd(SDIO_DLD_DEBUGFS_CASE_3_CODE);
 #endif
@@ -1393,13 +1548,13 @@ static int sdio_dld_write_callback(struct tty_struct *tty,
 
 			pr_debug(MODULE_NAME ": %s - WRITE CALLBACK - "
 					     "WAITING...", __func__);
-#ifdef DLOADER_DBG
+#ifdef CONFIG_DEBUG_FS
 			update_gd(SDIO_DLD_DEBUGFS_CASE_8_CODE);
 #endif
 			wait_event(sdio_dld->write_callback_event.wait_event,
 				   sdio_dld->write_callback_event.
 				   wake_up_signal);
-#ifdef DLOADER_DBG
+#ifdef CONFIG_DEBUG_FS
 			update_gd(SDIO_DLD_DEBUGFS_CASE_9_CODE);
 #endif
 			pr_debug(MODULE_NAME ": %s - WRITE CALLBACK - "
@@ -1420,7 +1575,7 @@ static int sdio_dld_write_callback(struct tty_struct *tty,
 		       __func__, write_retry);
 	}
 
-#ifdef DLOADER_DBG
+#ifdef CONFIG_DEBUG_FS
 	debugfs_glob.global_bytes_cb_tty = total_written;
 	update_gd(SDIO_DLD_DEBUGFS_CASE_10_CODE);
 #endif
@@ -1495,6 +1650,8 @@ static int sdio_memcpy_fromio_wrapper(struct sdio_func *str_func,
 	reg_str->dl_rd_ptr.reg_val =
 		(reg_str->dl_rd_ptr.reg_val + size_to_read) %
 		client_buffer_size;
+	/* keeping sdio_dld_info up to date */
+	sdio_dld_info.cl_dl_rd_ptr = reg_str->dl_rd_ptr.reg_val;
 
 	status = sdio_memcpy_toio(str_func,
 				  reg_str->dl_rd_ptr.reg_offset,
@@ -1579,11 +1736,17 @@ static int sdio_memcpy_toio_wrapper(struct sdio_func *str_func,
 		((reg_str->up_wr_ptr.reg_val + bytes_to_write) %
 		 reg_str->ul_buff_size.reg_val);
 
+	/* keeping sdio_dld_info up to date */
+	sdio_dld_info.cl_up_wr_ptr = reg_str->up_wr_ptr.reg_val;
+
 	outgoing->offset_read_p =
 		((outgoing->offset_read_p + bytes_to_write) %
 		  outgoing->buffer_size);
 
-#ifdef DLOADER_DBG
+	/* keeping sdio_dld_info up to date*/
+	sdio_dld_info.host_read_ptr = outgoing->offset_read_p;
+
+#ifdef CONFIG_DEBUG_FS
 	debugfs_glob.global_write_toio = bytes_to_write;
 	update_gd(SDIO_DLD_DEBUGFS_CASE_4_CODE);
 #endif
@@ -1663,7 +1826,7 @@ static int sdio_dld_read(unsigned int client_rd_ptr,
 		incoming->num_of_bytes_in_use += client_wr_ptr - client_rd_ptr;
 		*bytes_read = client_wr_ptr - client_rd_ptr;
 
-#ifdef DLOADER_DBG
+#ifdef CONFIG_DEBUG_FS
 			debugfs_glob.global_to_read =
 				client_wr_ptr - client_rd_ptr;
 			update_gd(SDIO_DLD_DEBUGFS_CASE_11_CODE);
@@ -1696,7 +1859,7 @@ static int sdio_dld_read(unsigned int client_rd_ptr,
 		incoming->num_of_bytes_in_use += tail_size;
 		*bytes_read = tail_size;
 
-#ifdef DLOADER_DBG
+#ifdef CONFIG_DEBUG_FS
 			debugfs_glob.global_to_read = tail_size;
 			update_gd(SDIO_DLD_DEBUGFS_CASE_11_CODE);
 #endif
@@ -1722,7 +1885,7 @@ static int sdio_dld_read(unsigned int client_rd_ptr,
 		incoming->num_of_bytes_in_use += client_wr_ptr;
 		*bytes_read += client_wr_ptr;
 
-#ifdef DLOADER_DBG
+#ifdef CONFIG_DEBUG_FS
 			debugfs_glob.global_to_read = client_wr_ptr;
 			update_gd(SDIO_DLD_DEBUGFS_CASE_11_CODE);
 #endif
@@ -1891,12 +2054,12 @@ static int sdio_dld_main_task(void *card)
 
 			pr_debug(MODULE_NAME ": %s - MAIN LOOP - WAITING...\n",
 				 __func__);
-#ifdef DLOADER_DBG
+#ifdef CONFIG_DEBUG_FS
 			update_gd(SDIO_DLD_DEBUGFS_CASE_6_CODE);
 #endif
 			wait_event(sdio_dld->main_loop_event.wait_event,
 				   sdio_dld->main_loop_event.wake_up_signal);
-#ifdef DLOADER_DBG
+#ifdef CONFIG_DEBUG_FS
 			update_gd(SDIO_DLD_DEBUGFS_CASE_7_CODE);
 #endif
 
@@ -1964,7 +2127,7 @@ static int sdio_dld_main_task(void *card)
 #endif /*PUSH_STRING*/
 			sdio_dld_info.global_bytes_push_tty +=
 				incoming->num_of_bytes_in_use;
-#ifdef DLOADER_DBG
+#ifdef CONFIG_DEBUG_FS
 			debugfs_glob.global_push_to_tty = bytes_read;
 			update_gd(SDIO_DLD_DEBUGFS_CASE_12_CODE);
 #endif
@@ -2006,7 +2169,7 @@ static int sdio_dld_main_task(void *card)
 				}
 				retries = 0;
 
-#ifdef DLOADER_DBG
+#ifdef CONFIG_DEBUG_FS
 				debugfs_glob.global_8k_has = h_bytes_rdy_wr;
 				debugfs_glob.global_9k_has = c_bytes_rdy_rcve;
 				debugfs_glob.global_min = bytes_to_write;
@@ -2124,20 +2287,28 @@ static int sdio_dld_init_global(struct mmc_card *card,
 
 	sdio_dld->sdio_dloader_data.sdioc_reg.dl_buff_size.reg_offset =
 		SDIOC_DL_BUFF_SIZE_OFFSET;
+
 	sdio_dld->sdio_dloader_data.sdioc_reg.dl_rd_ptr.reg_offset =
 		SDIOC_DL_RD_PTR;
+
 	sdio_dld->sdio_dloader_data.sdioc_reg.dl_wr_ptr.reg_offset =
 		SDIOC_DL_WR_PTR;
+
 	sdio_dld->sdio_dloader_data.sdioc_reg.ul_buff_size.reg_offset =
 		SDIOC_UP_BUFF_SIZE_OFFSET;
+
 	sdio_dld->sdio_dloader_data.sdioc_reg.up_rd_ptr.reg_offset =
 		SDIOC_UL_RD_PTR;
+
 	sdio_dld->sdio_dloader_data.sdioc_reg.up_wr_ptr.reg_offset =
 		SDIOC_UL_WR_PTR;
+
 	sdio_dld->sdio_dloader_data.sdioc_reg.good_to_exit_ptr.reg_offset =
 		SDIOC_EXIT_PTR;
+
 	sdio_dld->sdio_dloader_data.sdioc_reg.dl_buff_address.reg_offset =
 		SDIOC_DL_BUFF_ADDRESS;
+
 	sdio_dld->sdio_dloader_data.sdioc_reg.up_buff_address.reg_offset =
 		SDIOC_UP_BUFF_ADDRESS;
 
@@ -2195,9 +2366,9 @@ int sdio_downloader_setup(struct mmc_card *card,
 		return -ENOMEM;
 	}
 
-#ifdef DLOADER_DBG
+#ifdef CONFIG_DEBUG_FS
 	bootloader_debugfs_init();
-#endif /* DLOADER_DBG */
+#endif /* CONFIG_DEBUG_FS */
 
 	status = sdio_dld_init_global(card, done);
 
@@ -2286,6 +2457,10 @@ int sdio_downloader_setup(struct mmc_card *card,
 		       __func__, status);
 		goto exit_err;
 	}
+
+#ifdef CONFIG_DEBUG_FS
+	sdio_dld_debug_init();
+#endif
 
 	sdio_claim_host(str_func);
 

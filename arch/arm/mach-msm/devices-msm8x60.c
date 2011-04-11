@@ -99,31 +99,31 @@
 static void charm_ap2mdm_kpdpwr_on(void)
 {
 	if (machine_is_msm8x60_charm_surf())
-		gpio_direction_output(132, 0);
+		gpio_direction_output(AP2MDM_KPDPWR_N, 0);
 	else
-		gpio_direction_output(132, 1);
+		gpio_direction_output(AP2MDM_KPDPWR_N, 1);
 }
 
 static void charm_ap2mdm_kpdpwr_off(void)
 {
 	if (machine_is_msm8x60_charm_surf())
-		gpio_direction_output(132, 1);
+		gpio_direction_output(AP2MDM_KPDPWR_N, 1);
 	else
-		gpio_direction_output(132, 0);
+		gpio_direction_output(AP2MDM_KPDPWR_N, 0);
 
 }
 
 static struct resource charm_resources[] = {
 	/* MDM2AP_ERRFATAL */
 	{
-		.start	= MSM_GPIO_TO_INT(133),
-		.end	= MSM_GPIO_TO_INT(133),
+		.start	= MSM_GPIO_TO_INT(MDM2AP_ERRFATAL),
+		.end	= MSM_GPIO_TO_INT(MDM2AP_ERRFATAL),
 		.flags = IORESOURCE_IRQ,
 	},
 	/* MDM2AP_STATUS */
 	{
-		.start	= MSM_GPIO_TO_INT(134),
-		.end	= MSM_GPIO_TO_INT(134),
+		.start	= MSM_GPIO_TO_INT(MDM2AP_STATUS),
+		.end	= MSM_GPIO_TO_INT(MDM2AP_STATUS),
 		.flags = IORESOURCE_IRQ,
 	}
 };

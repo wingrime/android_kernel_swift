@@ -114,6 +114,7 @@
 
 /** SW threshold to trigger reading the mailbox. */
 #define DEFAULT_MIN_WRITE_THRESHOLD 	(1024)
+#define DEFAULT_MIN_WRITE_THRESHOLD_STREAMING	(1600)
 
 #define THRESHOLD_DISABLE_VAL  		(0xFFFFFFFF)
 
@@ -278,16 +279,8 @@ struct peer_sdioc_channel_config {
 #define PEER_SDIOC_SW_MAILBOX_UT_SIGNATURE 0x5D107E57
 #define PEER_SDIOC_SW_MAILBOX_BOOT_SIGNATURE 0xDEADBEEF
 
-/* Identifies if there are new features released */
-#define PEER_SDIOC_VERSION_MINOR	0x0001
-/* Identifies if there is backward compatibility */
-#define PEER_SDIOC_VERSION_MAJOR	0x0003
-
-
-/* Identifies if there are new features released */
-#define PEER_SDIOC_BOOT_VERSION_MINOR	0x0001
-/* Identifies if there is backward compatibility */
-#define PEER_SDIOC_BOOT_VERSION_MAJOR	0x0002
+/* Allow support in old sdio version */
+#define PEER_SDIOC_OLD_VERSION_MAJOR	0x0002
 
 #define PEER_CHANNEL_NAME_SIZE		4
 
@@ -460,6 +453,7 @@ struct sdio_al {
 	int unittest_mode;
 	struct sdio_al_device *bootloader_dev;
 	void *subsys_notif_handle;
+	int sdioc_major;
 };
 
 struct sdio_al_work {
@@ -1433,11 +1427,11 @@ static int sdio_al_bootloader_setup(void)
 
 	/* Upper byte has to be equal - no backward compatibility for unequal */
 	if ((bootloader_dev->sdioc_boot_sw_header->version >> 16) !=
-	    (PEER_SDIOC_BOOT_VERSION_MAJOR)) {
+	    (sdio_al->pdata->peer_sdioc_boot_version_major)) {
 		pr_err(MODULE_NAME ": HOST(0x%x) and CLIENT(0x%x) SDIO_AL BOOT "
 		       "VERSION don't match\n",
-		       ((PEER_SDIOC_BOOT_VERSION_MAJOR<<16)+
-			PEER_SDIOC_BOOT_VERSION_MINOR),
+		       ((sdio_al->pdata->peer_sdioc_boot_version_major<<16)+
+			sdio_al->pdata->peer_sdioc_boot_version_minor),
 		       bootloader_dev->sdioc_boot_sw_header->version);
 		sdio_release_host(func1);
 		ret = -EIO;
@@ -1514,13 +1508,28 @@ static int read_sdioc_software_header(struct sdio_al_device *sdio_al_dev,
 		goto exit_err;
 	}
 	/* Upper byte has to be equal - no backward compatibility for unequal */
-	if ((header->version >> 16) != (PEER_SDIOC_VERSION_MAJOR)) {
-		pr_err(MODULE_NAME ": HOST(0x%x) and CLIENT(0x%x) SDIO_AL "
-		       "VERSION don't match\n",
-		       ((PEER_SDIOC_VERSION_MAJOR<<16)+
-			PEER_SDIOC_VERSION_MINOR),
-		       header->version);
-		goto exit_err;
+	sdio_al->sdioc_major = header->version >> 16;
+	if (sdio_al->pdata->allow_sdioc_version_major_2) {
+		if ((sdio_al->sdioc_major !=
+		    sdio_al->pdata->peer_sdioc_version_major) &&
+		    (sdio_al->sdioc_major != PEER_SDIOC_OLD_VERSION_MAJOR)) {
+			pr_err(MODULE_NAME ": HOST(0x%x) and CLIENT(0x%x) "
+			       "SDIO_AL VERSION don't match\n",
+			       ((sdio_al->pdata->peer_sdioc_version_major<<16)+
+				sdio_al->pdata->peer_sdioc_version_minor),
+			       header->version);
+			goto exit_err;
+		}
+	} else {
+		if (sdio_al->sdioc_major !=
+		    sdio_al->pdata->peer_sdioc_version_major) {
+			pr_err(MODULE_NAME ": HOST(0x%x) and CLIENT(0x%x) "
+			       "SDIO_AL VERSION don't match\n",
+			       ((sdio_al->pdata->peer_sdioc_version_major<<16)+
+				sdio_al->pdata->peer_sdioc_version_minor),
+			       header->version);
+			goto exit_err;
+		}
 	}
 
 	pr_info(MODULE_NAME ":SDIOC SW version 0x%x\n", header->version);
@@ -1578,7 +1587,6 @@ static int read_sdioc_channel_config(struct sdio_channel *ch)
 	struct peer_sdioc_channel_config *ch_config = NULL;
 	struct sdio_al_device *sdio_al_dev = ch->sdio_al_dev;
 
-
 	if (sdio_al_dev == NULL) {
 		pr_err(MODULE_NAME ": NULL sdio_al_dev for channel %s\n",
 				 ch->name);
@@ -1624,11 +1632,20 @@ static int read_sdioc_channel_config(struct sdio_channel *ch)
 
 	ch->def_read_threshold = ch->read_threshold;
 
-	ch->min_write_avail = ch_config->max_packet_size;
+	ch->is_packet_mode = ch_config->is_packet_mode;
+	if (!ch->is_packet_mode) {
+		ch->poll_delay_msec = DEFAULT_POLL_DELAY_NOPACKET_MSEC;
+		ch->min_write_avail = DEFAULT_MIN_WRITE_THRESHOLD_STREAMING;
+	}
+	pr_info(MODULE_NAME ":ch %s is_packet_mode=%d.\n",
+		ch->name, ch->is_packet_mode);
+
+	/* The max_packet_size is set by the modem in version 3 and on */
+	if (sdio_al->sdioc_major > PEER_SDIOC_OLD_VERSION_MAJOR)
+		ch->min_write_avail = ch_config->max_packet_size;
 
 	if (ch->min_write_avail > ch->write_threshold)
 		ch->min_write_avail = ch->write_threshold;
-
 
 	pr_info(MODULE_NAME ":ch %s read_threshold=%d.\n",
 		ch->name, ch->read_threshold);
@@ -1638,12 +1655,6 @@ static int read_sdioc_channel_config(struct sdio_channel *ch)
 		ch->name, ch->def_read_threshold);
 	pr_info(MODULE_NAME ":ch %s min_write_avail=%d.\n",
 		ch->name, ch->min_write_avail);
-
-	ch->is_packet_mode = ch_config->is_packet_mode;
-	if (!ch->is_packet_mode)
-		ch->poll_delay_msec = DEFAULT_POLL_DELAY_NOPACKET_MSEC;
-	pr_info(MODULE_NAME ":ch %s is_packet_mode=%d.\n",
-		ch->name, ch->is_packet_mode);
 
 	ch->peer_tx_buf_size = ch_config->tx_buf_size;
 
@@ -2370,8 +2381,17 @@ int sdio_open(const char *name, struct sdio_channel **ret_ch, void *priv,
 
 	pr_info(MODULE_NAME ":sdio_open %s completed OK\n", name);
 	if (sdio_al_dev->lpm_chan == INVALID_SDIO_CHAN) {
-		pr_info(MODULE_NAME ":setting channel %s as lpm_chan\n", name);
-		sdio_al_dev->lpm_chan = ch->num;
+		if (sdio_al->sdioc_major == PEER_SDIOC_OLD_VERSION_MAJOR) {
+			if (!ch->is_packet_mode) {
+				pr_info(MODULE_NAME ":setting channel %s as "
+						    "lpm_chan\n", name);
+				sdio_al_dev->lpm_chan = ch->num;
+			}
+		} else {
+			pr_info(MODULE_NAME ":setting channel %s as lpm_chan\n",
+				name);
+			sdio_al_dev->lpm_chan = ch->num;
+		}
 	}
 
 	return 0;

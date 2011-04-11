@@ -668,7 +668,7 @@ static int __devexit pmic8xxx_kp_remove(struct platform_device *pdev)
 static int pmic8xxx_kp_suspend(struct device *dev)
 {
 	struct platform_device *pdev = to_platform_device(dev);
-	struct pmic8xxx_kp *kp = platform_get_drvdata(dev);
+	struct pmic8xxx_kp *kp = platform_get_drvdata(pdev);
 	struct input_dev *input_dev = kp->input;
 
 	if (device_may_wakeup(dev)) {
@@ -688,7 +688,7 @@ static int pmic8xxx_kp_suspend(struct device *dev)
 static int pmic8xxx_kp_resume(struct device *dev)
 {
 	struct platform_device *pdev = to_platform_device(dev);
-	struct pmic8xxx_kp *kp = platform_get_drvdata(dev);
+	struct pmic8xxx_kp *kp = platform_get_drvdata(pdev);
 	struct input_dev *input_dev = kp->input;
 
 	if (device_may_wakeup(dev)) {

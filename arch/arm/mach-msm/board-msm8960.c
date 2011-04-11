@@ -266,6 +266,7 @@ static struct platform_device *sim_devices[] __initdata = {
 	&msm_device_wcnss_wlan,
 	&usb_mass_storage_device,
 	&usb_gadget_fserial_device,
+	&msm_device_sps,
 };
 
 static struct platform_device *rumi3_devices[] __initdata = {
@@ -281,6 +282,7 @@ static struct platform_device *rumi3_devices[] __initdata = {
 	&msm_kgsl_2d1,
 #endif
 	&msm_device_wcnss_wlan,
+	&msm_device_sps,
 };
 
 static void __init msm8960_i2c_init(void)

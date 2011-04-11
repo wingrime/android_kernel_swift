@@ -25,6 +25,7 @@
 #include <mach/board.h>
 #include <mach/msm_iomap.h>
 #include <mach/msm_hsusb.h>
+#include <mach/msm_sps.h>
 
 #include "clock.h"
 #include "devices.h"
@@ -566,6 +567,45 @@ struct platform_device *msm_footswitch_devices[] = {
 };
 unsigned msm_num_footswitch_devices = ARRAY_SIZE(msm_footswitch_devices);
 
+static struct resource resources_sps[] = {
+	{
+		.name	= "pipe_mem",
+		.start	= 0x12800000,
+		.end	= 0x12800000 + 0x4000 - 1,
+		.flags	= IORESOURCE_MEM,
+	},
+	{
+		.name	= "bamdma_dma",
+		.start	= 0x12240000,
+		.end	= 0x12240000 + 0x1000 - 1,
+		.flags	= IORESOURCE_MEM,
+	},
+	{
+		.name	= "bamdma_bam",
+		.start	= 0x12244000,
+		.end	= 0x12244000 + 0x4000 - 1,
+		.flags	= IORESOURCE_MEM,
+	},
+	{
+		.name	= "bamdma_irq",
+		.start	= SPS_BAM_DMA_IRQ,
+		.end	= SPS_BAM_DMA_IRQ,
+		.flags	= IORESOURCE_IRQ,
+	},
+};
+
+struct msm_sps_platform_data msm_sps_pdata = {
+	.bamdma_restricted_pipes = 0x06,
+};
+
+struct platform_device msm_device_sps = {
+	.name		= "msm_sps",
+	.id		= -1,
+	.num_resources	= ARRAY_SIZE(resources_sps),
+	.resource	= resources_sps,
+	.dev.platform_data = &msm_sps_pdata,
+};
+
 struct clk_lookup msm_clocks_8960[] = {
 	CLK_DUMMY("gsbi_uart_clk",	GSBI1_UART_CLK,		NULL, OFF),
 	CLK_DUMMY("gsbi_uart_clk",	GSBI2_UART_CLK,
@@ -733,6 +773,8 @@ struct clk_lookup msm_clocks_8960[] = {
 	CLK_DUMMY("dfab_sdc_clk",	DFAB_SDC3_CLK, "msm_sdcc.3", 0),
 	CLK_DUMMY("dfab_sdc_clk",	DFAB_SDC4_CLK, "msm_sdcc.4", 0),
 	CLK_DUMMY("dfab_sdc_clk",	DFAB_SDC5_CLK, "msm_sdcc.5", 0),
+	CLK_DUMMY("dfab_clk",		DFAB_CLK,		NULL, 0),
+	CLK_DUMMY("dma_bam_pclk",	DMA_BAM_P_CLK,		NULL, 0),
 };
 
 unsigned msm_num_clocks_8960 = ARRAY_SIZE(msm_clocks_8960);

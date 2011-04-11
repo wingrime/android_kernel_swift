@@ -567,6 +567,8 @@ static void __init msm7x2x_init(void)
 	if (socinfo_init() < 0)
 		printk(KERN_ERR "%s: socinfo_init() failed!\n",
 		       __func__);
+
+	msm_clock_init(msm_clocks_7x27a, msm_num_clocks_7x27a);
 	/* Common functions for SURF/FFA/RUMI3 */
 	msm_device_i2c_init();
 	msm7x27a_init_mmc();
@@ -587,7 +589,6 @@ static void __init msm7x2x_init(void)
 #endif
 	}
 
-	msm_clock_init(msm_clocks_7x27a, msm_num_clocks_7x27a);
 #if defined(CONFIG_I2C) && defined(CONFIG_GPIO_SX150X)
 	register_i2c_devices();
 #endif

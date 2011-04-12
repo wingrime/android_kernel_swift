@@ -37,6 +37,7 @@
 #include <mach/usbdiag.h>
 #include <mach/socinfo.h>
 #include <mach/usb_gadget_fserial.h>
+#include <mach/rpm.h>
 
 #include "timer.h"
 #include "devices.h"
@@ -252,6 +253,24 @@ static struct msm_i2c_platform_data msm8960_i2c_qup_gsbi4_pdata = {
 	.pclk = "gsbi_pclk",
 	.msm_i2c_config_gpio = gsbi_qup_i2c_gpio_config,
 };
+
+#ifdef CONFIG_MSM_RPM
+static struct msm_rpm_platform_data msm_rpm_data = {
+	.reg_base_addrs = {
+		[MSM_RPM_PAGE_STATUS] = MSM_RPM_BASE,
+		[MSM_RPM_PAGE_CTRL] = MSM_RPM_BASE + 0x400,
+		[MSM_RPM_PAGE_REQ] = MSM_RPM_BASE + 0x600,
+		[MSM_RPM_PAGE_ACK] = MSM_RPM_BASE + 0xa00,
+	},
+
+	.irq_ack = RPM_APCC_CPU0_GP_HIGH_IRQ,
+	.irq_err = RPM_APCC_CPU0_GP_LOW_IRQ,
+	.irq_vmpm = RPM_APCC_CPU0_GP_MEDIUM_IRQ,
+	.msm_apps_ipc_rpm_reg = MSM_APCS_GCC_BASE + 0x008,
+	.msm_apps_ipc_rpm_val = 4,
+};
+#endif
+
 
 static struct platform_device *sim_devices[] __initdata = {
 	&msm_device_dmov,
@@ -469,6 +488,11 @@ static void __init msm8960_sim_init(void)
 {
 	if (socinfo_init() < 0)
 		pr_err("socinfo_init() failed!\n");
+
+#ifdef CONFIG_MSM_RPM
+	BUG_ON(msm_rpm_init(&msm_rpm_data));
+#endif
+
 	msm_clock_init(msm_clocks_8960, msm_num_clocks_8960);
 	msm8960_device_ssbi_pm8921.dev.platform_data =
 				&msm8960_ssbi_pm8921_pdata;
@@ -490,6 +514,11 @@ static void __init msm8960_rumi3_init(void)
 {
 	if (socinfo_init() < 0)
 		pr_err("socinfo_init() failed!\n");
+
+#ifdef CONFIG_MSM_RPM
+	BUG_ON(msm_rpm_init(&msm_rpm_data));
+#endif
+
 	msm_clock_init(msm_clocks_8960, msm_num_clocks_8960);
 	gpiomux_init();
 	msm8960_device_ssbi_pm8921.dev.platform_data =

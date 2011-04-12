@@ -32,6 +32,10 @@
 #include "devices.h"
 #include "devices-msm8x60.h"
 
+#ifdef CONFIG_MSM_MPM
+#include "mpm.h"
+#endif
+
 /* Address of GSBI blocks */
 #define MSM_GSBI1_PHYS		0x16000000
 #define MSM_GSBI2_PHYS		0x16100000
@@ -606,6 +610,102 @@ struct platform_device msm_device_sps = {
 	.resource	= resources_sps,
 	.dev.platform_data = &msm_sps_pdata,
 };
+
+#ifdef CONFIG_MSM_MPM
+static uint16_t msm_mpm_irqs_m2a[MSM_MPM_NR_MPM_IRQS] = {
+	[1] = MSM_GPIO_TO_INT(61),
+	[4] = MSM_GPIO_TO_INT(87),
+	[5] = MSM_GPIO_TO_INT(88),
+	[6] = MSM_GPIO_TO_INT(89),
+	[7] = MSM_GPIO_TO_INT(90),
+	[8] = MSM_GPIO_TO_INT(91),
+	[9] = MSM_GPIO_TO_INT(34),
+	[10] = MSM_GPIO_TO_INT(38),
+	[11] = MSM_GPIO_TO_INT(42),
+	[12] = MSM_GPIO_TO_INT(46),
+	[13] = MSM_GPIO_TO_INT(50),
+	[14] = MSM_GPIO_TO_INT(54),
+	[15] = MSM_GPIO_TO_INT(58),
+	[16] = MSM_GPIO_TO_INT(63),
+	[17] = MSM_GPIO_TO_INT(160),
+	[18] = MSM_GPIO_TO_INT(162),
+	[19] = MSM_GPIO_TO_INT(144),
+	[20] = MSM_GPIO_TO_INT(146),
+	[25] = USB1_HS_IRQ,
+	[26] = TV_ENC_IRQ,
+	[27] = HDMI_IRQ,
+	[29] = MSM_GPIO_TO_INT(123),
+	[30] = MSM_GPIO_TO_INT(172),
+	[31] = MSM_GPIO_TO_INT(99),
+	[32] = MSM_GPIO_TO_INT(96),
+	[33] = MSM_GPIO_TO_INT(67),
+	[34] = MSM_GPIO_TO_INT(71),
+	[35] = MSM_GPIO_TO_INT(105),
+	[36] = MSM_GPIO_TO_INT(117),
+	[37] = MSM_GPIO_TO_INT(29),
+	[38] = MSM_GPIO_TO_INT(30),
+	[39] = MSM_GPIO_TO_INT(31),
+	[40] = MSM_GPIO_TO_INT(37),
+	[41] = MSM_GPIO_TO_INT(40),
+	[42] = MSM_GPIO_TO_INT(41),
+	[43] = MSM_GPIO_TO_INT(45),
+	[44] = MSM_GPIO_TO_INT(51),
+	[45] = MSM_GPIO_TO_INT(52),
+	[46] = MSM_GPIO_TO_INT(57),
+	[47] = MSM_GPIO_TO_INT(73),
+	[48] = MSM_GPIO_TO_INT(93),
+	[49] = MSM_GPIO_TO_INT(94),
+	[50] = MSM_GPIO_TO_INT(103),
+	[51] = MSM_GPIO_TO_INT(104),
+	[52] = MSM_GPIO_TO_INT(106),
+	[53] = MSM_GPIO_TO_INT(115),
+	[54] = MSM_GPIO_TO_INT(124),
+	[55] = MSM_GPIO_TO_INT(125),
+	[56] = MSM_GPIO_TO_INT(126),
+	[57] = MSM_GPIO_TO_INT(127),
+	[58] = MSM_GPIO_TO_INT(128),
+	[59] = MSM_GPIO_TO_INT(129),
+};
+
+static uint16_t msm_mpm_bypassed_apps_irqs[] = {
+	TLMM_MSM_SUMMARY_IRQ,
+	RPM_APCC_CPU0_GP_HIGH_IRQ,
+	RPM_APCC_CPU0_GP_MEDIUM_IRQ,
+	RPM_APCC_CPU0_GP_LOW_IRQ,
+	RPM_APCC_CPU0_WAKE_UP_IRQ,
+	RPM_APCC_CPU1_GP_HIGH_IRQ,
+	RPM_APCC_CPU1_GP_MEDIUM_IRQ,
+	RPM_APCC_CPU1_GP_LOW_IRQ,
+	RPM_APCC_CPU1_WAKE_UP_IRQ,
+	MSS_TO_APPS_IRQ_0,
+	MSS_TO_APPS_IRQ_1,
+	MSS_TO_APPS_IRQ_2,
+	MSS_TO_APPS_IRQ_3,
+	MSS_TO_APPS_IRQ_4,
+	MSS_TO_APPS_IRQ_5,
+	MSS_TO_APPS_IRQ_6,
+	MSS_TO_APPS_IRQ_7,
+	MSS_TO_APPS_IRQ_8,
+	MSS_TO_APPS_IRQ_9,
+	LPASS_SCSS_GP_LOW_IRQ,
+	LPASS_SCSS_GP_MEDIUM_IRQ,
+	LPASS_SCSS_GP_HIGH_IRQ,
+	SPS_MTI_31,
+};
+
+struct msm_mpm_device_data msm_mpm_dev_data = {
+	.irqs_m2a = msm_mpm_irqs_m2a,
+	.irqs_m2a_size = ARRAY_SIZE(msm_mpm_irqs_m2a),
+	.bypassed_apps_irqs = msm_mpm_bypassed_apps_irqs,
+	.bypassed_apps_irqs_size = ARRAY_SIZE(msm_mpm_bypassed_apps_irqs),
+	.mpm_request_reg_base = MSM_RPM_BASE + 0x9d8,
+	.mpm_status_reg_base = MSM_RPM_BASE + 0xdf8,
+	.mpm_apps_ipc_reg = MSM_APCS_GCC_BASE + 0x008,
+	.mpm_apps_ipc_val =  BIT(1),
+	.mpm_ipc_irq = RPM_APCC_CPU0_GP_MEDIUM_IRQ,
+
+};
+#endif
 
 struct clk_lookup msm_clocks_8960[] = {
 	CLK_DUMMY("gsbi_uart_clk",	GSBI1_UART_CLK,		NULL, OFF),

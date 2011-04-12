@@ -101,7 +101,7 @@ struct msm_rpmrs_resource {
 };
 
 static struct msm_rpmrs_resource msm_rpmrs_pxo = {
-	.rs[0].id = MSM_RPM_ID_PXO_CLK,
+	.rs[0].id = MSM_RPMRS_ID_PXO_CLK,
 	.size = 1,
 	.name = "pxo",
 	.beyond_limits = msm_rpmrs_pxo_beyond_limits,
@@ -110,7 +110,7 @@ static struct msm_rpmrs_resource msm_rpmrs_pxo = {
 };
 
 static struct msm_rpmrs_resource msm_rpmrs_l2_cache = {
-	.rs[0].id = MSM_RPM_ID_APPS_L2_CACHE_CTL,
+	.rs[0].id = MSM_RPMRS_ID_APPS_L2_CACHE_CTL,
 	.size = 1,
 	.name = "L2_cache",
 	.beyond_limits = msm_rpmrs_l2_cache_beyond_limits,
@@ -119,8 +119,8 @@ static struct msm_rpmrs_resource msm_rpmrs_l2_cache = {
 };
 
 static struct msm_rpmrs_resource msm_rpmrs_vdd_mem = {
-	.rs[0].id = MSM_RPM_ID_SMPS0_0,
-	.rs[1].id = MSM_RPM_ID_SMPS0_1,
+	.rs[0].id = MSM_RPMRS_ID_VDD_MEM_0,
+	.rs[1].id = MSM_RPMRS_ID_VDD_MEM_1,
 	.size = 2,
 	.name = "vdd_mem",
 	.beyond_limits = msm_rpmrs_vdd_mem_beyond_limits,
@@ -129,8 +129,8 @@ static struct msm_rpmrs_resource msm_rpmrs_vdd_mem = {
 };
 
 static struct msm_rpmrs_resource msm_rpmrs_vdd_dig = {
-	.rs[0].id = MSM_RPM_ID_SMPS1_0,
-	.rs[1].id = MSM_RPM_ID_SMPS1_1,
+	.rs[0].id = MSM_RPMRS_ID_VDD_DIG_0,
+	.rs[1].id = MSM_RPMRS_ID_VDD_DIG_1,
 	.size = 2,
 	.name = "vdd_dig",
 	.beyond_limits = msm_rpmrs_vdd_dig_beyond_limits,
@@ -139,7 +139,7 @@ static struct msm_rpmrs_resource msm_rpmrs_vdd_dig = {
 };
 
 static struct msm_rpmrs_resource msm_rpmrs_rpm_cpu = {
-	.rs[0].id = MSM_RPM_ID_TRIGGER_SET_FROM,
+	.rs[0].id = MSM_RPMRS_ID_RPM_CTL,
 	.size = 1,
 	.name = "rpm_cpu",
 	.beyond_limits = NULL,
@@ -597,8 +597,10 @@ static int msm_rpmrs_flush_buffer(
 	int i;
 
 	msm_rpmrs_aggregate_sclk(sclk_count);
-	for (i = 0; i < ARRAY_SIZE(msm_rpmrs_resources); i++)
-		msm_rpmrs_resources[i]->aggregate(limits);
+	for (i = 0; i < ARRAY_SIZE(msm_rpmrs_resources); i++) {
+		if (msm_rpmrs_resources[i]->aggregate)
+			msm_rpmrs_resources[i]->aggregate(limits);
+	}
 
 	count = bitmap_weight(msm_rpmrs_buffered, MSM_RPM_ID_LAST + 1);
 
@@ -633,8 +635,10 @@ static int msm_rpmrs_flush_buffer(
 		msm_rpmrs_buffered, msm_rpmrs_listed, MSM_RPM_ID_LAST + 1);
 
 flush_buffer_restore:
-	for (i = 0; i < ARRAY_SIZE(msm_rpmrs_resources); i++)
-		msm_rpmrs_resources[i]->restore();
+	for (i = 0; i < ARRAY_SIZE(msm_rpmrs_resources); i++) {
+		if (msm_rpmrs_resources[i]->restore)
+			msm_rpmrs_resources[i]->restore();
+	}
 	msm_rpmrs_restore_sclk();
 
 	if (rc)
@@ -764,6 +768,9 @@ static int __init msm_rpmrs_resource_sysfs_add(void)
 	}
 
 	for (i = 0; i < ARRAY_SIZE(msm_rpmrs_resources); i++) {
+		if (msm_rpmrs_resources[i]->rs[0].id == MSM_RPM_ID_LAST + 1)
+			continue;
+
 		rs = kzalloc(sizeof(*rs), GFP_KERNEL);
 		if (!rs) {
 			pr_err("%s: cannot allocate memory for attributes\n",
@@ -835,6 +842,9 @@ void msm_rpmrs_show_resources(void)
 	spin_lock_irqsave(&msm_rpmrs_lock, flags);
 	for (i = 0; i < ARRAY_SIZE(msm_rpmrs_resources); i++) {
 		rs = msm_rpmrs_resources[i];
+		if (rs->rs[0].id == MSM_RPM_ID_LAST + 1)
+			continue;
+
 		pr_info("%s: resource %s: buffered %d, value 0x%x\n",
 			__func__, rs->name,
 			test_bit(rs->rs[0].id, msm_rpmrs_buffered),
@@ -925,7 +935,8 @@ static int __init msm_rpmrs_init(void)
 	struct msm_rpm_iv_pair req;
 	int rc;
 
-	req.id = MSM_RPM_ID_APPS_L2_CACHE_CTL;
+#ifdef CONFIG_ARCH_MSM8X60
+	req.id = MSM_RPMRS_ID_APPS_L2_CACHE_CTL;
 	req.value = 1;
 
 	rc = msm_rpm_set(MSM_RPM_CTX_SET_0, &req, 1);
@@ -934,17 +945,18 @@ static int __init msm_rpmrs_init(void)
 		goto init_exit;
 	}
 
-	req.id = MSM_RPM_ID_APPS_L2_CACHE_CTL;
+	req.id = MSM_RPMRS_ID_APPS_L2_CACHE_CTL;
 	req.value = 0;
 
 	rc = msm_rpmrs_set(MSM_RPM_CTX_SET_SLEEP, &req, 1);
 	if (rc) {
 		pr_err("%s: failed to initialize L2 cache for sleep: %d\n",
-			__func__, rc);
+		       __func__, rc);
 		goto init_exit;
 	}
+#endif
 
-	req.id = MSM_RPM_ID_TRIGGER_SET_FROM;
+	req.id = MSM_RPMRS_ID_RPM_CTL;
 	req.value = 0;
 
 	rc = msm_rpmrs_set(MSM_RPM_CTX_SET_SLEEP, &req, 1);
@@ -965,10 +977,18 @@ static int __init msm_rpmrs_early_init(void)
 {
 	int i, k;
 
-	for (i = 0; i < ARRAY_SIZE(msm_rpmrs_resources); i++)
-		for (k = 0; k < msm_rpmrs_resources[i]->size; k++)
-			set_bit(msm_rpmrs_resources[i]->rs[k].id,
-				msm_rpmrs_listed);
+	/* initialize listed bitmap for valid resource IDs */
+	for (i = 0; i < ARRAY_SIZE(msm_rpmrs_resources); i++) {
+		if (msm_rpmrs_resources[i]->rs[0].id == MSM_RPM_ID_LAST + 1) {
+			msm_rpmrs_resources[i]->beyond_limits = NULL;
+			msm_rpmrs_resources[i]->aggregate = NULL;
+			msm_rpmrs_resources[i]->restore = NULL;
+		} else {
+			for (k = 0; k < msm_rpmrs_resources[i]->size; k++)
+				set_bit(msm_rpmrs_resources[i]->rs[k].id,
+					msm_rpmrs_listed);
+		}
+	}
 
 	return 0;
 }

@@ -66,6 +66,7 @@
 #define SLEEP_MS			10
 #define PRINTING_GAP			200
 #define TIMER_DURATION			10
+#define PUSH_TIMER_DURATION		5000
 #define MULTIPLE_RATIO			10
 #define MS_IN_SEC			1000
 #define BITS_IN_BYTE			8
@@ -180,7 +181,9 @@ struct sdio_downloader {
 	int(*done_callback)(void);
 	struct sdio_dld_wait_event main_loop_event;
 	struct timer_list timer;
-	int poll_ms;
+	unsigned int poll_ms;
+	struct timer_list push_timer;
+	unsigned int push_timer_ms;
 	enum sdio_dld_op_mode op_mode;
 	char op_mode_name[TEST_NAME_MAX_SIZE];
 };
@@ -1032,18 +1035,22 @@ static int sdio_dld_create_thread(void)
 	return 0;
 }
 
-
 /**
-  * start_timer - sets the timer and starts.
+  * start_timer
+  * sets the timer and starts.
   *
+  * @timer: the timer to configure and add
+  * @ms: the ms until it expires
   * @return None.
   */
-static void start_timer(void)
+static void start_timer(struct timer_list *timer, unsigned int ms)
 {
-	if (sdio_dld->poll_ms) {
-		sdio_dld->timer.expires = jiffies +
-			msecs_to_jiffies(sdio_dld->poll_ms);
-		add_timer(&sdio_dld->timer);
+	if ((ms == 0) || (timer == NULL)) {
+		pr_err(MODULE_NAME ": %s - invalid parameter", __func__);
+	} else {
+		timer->expires = jiffies +
+			msecs_to_jiffies(ms);
+		add_timer(timer);
 	}
 }
 
@@ -1070,9 +1077,22 @@ static void sdio_dld_timer_handler(unsigned long data)
 	sdio_dld->write_callback_event.wake_up_signal = 1;
 	wake_up(&sdio_dld->write_callback_event.wait_event);
 
-	start_timer();
+	start_timer(&sdio_dld->timer, sdio_dld->poll_ms);
 }
 
+/**
+  * sdio_dld_push_timer_handler
+  * this is a timer handler of the push_timer.
+  *
+  * @data: a pointer to the tty device driver structure.
+  * @return None.
+  */
+static void sdio_dld_push_timer_handler(unsigned long data)
+{
+	pr_err(MODULE_NAME " %s - Push Timer Expired... Trying to "
+		"push data to TTY Core for over then %d ms.\n",
+		__func__, sdio_dld->push_timer_ms);
+}
 
 /**
   * sdio_dld_open
@@ -1136,11 +1156,16 @@ static int sdio_dld_open(struct tty_struct *tty, struct file *file)
 	/* configure and init the timer */
 	sdio_dld->poll_ms = TIMER_DURATION;
 	init_timer(&sdio_dld->timer);
-	sdio_dld->timer.data = (unsigned long) &sdio_dld;
+	sdio_dld->timer.data = (unsigned long) sdio_dld;
 	sdio_dld->timer.function = sdio_dld_timer_handler;
 	sdio_dld->timer.expires = jiffies +
 		msecs_to_jiffies(sdio_dld->poll_ms);
 	add_timer(&sdio_dld->timer);
+
+	sdio_dld->push_timer_ms = PUSH_TIMER_DURATION;
+	init_timer(&sdio_dld->push_timer);
+	sdio_dld->push_timer.data = (unsigned long) sdio_dld;
+	sdio_dld->push_timer.function = sdio_dld_push_timer_handler;
 
 	return 0;
 }
@@ -1174,6 +1199,7 @@ static void sdio_dld_close(struct tty_struct *tty, struct file *file)
 	pr_debug(MODULE_NAME ": %s - CLOSING - WOKE UP...", __func__);
 
 	del_timer_sync(&sdio_dld->timer);
+	del_timer_sync(&sdio_dld->push_timer);
 
 	sdio_dld_dealloc_local_buffers();
 
@@ -1914,6 +1940,9 @@ static int sdio_dld_main_task(void *card)
 	struct sdio_data *incoming = &sdio_dld->sdio_dloader_data.incoming_data;
 	struct sdio_dld_task *task = &sdio_dld->dld_main_thread;
 	int retries = 0;
+#ifdef PUSH_STRING
+	int bytes_pushed = 0;
+#endif
 
 	msleep(SLEEP_MS);
 
@@ -2072,7 +2101,6 @@ static int sdio_dld_main_task(void *card)
 		if (need_to_read) {
 #ifdef PUSH_STRING
 			int num_push = 0;
-			int total_push = 0;
 			int left = 0;
 			int bytes_read;
 #else
@@ -2095,19 +2123,26 @@ static int sdio_dld_main_task(void *card)
 
 			sdio_dld_info.global_bytes_read_fromio +=
 				bytes_read;
+
+			bytes_pushed = 0;
 #ifdef PUSH_STRING
 			left = incoming->num_of_bytes_in_use;
+			start_timer(&sdio_dld->push_timer,
+				    sdio_dld->push_timer_ms);
 			do {
 				num_push = tty_insert_flip_string(
 					tty,
-					incoming->data+total_push,
+					incoming->data+bytes_pushed,
 					left);
-				total_push += num_push;
+
+				bytes_pushed += num_push;
 				left -= num_push;
 				tty_flip_buffer_push(tty);
 			} while (left != 0);
 
-			if (total_push != incoming->num_of_bytes_in_use) {
+			del_timer(&sdio_dld->push_timer);
+
+			if (bytes_pushed != incoming->num_of_bytes_in_use) {
 				pr_err(MODULE_NAME ": %s - failed\n",
 				       __func__);
 			}

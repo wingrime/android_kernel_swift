@@ -71,6 +71,7 @@ ifndef CONFIG_ARCH_MSM8X60
 	obj-$(CONFIG_MSM_ONCRPCROUTER) += rpc_hsusb.o rpc_pmapp.o rpc_fsusb.o
 endif
 endif
+obj-$(CONFIG_MSM_SDIO_TTY) += sdio_tty.o sdio_tty_ciq.o
 obj-$(CONFIG_MSM_SMD_TTY) += smd_tty.o
 obj-$(CONFIG_MSM_SMD_QMI) += smd_qmi.o
 obj-$(CONFIG_MSM_SMD_PKT) += smd_pkt.o

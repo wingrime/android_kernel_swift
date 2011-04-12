@@ -3259,11 +3259,11 @@ static void sdio_print_mailbox(struct sdio_mailbox *mailbox)
 		return;
 	}
 
-	pr_err(MODULE_NAME ": eot_pipe(0_7)=%d, "
-		"thresh_above_limit_pipe(0_7)=%d\n"
-		MODULE_NAME ": overflow_pipe(0_7)=%d, "
-		"underflow_pipe(0_7)=%d, "
-		"mask_thresh_above_limit_pipe(0_7)=%d\n",
+	pr_err(MODULE_NAME ": eot_pipe(0_7)=0x%x, "
+		"thresh_above_limit_pipe(0_7)=0x%x\n"
+		MODULE_NAME ": overflow_pipe(0_7)=0x%x, "
+		"underflow_pipe(0_7)=0x%x, "
+		"mask_thresh_above_limit_pipe(0_7)=0x%x\n",
 		 mailbox->eot_pipe_0_7,
 		 mailbox->thresh_above_limit_pipe_0_7,
 		 mailbox->overflow_pipe_0_7,
@@ -3273,7 +3273,7 @@ static void sdio_print_mailbox(struct sdio_mailbox *mailbox)
 	 pr_err(MODULE_NAME ": pipe_bytes_avail for pipes 0-7:");
 
 	 for (k = 0 ; k < SDIO_AL_ACTIVE_PIPES ; ++k) {
-		pr_err(MODULE_NAME ": pipe_bytes_avail in pipe#%d = %d",
+		pr_err(MODULE_NAME ": pipe_bytes_avail in pipe#%d = 0x%x",
 			 k, mailbox->pipe_bytes_avail[k]);
 	 }
 }
@@ -3362,10 +3362,10 @@ static void sdio_al_print_info(void)
 				 "Shadowing SW Mailbox:", i, ch->name);
 			ch_config = &sdio_al_dev->channel[i].ch_config;
 
-			pr_err(MODULE_NAME ": max_rx_threshold=%d, "
-				"max_tx_threshold=%d, tx_buf_size=%d\n"
+			pr_err(MODULE_NAME ": max_rx_threshold=0x%x, "
+				"max_tx_threshold=0x%x, tx_buf_size=0x%x\n"
 				MODULE_NAME ": is_packet_mode=%d, "
-				"max_packet_size=%d, min_write_avail=%d",
+				"max_packet_size=0x%x, min_write_avail=0x%x",
 				ch_config->max_rx_threshold,
 				ch_config->max_tx_threshold,
 				ch_config->tx_buf_size,
@@ -3380,10 +3380,10 @@ static void sdio_al_print_info(void)
 				continue;
 			}
 
-			pr_err(MODULE_NAME ": total_rx_bytes = %d, "
-				"total_tx_bytes = %d\n"
-				MODULE_NAME ": read_avail = %d, "
-				"write_avail = %d, rx_pending_bytes=%d",
+			pr_err(MODULE_NAME ": total_rx_bytes = 0x%x, "
+				"total_tx_bytes = 0x%x\n"
+				MODULE_NAME ": read_avail = 0x%x, "
+				"write_avail = 0x%x, rx_pending_bytes=0x%x",
 				ch->total_rx_bytes, ch->total_tx_bytes,
 				ch->read_avail, ch->write_avail,
 				ch->rx_pending_bytes);
@@ -3391,7 +3391,7 @@ static void sdio_al_print_info(void)
 			list_for_each(pos, &(ch->rx_size_list_head)) {
 				p = list_entry(pos,
 						struct rx_packet_size, list);
-				pr_err(MODULE_NAME ": size=%d\n", p->size);
+				pr_err(MODULE_NAME ": size=0x%x\n", p->size);
 			}
 		} /* end loop over all channels */
 
@@ -3443,15 +3443,14 @@ static void sdio_al_print_info(void)
 					    sizeof(int));
 		sdio_release_host(func1);
 
-		if (ret) {
+		if (ret)
 			pr_err(MODULE_NAME ": %s - fail to read "
-				 "is_ok_to_sleep from mailbox.", __func__);
-		}
-
-		pr_err(MODULE_NAME ": Device#%d, Card#%d - "
-			"is_HOST_ok_to_sleep=%d\n",
-			j, sdio_al_dev->card->host->index,
-			is_ok_to_sleep);
+				 "is_HOST_ok_to_sleep from mailbox.", __func__);
+		else
+			pr_err(MODULE_NAME ": Device#%d, Card#%d - "
+				"is_HOST_ok_to_sleep=%d\n",
+				j, sdio_al_dev->card->host->index,
+				is_ok_to_sleep);
 	}
 
 	for (j = 0 ; j < MAX_NUM_OF_SDIO_DEVICES ; ++j) {
@@ -3481,7 +3480,7 @@ static void sdio_al_print_info(void)
 
 		if (ret) {
 			pr_err(MODULE_NAME ": fail to read "
-			       "mailbox.from Device#%d card=#%d. "
+			       "mailbox for Device#%d card=#%d. "
 			       "continuing...\n",  j,
 			       sdio_al_dev->card->host->index);
 			continue;

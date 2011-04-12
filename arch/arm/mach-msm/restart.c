@@ -191,6 +191,10 @@ static int __init msm_restart_init(void)
 #ifdef CONFIG_MSM_DLOAD_MODE
 	atomic_notifier_chain_register(&panic_notifier_list, &panic_blk);
 	dload_mode_addr = imem + DLOAD_MODE_ADDR;
+
+	/* Reset detection is switched on below.*/
+	set_dload_mode(1);
+	reset_detection = 1;
 #endif
 	restart_reason = imem + RESTART_REASON_ADDR;
 	pm_power_off = msm_power_off;

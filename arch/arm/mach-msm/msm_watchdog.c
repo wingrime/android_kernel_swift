@@ -86,14 +86,15 @@ static DECLARE_DELAYED_WORK(dogwork_struct, pet_watchdog_work);
 
 static int msm_watchdog_suspend(void)
 {
-	writel(1, WDT0_RST);
-	writel(0, WDT0_EN);
+	__raw_writel(1, WDT0_RST);
+	__raw_writel(0, WDT0_EN);
+	dsb();
 	return NOTIFY_DONE;
 }
 static int msm_watchdog_resume(void)
 {
-	writel(1, WDT0_EN);
-	writel(1, WDT0_RST);
+	__raw_writel(1, WDT0_EN);
+	__raw_writel(1, WDT0_RST);
 	return NOTIFY_DONE;
 }
 
@@ -116,12 +117,13 @@ static int panic_wdog_handler(struct notifier_block *this,
 			      unsigned long event, void *ptr)
 {
 	if (panic_timeout == 0) {
-		writel(0, WDT0_EN);
+		__raw_writel(0, WDT0_EN);
+		dsb();
 		secure_writel(0, MSM_TCSR_BASE + TCSR_WDT_CFG);
 	} else {
-		writel(32768 * (panic_timeout + 4), WDT0_BARK_TIME);
-		writel(32768 * (panic_timeout + 4), WDT0_BITE_TIME);
-		writel(1, WDT0_RST);
+		__raw_writel(32768 * (panic_timeout + 4), WDT0_BARK_TIME);
+		__raw_writel(32768 * (panic_timeout + 4), WDT0_BITE_TIME);
+		__raw_writel(1, WDT0_RST);
 	}
 	return NOTIFY_DONE;
 }
@@ -156,11 +158,12 @@ static int wdog_enable_set(const char *val, struct kernel_param *kp)
 
 	case 1:
 		if (!old_val) {
-			writel(0, WDT0_EN);
+			__raw_writel(0, WDT0_EN);
 			unregister_pm_notifier(&msm_watchdog_power_notifier);
 
 			/* may be suspended after the first write above */
-			writel(0, WDT0_EN);
+			__raw_writel(0, WDT0_EN);
+			dsb();
 			secure_writel(0, MSM_TCSR_BASE + TCSR_WDT_CFG);
 			free_irq(WDT0_ACCSCSSNBARK_INT, 0);
 			enable = 0;
@@ -185,7 +188,7 @@ done:
 
 void pet_watchdog(void)
 {
-	writel(1, WDT0_RST);
+	__raw_writel(1, WDT0_RST);
 	last_pet = sched_clock();
 }
 
@@ -200,9 +203,11 @@ static void pet_watchdog_work(struct work_struct *work)
 static void __exit exit_watchdog(void)
 {
 	if (enable) {
-		writel(0, WDT0_EN);
+		__raw_writel(0, WDT0_EN);
 		unregister_pm_notifier(&msm_watchdog_power_notifier);
-		writel(0, WDT0_EN); /* In case we got suspended mid-exit */
+		__raw_writel(0, WDT0_EN); /* In case we got suspended
+					   * mid-exit */
+		dsb();
 		secure_writel(0, MSM_TCSR_BASE + TCSR_WDT_CFG);
 		free_irq(WDT0_ACCSCSSNBARK_INT, 0);
 		enable = 0;
@@ -294,8 +299,8 @@ static int __init init_watchdog(void)
 	delay_time = msecs_to_jiffies(PET_DELAY);
 
 	/* 32768 ticks = 1 second */
-	writel(32768*4, WDT0_BARK_TIME);
-	writel(32768*5, WDT0_BITE_TIME);
+	__raw_writel(32768*4, WDT0_BARK_TIME);
+	__raw_writel(32768*5, WDT0_BITE_TIME);
 
 	ret = register_pm_notifier(&msm_watchdog_power_notifier);
 	if (ret) {
@@ -308,8 +313,8 @@ static int __init init_watchdog(void)
 	atomic_notifier_chain_register(&panic_notifier_list,
 				       &panic_blk);
 
-	writel(1, WDT0_EN);
-	writel(1, WDT0_RST);
+	__raw_writel(1, WDT0_EN);
+	__raw_writel(1, WDT0_RST);
 	last_pet = sched_clock();
 
 	printk(KERN_INFO "MSM Watchdog Initialized\n");

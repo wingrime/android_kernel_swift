@@ -56,7 +56,7 @@ module_param_named(debug_mask, msm_timer_debug_mask, int, S_IRUGO | S_IWUSR | S_
 	#define MSM_GLOBAL_TIMER MSM_CLOCK_DGT
 #endif
 
-#if defined(CONFIG_ARCH_MSM_ARM11)
+#if defined(CONFIG_ARCH_MSM_ARM11) || defined(CONFIG_ARCH_MSM_CORTEX_A5)
 #define MSM_DGT_SHIFT (5)
 #else
 #define MSM_DGT_SHIFT (0)
@@ -203,7 +203,7 @@ static struct msm_clock msm_clocks[] = {
 		.freq = GPT_HZ,
 		.index = MSM_CLOCK_GPT,
 		.flags =
-#ifdef CONFIG_ARCH_MSM_ARM11
+#if defined(CONFIG_ARCH_MSM_ARM11) || defined(CONFIG_ARCH_MSM_CORTEX_A5)
 			MSM_CLOCK_FLAGS_UNSTABLE_COUNT |
 			MSM_CLOCK_FLAGS_ODD_MATCH_WRITE |
 			MSM_CLOCK_FLAGS_DELAYED_WRITE_POST |

@@ -192,6 +192,14 @@ enum  VFE_STATE {
 	VFE_STATE_ACTIVE
 };
 
+enum  vfe_recording_state {
+	VFE_REC_STATE_IDLE,
+	VFE_REC_STATE_START_REQUESTED,
+	VFE_REC_STATE_STARTED,
+	VFE_REC_STATE_STOP_REQUESTED,
+	VFE_REC_STATE_STOPPED,
+};
+
 #define V31_DUMMY_0               0
 #define V31_SET_CLK               1
 #define V31_RESET                 2
@@ -793,6 +801,7 @@ enum VFE31_MESSAGE_ID {
 	MSG_ID_CAMIF_ERROR,
 	MSG_ID_BUS_OVERFLOW,
 	MSG_ID_SOF_ACK,
+	MSG_ID_STOP_REC_ACK,
 };
 
 struct vfe_msg_stats{
@@ -1022,8 +1031,7 @@ struct vfe31_ctrl_type {
 	atomic_t stop_ack_pending;
 	int8_t reset_ack_pending;
 	int8_t update_ack_pending;
-	int8_t req_start_video_rec;
-	int8_t req_stop_video_rec;
+	enum vfe_recording_state recording_state;
 	int8_t output0_available;
 	int8_t output1_available;
 	int8_t update_gamma;

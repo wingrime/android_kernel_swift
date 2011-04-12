@@ -130,6 +130,7 @@ static struct msm_camera_io_ext camio_ext;
 static struct msm_camera_io_clk camio_clk;
 static struct resource *camifpadio, *csiio;
 void __iomem *camifpadbase, *csibase;
+static uint32_t vpe_clk_rate;
 
 void msm_io_w(u32 data, void __iomem *addr)
 {
@@ -394,7 +395,7 @@ int msm_camio_clk_enable(enum msm_camio_clk_type clktype)
 	case CAMIO_VPE_CLK:
 		camio_vpe_clk =
 		clk = clk_get(NULL, "vpe_clk");
-		msm_camio_clk_set_min_rate(clk, 150000000);
+		msm_camio_clk_set_min_rate(clk, vpe_clk_rate);
 		break;
 	default:
 		break;
@@ -524,8 +525,9 @@ int msm_camio_vpe_clk_disable(void)
 	return 0;
 }
 
-int msm_camio_vpe_clk_enable(void)
+int msm_camio_vpe_clk_enable(uint32_t clk_rate)
 {
+	vpe_clk_rate = clk_rate;
 	msm_camio_clk_enable(CAMIO_VPE_CLK);
 	return 0;
 }

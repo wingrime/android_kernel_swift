@@ -1242,6 +1242,7 @@ static int msm_rpc_write_pkt(
 		} else if (ept->restart_state & RESTART_PEND_NTFY) {
 			ept->restart_state &= ~RESTART_PEND_NTFY;
 			spin_unlock_irqrestore(&ept->restart_lock, flags);
+			finish_wait(&ept->restart_wait, &__wait);
 			return -ENETRESET;
 		}
 		if (signal_pending(current) &&

@@ -226,6 +226,9 @@ kgsl_g12_cmdstream_issueibcmds(struct kgsl_device_private *dev_priv,
 	kgsl_sharedmem_writel(&tmp, 4, nextaddr);
 	kgsl_sharedmem_writel(&tmp, 8, nextcnt);
 
+	/* sync memory before activating the hardware for the new command*/
+	mb();
+
 	cmd = (int)(((2) & VGV3_CONTROL_MARKADD_FMASK)
 		<< VGV3_CONTROL_MARKADD_FSHIFT);
 

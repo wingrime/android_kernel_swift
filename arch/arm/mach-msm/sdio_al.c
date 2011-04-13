@@ -429,6 +429,10 @@ struct sdio_channel {
 	u32 signature;
 
 	struct sdio_al_device *sdio_al_dev;
+
+	int last_any_read_avail;
+	int last_read_avail;
+	int last_old_read_avail;
 };
 
 
@@ -755,6 +759,47 @@ static int is_user_irq_enabled(struct sdio_al_device *sdio_al_dev,
 	return 0;
 }
 
+static void sdio_al_sleep(struct sdio_al_device *sdio_al_dev,
+			  struct mmc_host *host)
+{
+	int i;
+
+	/* Go to sleep */
+	LPM_DEBUG(MODULE_NAME  ":Inactivity timer expired."
+		" Going to sleep\n");
+	/* Stop mailbox timer */
+	sdio_al_dev->poll_delay_msec = 0;
+	del_timer_sync(&sdio_al_dev->timer);
+	/* Make sure we get interrupt for non-packet-mode right away */
+	for (i = 0; i < SDIO_AL_MAX_CHANNELS; i++) {
+		struct sdio_channel *ch = &sdio_al_dev->channel[i];
+		if ((!ch->is_valid) || (!ch->is_open))
+			continue;
+		if (ch->is_packet_mode == false) {
+			ch->read_threshold = 1;
+			set_pipe_threshold(sdio_al_dev,
+					   ch->rx_pipe_index,
+					   ch->read_threshold);
+		}
+	}
+	/* Mark HOST_OK_TOSLEEP */
+	sdio_al_dev->is_ok_to_sleep = 1;
+	write_lpm_info(sdio_al_dev);
+
+	/* Clock rate is required to enable the clock and set its rate.
+	 * Hence, save the clock rate before disabling it */
+	sdio_al_dev->clock = host->ios.clock;
+	/* Disable clocks here */
+	host->ios.clock = 0;
+	host->ops->set_ios(host, &host->ios);
+	LPM_DEBUG(MODULE_NAME ":Finished sleep sequence for card %d. "
+			    "Sleep now.\n",
+		sdio_al_dev->card->host->index);
+	/* Release wakelock */
+	wake_unlock(&sdio_al_dev->wake_lock);
+}
+
+
 /**
  *  Read SDIO-Client Mailbox from Function#1.thresh_pipe
  *
@@ -859,6 +904,9 @@ static int read_mailbox(struct sdio_al_device *sdio_al_dev, int from_isr)
 			continue;
 		}
 		any_read_avail |= read_avail | old_read_avail;
+		ch->last_any_read_avail = any_read_avail;
+		ch->last_read_avail = read_avail;
+		ch->last_old_read_avail = old_read_avail;
 
 		if (ch->is_packet_mode)
 			new_packet_size = check_pending_rx_packet(ch, eot_pipe);
@@ -905,19 +953,6 @@ static int read_mailbox(struct sdio_al_device *sdio_al_dev, int from_isr)
 				(new_write_avail <= ch->min_write_avail);
 	}
 
-	if ((rx_notify_bitmask == 0) && (tx_notify_bitmask == 0) &&
-	    !any_read_avail && !any_no_write_avail) {
-		DATA_DEBUG(MODULE_NAME ":Nothing to Notify for card %d\n",
-			   sdio_al_dev->card->host->index);
-	} else {
-		DATA_DEBUG(MODULE_NAME ":Notify bitmask for card %d "
-				       "rx=0x%x, tx=0x%x.\n",
-			sdio_al_dev->card->host->index, rx_notify_bitmask,
-			   tx_notify_bitmask);
-		/* Restart inactivity timer if any activity on the channel */
-		restart_inactive_time(sdio_al_dev);
-	}
-
 	for (i = 0; i < SDIO_AL_MAX_CHANNELS; i++) {
 		struct sdio_channel *ch = &sdio_al_dev->channel[i];
 
@@ -933,40 +968,20 @@ static int read_mailbox(struct sdio_al_device *sdio_al_dev, int from_isr)
 					   SDIO_EVENT_DATA_WRITE_AVAIL);
 	}
 
-	if (is_inactive_time_expired(sdio_al_dev)) {
-		/* Go to sleep */
-		LPM_DEBUG(MODULE_NAME  ":Inactivity timer expired."
-			" Going to sleep\n");
-		/* Stop mailbox timer */
-		sdio_al_dev->poll_delay_msec = 0;
-		del_timer_sync(&sdio_al_dev->timer);
-		/* Make sure we get interrupt for non-packet-mode right away */
-		for (i = 0; i < SDIO_AL_MAX_CHANNELS; i++) {
-			struct sdio_channel *ch = &sdio_al_dev->channel[i];
-			if ((!ch->is_valid) || (!ch->is_open))
-				continue;
-			if (ch->is_packet_mode == false) {
-				ch->read_threshold = 1;
-				set_pipe_threshold(sdio_al_dev,
-						   ch->rx_pipe_index,
-						   ch->read_threshold);
-			}
-		}
-		/* Mark HOST_OK_TOSLEEP */
-		sdio_al_dev->is_ok_to_sleep = 1;
-		write_lpm_info(sdio_al_dev);
 
-		/* Clock rate is required to enable the clock and set its rate.
-		 * Hence, save the clock rate before disabling it */
-		sdio_al_dev->clock = host->ios.clock;
-		/* Disable clocks here */
-		host->ios.clock = 0;
-		host->ops->set_ios(host, &host->ios);
-		LPM_DEBUG(MODULE_NAME ":Finished sleep sequence for card %d. "
-				    "Sleep now.\n",
-			sdio_al_dev->card->host->index);
-		/* Release wakelock */
-		wake_unlock(&sdio_al_dev->wake_lock);
+	if ((rx_notify_bitmask == 0) && (tx_notify_bitmask == 0) &&
+	    !any_read_avail && !any_no_write_avail) {
+		DATA_DEBUG(MODULE_NAME ":Nothing to Notify for card %d\n",
+			   sdio_al_dev->card->host->index);
+		if (is_inactive_time_expired(sdio_al_dev))
+			sdio_al_sleep(sdio_al_dev, host);
+	} else {
+		DATA_DEBUG(MODULE_NAME ":Notify bitmask for card %d "
+				       "rx=0x%x, tx=0x%x.\n",
+			sdio_al_dev->card->host->index, rx_notify_bitmask,
+			   tx_notify_bitmask);
+		/* Restart inactivity timer if any activity on the channel */
+		restart_inactive_time(sdio_al_dev);
 	}
 
 	pr_debug(MODULE_NAME ":end %s.\n", __func__);
@@ -2517,6 +2532,13 @@ int sdio_read(struct sdio_channel *ch, void *data, int len)
 	/* lpm policy says we can't go to sleep when we have pending rx data,
 	   so either we had rx interrupt and woken up, or we never went to
 	   sleep */
+	if (sdio_al_dev->is_ok_to_sleep) {
+		pr_err(MODULE_NAME ":%s: called when is_ok_to_sleep is set "
+		       "for ch %s, len=%d, last_any_read_avail=%d,"
+		       "last_read_avail=%d, last_old_read_avail=%d",
+		       __func__, ch->name, len, ch->last_any_read_avail,
+		       ch->last_read_avail, ch->last_old_read_avail);
+	}
 	BUG_ON(sdio_al_dev->is_ok_to_sleep);
 
 	if (!ch->is_open) {

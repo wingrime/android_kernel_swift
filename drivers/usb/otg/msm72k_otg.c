@@ -246,6 +246,19 @@ static inline void set_pre_emphasis_level(struct msm_otg *dev)
 	ulpi_write(dev, res, ULPI_CONFIG_REG3);
 }
 
+static inline void set_hsdrv_slope(struct msm_otg *dev)
+{
+	unsigned res = 0;
+
+	if (!dev->pdata || dev->pdata->hsdrvslope == HS_DRV_SLOPE_DEFAULT)
+		return;
+
+	res = ulpi_read(dev, ULPI_CONFIG_REG3);
+	res &= ~(ULPI_HSDRVSLOPE_MASK);
+	res |= (dev->pdata->hsdrvslope & ULPI_HSDRVSLOPE_MASK);
+	ulpi_write(dev, res, ULPI_CONFIG_REG3);
+}
+
 static inline void set_cdr_auto_reset(struct msm_otg *dev)
 {
 	unsigned res = 0;
@@ -1454,6 +1467,7 @@ reset_link:
 	writel(0x80000000, USB_PORTSC);
 
 	set_pre_emphasis_level(dev);
+	set_hsdrv_slope(dev);
 	set_cdr_auto_reset(dev);
 	set_driver_amplitude(dev);
 	set_se1_gating(dev);

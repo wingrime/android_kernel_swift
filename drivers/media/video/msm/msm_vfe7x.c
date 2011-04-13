@@ -408,11 +408,8 @@ static int vfe_7x_config_axi(int mode,
 		regptr = &(ad->region[ad->bufnum1]);
 
 		CDBG("bufnum2 = %d\n", ad->bufnum2);
-		if (mode == OUTPUT_1_AND_2) {
-			paddr_s_y = regptr->paddr +  regptr->info.y_off;
-			paddr_s_cbcr = regptr->paddr +  regptr->info.cbcr_off;
-		}
-
+		paddr_s_y = regptr->paddr +  regptr->info.y_off;
+		paddr_s_cbcr = regptr->paddr +  regptr->info.cbcr_off;
 		CDBG("config_axi2: O2, phy = 0x%lx, y_off = %d, cbcr_off =%d\n",
 		     regptr->paddr, regptr->info.y_off, regptr->info.cbcr_off);
 

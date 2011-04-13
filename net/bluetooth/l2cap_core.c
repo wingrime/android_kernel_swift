@@ -442,10 +442,11 @@ static inline void l2cap_ertm_stop_ack_timer(struct l2cap_pinfo *pi)
 
 static inline void l2cap_ertm_start_ack_timer(struct l2cap_pinfo *pi)
 {
-	BT_DBG("pi %p", pi);
-	__cancel_delayed_work(&pi->ack_work);
-	queue_delayed_work(_l2cap_wq, &pi->ack_work,
-		msecs_to_jiffies(L2CAP_DEFAULT_ACK_TO));
+	BT_DBG("pi %p, pending %d", pi, delayed_work_pending(&pi->ack_work));
+	if (!delayed_work_pending(&pi->ack_work)) {
+		queue_delayed_work(_l2cap_wq, &pi->ack_work,
+				msecs_to_jiffies(L2CAP_DEFAULT_ACK_TO));
+	}
 }
 
 static inline void l2cap_ertm_stop_retrans_timer(struct l2cap_pinfo *pi)
@@ -2320,13 +2321,12 @@ static void l2cap_ertm_send_ack(struct sock *sk)
 	BT_DBG("last_acked_seq %d, buffer_seq %d", (int)pi->last_acked_seq,
 		(int)pi->buffer_seq);
 
-	l2cap_ertm_stop_ack_timer(pi);
-
 	memset(&control, 0, sizeof(control));
 	control.frame_type = 's';
 
 	if ((pi->conn_state & L2CAP_CONN_LOCAL_BUSY) &&
 		pi->rx_state == L2CAP_ERTM_RX_STATE_RECV) {
+		l2cap_ertm_stop_ack_timer(pi);
 		control.super = L2CAP_SFRAME_RNR;
 		control.reqseq = pi->buffer_seq;
 		l2cap_ertm_send_sframe(sk, &control);
@@ -2349,6 +2349,7 @@ static void l2cap_ertm_send_ack(struct sock *sk)
 			threshold);
 
 		if (frames_to_ack >= threshold) {
+			l2cap_ertm_stop_ack_timer(pi);
 			control.super = L2CAP_SFRAME_RR;
 			control.reqseq = pi->buffer_seq;
 			l2cap_ertm_send_sframe(sk, &control);
@@ -5795,6 +5796,9 @@ void l2cap_amp_physical_complete(int result, u8 local_id, u8 remote_id,
 			l2cap_rmem_available(sk))
 			l2cap_ertm_tx(sk, 0, 0,
 					L2CAP_ERTM_EVENT_LOCAL_BUSY_CLEAR);
+
+		/* Restart data transmission */
+		l2cap_ertm_send_txq(sk);
 	}
 
 	release_sock(sk);

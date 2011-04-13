@@ -2029,6 +2029,7 @@ static struct marimba_fm_platform_data marimba_fm_pdata = {
 	.irq = MSM_GPIO_TO_INT(147),
 	.vreg_s2 = NULL,
 	.vreg_xo_out = NULL,
+	.is_fm_soc_i2s_master = false,
 };
 
 

@@ -6269,6 +6269,7 @@ static struct marimba_fm_platform_data marimba_fm_pdata = {
 	.fm_setup =  fm_radio_setup,
 	.fm_shutdown = fm_radio_shutdown,
 	.irq = PM8058_GPIO_IRQ(PM8058_IRQ_BASE, FM_GPIO),
+	.is_fm_soc_i2s_master = false,
 };
 
 /*

@@ -998,7 +998,7 @@ static struct resource resources_sdc1[] = {
 static struct resource resources_sdc2[] = {
 	{
 		.start	= MSM_SDC2_BASE,
-		.end	= MSM_SDC2_BASE + SZ_4K - 1,
+		.end	= MSM_SDC2_DML_BASE - 1,
 		.flags	= IORESOURCE_MEM,
 	},
 	{
@@ -1115,7 +1115,7 @@ static struct resource resources_sdc4[] = {
 static struct resource resources_sdc5[] = {
 	{
 		.start	= MSM_SDC5_BASE,
-		.end	= MSM_SDC5_BASE + SZ_4K - 1,
+		.end	= MSM_SDC5_DML_BASE - 1,
 		.flags	= IORESOURCE_MEM,
 	},
 	{

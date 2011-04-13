@@ -478,7 +478,7 @@ enum msm_bus_perf_setting {
 int msm_camio_enable(struct platform_device *dev);
 int msm_camio_jpeg_clk_enable(void);
 int msm_camio_jpeg_clk_disable(void);
-int msm_camio_vpe_clk_enable(uint32_t);
+int msm_camio_vpe_clk_enable(void);
 int msm_camio_vpe_clk_disable(void);
 
 int  msm_camio_clk_enable(enum msm_camio_clk_type clk);

@@ -87,6 +87,12 @@ struct kgsl_functable {
 	void (*device_regwrite) (struct kgsl_device *device,
 					unsigned int offsetwords,
 					unsigned int value);
+	void (*device_regread_isr) (struct kgsl_device *device,
+				    unsigned int offsetwords,
+				    unsigned int *value);
+	void (*device_regwrite_isr) (struct kgsl_device *device,
+				     unsigned int offsetwords,
+				     unsigned int value);
 	int (*device_setstate) (struct kgsl_device *device, uint32_t flags);
 	int (*device_idle) (struct kgsl_device *device, unsigned int timeout);
 	unsigned int (*device_isidle) (struct kgsl_device *device);

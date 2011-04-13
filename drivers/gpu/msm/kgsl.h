@@ -184,6 +184,20 @@ static inline void kgsl_regwrite(struct kgsl_device *device,
 	device->ftbl.device_regwrite(device, offsetwords, value);
 }
 
+static inline void kgsl_regread_isr(struct kgsl_device *device,
+				unsigned int offsetwords,
+				unsigned int *value)
+{
+	device->ftbl.device_regread_isr(device, offsetwords, value);
+}
+
+static inline void kgsl_regwrite_isr(struct kgsl_device *device,
+				 unsigned int offsetwords,
+				 unsigned int value)
+{
+	device->ftbl.device_regwrite_isr(device, offsetwords, value);
+}
+
 int kgsl_check_timestamp(struct kgsl_device *device, unsigned int timestamp);
 
 int kgsl_setup_pt(struct kgsl_pagetable *);

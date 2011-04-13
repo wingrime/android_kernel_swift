@@ -327,6 +327,9 @@ int kgsl_suspend_device(struct kgsl_device *device, pm_message_t state)
 	int status = -EINVAL;
 	unsigned int nap_allowed_saved;
 
+	if (!device)
+		return -EINVAL;
+
 	KGSL_PWR_WARN(device, "suspend start\n");
 
 	mutex_lock(&device->mutex);
@@ -376,6 +379,9 @@ end:
 int kgsl_resume_device(struct kgsl_device *device)
 {
 	int status = -EINVAL;
+
+	if (!device)
+		return -EINVAL;
 
 	KGSL_PWR_WARN(device, "resume start\n");
 	mutex_lock(&device->mutex);
@@ -439,15 +445,14 @@ const struct dev_pm_ops kgsl_pm_ops = {
 int kgsl_suspend_driver(struct platform_device *pdev,
 					pm_message_t state)
 {
-	return kgsl_suspend_device(
-		(struct kgsl_device *)pdev->id_entry->driver_data,
-		state);
+	struct kgsl_device *device = dev_get_drvdata(&pdev->dev);
+	return kgsl_suspend_device(device, state);
 }
 
 int kgsl_resume_driver(struct platform_device *pdev)
 {
-	return kgsl_resume_device(
-		(struct kgsl_device *)pdev->id_entry->driver_data);
+	struct kgsl_device *device = dev_get_drvdata(&pdev->dev);
+	return kgsl_resume_device(device);
 }
 
 /* file operations */
@@ -1873,6 +1878,8 @@ kgsl_register_device(struct kgsl_device *device)
 		KGSL_CORE_ERR("device_create(%s): %d\n", device->name, ret);
 		goto err_devlist;
 	}
+
+	dev_set_drvdata(&device->pdev->dev, device);
 
 	/* Generic device initialization */
 	atomic_set(&device->open_count, -1);

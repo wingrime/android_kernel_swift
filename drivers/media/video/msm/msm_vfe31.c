@@ -943,7 +943,8 @@ static void vfe31_reset_internal_variables(void)
 	vfe31_ctrl->update_ack_pending = FALSE;
 	spin_unlock_irqrestore(&vfe31_ctrl->update_ack_lock, flags);
 
-	vfe31_ctrl->recording_state = VFE_REC_STATE_IDLE;
+	vfe31_ctrl->req_stop_video_rec = FALSE;
+	vfe31_ctrl->req_start_video_rec = FALSE;
 
 	/* 0 for continuous mode, 1 for snapshot mode */
 	vfe31_ctrl->operation_mode = VFE_MODE_OF_OPERATION_CONTINUOUS;
@@ -1142,15 +1143,38 @@ static void vfe31_start_common(void)
 
 static int vfe31_start_recording(void)
 {
-	vfe31_ctrl->recording_state = VFE_REC_STATE_START_REQUESTED;
-	msm_io_w_mb(1, vfe31_ctrl->vfebase + VFE_REG_UPDATE_CMD);
+	vfe31_ctrl->req_start_video_rec = TRUE;
+	/* Mask with 0x7 to extract the pixel pattern*/
+	switch (msm_io_r(vfe31_ctrl->vfebase + VFE_CFG_OFF) & 0x7) {
+	case VFE_YUV_YCbYCr:
+	case VFE_YUV_YCrYCb:
+	case VFE_YUV_CbYCrY:
+	case VFE_YUV_CrYCbY:
+		msm_io_w_mb(1,
+		vfe31_ctrl->vfebase + VFE_REG_UPDATE_CMD);
+		break;
+	default:
+		break;
+	}
 	return 0;
 }
 
 static int vfe31_stop_recording(void)
 {
-	vfe31_ctrl->recording_state = VFE_REC_STATE_STOP_REQUESTED;
-	msm_io_w_mb(1, vfe31_ctrl->vfebase + VFE_REG_UPDATE_CMD);
+
+	vfe31_ctrl->req_stop_video_rec = TRUE;
+	/* Mask with 0x7 to extract the pixel pattern*/
+	switch (msm_io_r(vfe31_ctrl->vfebase + VFE_CFG_OFF) & 0x7) {
+	case VFE_YUV_YCbYCr:
+	case VFE_YUV_YCrYCb:
+	case VFE_YUV_CbYCrY:
+	case VFE_YUV_CrYCbY:
+		msm_io_w_mb(1, vfe31_ctrl->vfebase + VFE_REG_UPDATE_CMD);
+		break;
+	default:
+		break;
+	}
+
 	return 0;
 }
 
@@ -2441,7 +2465,7 @@ static void vfe31_process_reg_update_irq(void)
 {
 	uint32_t  temp, old_val;
 	unsigned long flags;
-	if (vfe31_ctrl->recording_state == VFE_REC_STATE_START_REQUESTED) {
+	if (vfe31_ctrl->req_start_video_rec) {
 		if (vfe31_ctrl->outpath.output_mode & VFE31_OUTPUT_MODE_V) {
 			msm_io_w_mb(1, vfe31_ctrl->vfebase + V31_AXI_OUT_OFF +
 				20 + 24 * (vfe31_ctrl->outpath.out2.ch0));
@@ -2451,8 +2475,21 @@ static void vfe31_process_reg_update_irq(void)
 				20 + 24 * (vfe31_ctrl->outpath.out2.ch1));
 			temp = msm_io_r(vfe31_ctrl->vfebase + V31_AXI_OUT_OFF +
 				20 + 24 * (vfe31_ctrl->outpath.out2.ch1));
+			/* Mask with 0x7 to extract the pixel pattern*/
+			switch (msm_io_r(vfe31_ctrl->vfebase + VFE_CFG_OFF)
+				& 0x7) {
+			case VFE_YUV_YCbYCr:
+			case VFE_YUV_YCrYCb:
+			case VFE_YUV_CbYCrY:
+			case VFE_YUV_CrYCbY:
+				msm_io_w_mb(1,
+				vfe31_ctrl->vfebase + VFE_REG_UPDATE_CMD);
+				break;
+			default:
+				break;
+			}
 		}
-		vfe31_ctrl->recording_state = VFE_REC_STATE_STARTED;
+		vfe31_ctrl->req_start_video_rec =  FALSE;
 		if (vpe_ctrl->dis_en) {
 			old_val = msm_io_r(
 				vfe31_ctrl->vfebase + VFE_MODULE_CFG);
@@ -2460,10 +2497,8 @@ static void vfe31_process_reg_update_irq(void)
 			msm_io_w(old_val,
 				vfe31_ctrl->vfebase + VFE_MODULE_CFG);
 		}
-		msm_io_w_mb(1, vfe31_ctrl->vfebase + VFE_REG_UPDATE_CMD);
 		CDBG("start video triggered .\n");
-	} else if (vfe31_ctrl->recording_state
-			== VFE_REC_STATE_STOP_REQUESTED) {
+	} else if (vfe31_ctrl->req_stop_video_rec) {
 		if (vfe31_ctrl->outpath.output_mode & VFE31_OUTPUT_MODE_V) {
 			msm_io_w_mb(0, vfe31_ctrl->vfebase + V31_AXI_OUT_OFF +
 				20 + 24 * (vfe31_ctrl->outpath.out2.ch0));
@@ -2473,30 +2508,34 @@ static void vfe31_process_reg_update_irq(void)
 				 20 + 24 * (vfe31_ctrl->outpath.out2.ch1));
 			temp = msm_io_r(vfe31_ctrl->vfebase + V31_AXI_OUT_OFF +
 				20 + 24 * (vfe31_ctrl->outpath.out2.ch1));
+			/* Mask with 0x7 to extract the pixel pattern*/
+			switch (msm_io_r(vfe31_ctrl->vfebase + VFE_CFG_OFF)
+				& 0x7) {
+			case VFE_YUV_YCbYCr:
+			case VFE_YUV_YCrYCb:
+			case VFE_YUV_CbYCrY:
+			case VFE_YUV_CrYCbY:
+				msm_io_w_mb(1,
+				vfe31_ctrl->vfebase + VFE_REG_UPDATE_CMD);
+				break;
+			default:
+				break;
+			}
 		}
+		vfe31_ctrl->req_stop_video_rec =  FALSE;
 
 		/*disable rs& cs when stop recording. */
 		old_val = msm_io_r(vfe31_ctrl->vfebase + VFE_MODULE_CFG);
 		old_val &= (~RS_CS_ENABLE_MASK);
 		msm_io_w(old_val,
 				vfe31_ctrl->vfebase + VFE_MODULE_CFG);
-		CDBG("stop video triggered\n");
+
+		CDBG("stop video triggered .\n");
 	}
 	if (vfe31_ctrl->start_ack_pending == TRUE) {
 		vfe31_send_msg_no_payload(MSG_ID_START_ACK);
 		vfe31_ctrl->start_ack_pending = FALSE;
 	} else {
-		if (vfe31_ctrl->recording_state ==
-			VFE_REC_STATE_STOP_REQUESTED) {
-			vfe31_ctrl->recording_state = VFE_REC_STATE_STOPPED;
-			msm_io_w_mb(1, vfe31_ctrl->vfebase +
-						VFE_REG_UPDATE_CMD);
-		} else if (vfe31_ctrl->recording_state ==
-			VFE_REC_STATE_STOPPED) {
-			CDBG("sent stop video rec ACK");
-			vfe31_send_msg_no_payload(MSG_ID_STOP_REC_ACK);
-			vfe31_ctrl->recording_state = VFE_REC_STATE_IDLE;
-		}
 		spin_lock_irqsave(&vfe31_ctrl->update_ack_lock, flags);
 		if (vfe31_ctrl->update_ack_pending == TRUE) {
 			vfe31_ctrl->update_ack_pending = FALSE;
@@ -3073,16 +3112,9 @@ static void vfe31_process_output_path_irq_2(void)
 	/* we render frames in the following conditions:
 	1. Continuous mode and the free buffer is avaialable.
 	*/
-	CDBG("%s, operation_mode = %d, state %d\n", __func__,
-		vfe31_ctrl->operation_mode,
-		vfe31_ctrl->recording_state);
-	if (vfe31_ctrl->recording_state == VFE_REC_STATE_STOPPED) {
-		vfe31_ctrl->outpath.out2.frame_drop_cnt++;
-		pr_warning("path_irq_2 - recording stopped\n");
-		return;
-	}
-
 	free_buf = vfe31_get_free_buf(&vfe31_ctrl->outpath.out2);
+	CDBG("%s, operation_mode = %d,\n", __func__,
+		 vfe31_ctrl->operation_mode);
 
 	if (free_buf) {
 		ping_pong = msm_io_r(vfe31_ctrl->vfebase +

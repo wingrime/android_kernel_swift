@@ -21,7 +21,7 @@
 #include <linux/types.h>
 #include <linux/cpuidle.h>
 
-#ifdef CONFIG_HOTPLUG_CPU
+#ifdef CONFIG_SMP
 extern int pen_release;
 extern void msm_secondary_startup(void);
 #else

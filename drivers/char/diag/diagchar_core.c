@@ -148,6 +148,9 @@ static int diagchar_open(struct inode *inode, struct file *file)
 				driver->client_map = krealloc(driver->client_map
 					, (driver->num_clients) * sizeof(struct
 						 diag_client_map), GFP_KERNEL);
+				driver->data_ready = krealloc(driver->data_ready
+					, (driver->num_clients) * sizeof(int),
+							GFP_KERNEL);
 				driver->client_map[i].pid = current->tgid;
 				strncpy(driver->client_map[i].name,
 					current->comm, 20);

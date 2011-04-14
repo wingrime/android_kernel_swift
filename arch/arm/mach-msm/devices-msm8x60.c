@@ -1620,6 +1620,20 @@ struct platform_device usb_gadget_fserial_device = {
 };
 #endif
 
+#ifdef CONFIG_USB_ANDROID_ACM
+static struct usb_gadget_facm_pdata facm_pdata = {
+	.no_ports	= 2,
+};
+
+struct platform_device usb_gadget_facm_device = {
+	.name	= "usb_facm",
+	.id	= -1,
+	.dev	= {
+		.platform_data = &facm_pdata,
+	},
+};
+#endif
+
 struct platform_device msm_device_smd = {
 	.name           = "msm_smd",
 	.id             = -1,

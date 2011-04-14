@@ -43,4 +43,9 @@ struct usb_gadget_fserial_platform_data {
 	enum transport_type	transport[GSERIAL_NO_PORTS];
 	unsigned		no_ports;
 };
+
+struct usb_gadget_facm_pdata {
+	enum transport_type	transport[GSERIAL_NO_PORTS];
+	unsigned		no_ports;
+};
 #endif

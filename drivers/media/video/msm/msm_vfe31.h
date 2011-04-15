@@ -170,6 +170,7 @@
 #define VFE_AF_PINGPONG_STATUS_BIT       0x100
 #define VFE_AWB_PINGPONG_STATUS_BIT      0x200
 
+#define HFR_MODE_OFF 1
 
 enum VFE31_DMI_RAM_SEL {
 	 NO_MEM_SELECTED          = 0,
@@ -324,7 +325,7 @@ enum  VFE_STATE {
 #define V31_OUT_CLAMP_OFF         0x00000524
 #define V31_OUT_CLAMP_LEN         8
 
-#define V31_OPERATION_CFG_LEN     28
+#define V31_OPERATION_CFG_LEN     32
 
 #define V31_AXI_OUT_OFF           0x00000038
 #define V31_AXI_OUT_LEN           188
@@ -1039,6 +1040,7 @@ struct vfe31_ctrl_type {
 	struct resource *vfeio;
 
 	uint32_t stats_comp;
+	uint32_t hfr_mode;
 	atomic_t vstate;
 	uint32_t vfe_capture_count;
 	uint32_t sync_timer_repeat_count;

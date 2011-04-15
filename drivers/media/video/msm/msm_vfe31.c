@@ -1030,6 +1030,7 @@ static int vfe31_operation_config(uint32_t *cmd)
 		FALSE : TRUE;
 
 	vfe31_ctrl->stats_comp = *(++p);
+	vfe31_ctrl->hfr_mode = *(++p);
 
 	msm_io_w(*(++p), vfe31_ctrl->vfebase + VFE_CFG_OFF);
 	msm_io_w(*(++p), vfe31_ctrl->vfebase + VFE_MODULE_CFG);
@@ -1127,7 +1128,12 @@ static void vfe31_start_common(void)
 	vfe31_ctrl->start_ack_pending = TRUE;
 	CDBG("VFE opertaion mode = 0x%x, output mode = 0x%x\n",
 		vfe31_ctrl->operation_mode, vfe31_ctrl->outpath.output_mode);
-	msm_io_w(0x00EFE021, vfe31_ctrl->vfebase + VFE_IRQ_MASK_0);
+	/* Enable comp IRQ for stats  */
+	if (vfe31_ctrl->stats_comp)
+		msm_io_w(0x01E00021, vfe31_ctrl->vfebase + VFE_IRQ_MASK_0);
+	else /* Disable comp IRQ and enable only AF irq */
+		msm_io_w(0x00E04021, vfe31_ctrl->vfebase + VFE_IRQ_MASK_0);
+
 	msm_io_w(VFE_IMASK_RESET,
 		vfe31_ctrl->vfebase + VFE_IRQ_MASK_1);
 
@@ -2718,6 +2724,14 @@ static void vfe31_process_camif_sof_irq(void)
 				VFE_CAMIF_COMMAND);
 		}
 	} /* if raw snapshot mode. */
+
+	if ((vfe31_ctrl->hfr_mode != HFR_MODE_OFF) &&
+		(vfe31_ctrl->operation_mode == VFE_MODE_OF_OPERATION_VIDEO) &&
+		(vfe31_ctrl->vfeFrameId % vfe31_ctrl->hfr_mode != 0)) {
+		vfe31_ctrl->vfeFrameId++;
+		CDBG("Skip the SOF notification when HFR enabled\n");
+		return;
+	}
 	vfe31_send_msg_no_payload(MSG_ID_SOF_ACK);
 	vfe31_ctrl->vfeFrameId++;
 	CDBG("camif_sof_irq, frameId = %d\n", vfe31_ctrl->vfeFrameId);
@@ -3130,10 +3144,6 @@ static void vfe31_process_output_path_irq_2(uint32_t ping_pong)
 	}
 }
 
-static void vfe31_process_stats_comb_irq(uint32_t *irqstatus)
-{
-	return;
-}
 
 static uint32_t  vfe31_process_stats_irq_common(uint32_t statsNum,
 						uint32_t newAddr) {
@@ -3315,6 +3325,48 @@ static void vfe31_process_stats_cs_irq(void)
 						statsCsNum);
 	} else
 		vfe31_ctrl->csStatsControl.droppedStatsFrameCount++;
+}
+
+static void vfe31_process_stats_comb_irq(uint32_t *irqstatus)
+{
+	/* Subsample the stats according to the hfr speed*/
+	if ((vfe31_ctrl->hfr_mode != HFR_MODE_OFF) &&
+		(vfe31_ctrl->vfeFrameId % vfe31_ctrl->hfr_mode != 0)) {
+		CDBG("Skip the stats when HFR enabled\n");
+		return;
+	}
+	/* process individual stats interrupt. */
+	if (*irqstatus &
+		VFE_IRQ_STATUS0_STATS_AF) {
+		CDBG("Stats AF irq occured.\n");
+		vfe31_process_stats_af_irq();
+	}
+	if (*irqstatus &
+		VFE_IRQ_STATUS0_STATS_AEC) {
+		CDBG("Stats AEC irq occured.\n");
+		vfe31_process_stats_ae_irq();
+	}
+	if (*irqstatus &
+		VFE_IRQ_STATUS0_STATS_AWB) {
+		CDBG("Stats AWB irq occured.\n");
+		vfe31_process_stats_awb_irq();
+	}
+	if (*irqstatus &
+		VFE_IRQ_STATUS0_STATS_IHIST) {
+		CDBG("Stats IHIST irq occured.\n");
+		vfe31_process_stats_ihist_irq();
+	}
+	if (*irqstatus &
+		VFE_IRQ_STATUS0_STATS_RS) {
+		CDBG("Stats RS irq occured.\n");
+		vfe31_process_stats_rs_irq();
+	}
+	if (*irqstatus &
+		VFE_IRQ_STATUS0_STATS_CS) {
+		CDBG("Stats CS irq occured.\n");
+		vfe31_process_stats_cs_irq();
+	}
+	return;
 }
 
 static void vfe31_do_tasklet(unsigned long data)
@@ -3627,6 +3679,8 @@ static int vfe31_resource_init(struct msm_vfe_callback *presp,
 	vfe31_ctrl->update_gamma = false;
 	vfe31_ctrl->update_luma = false;
 	vfe31_ctrl->s_info = s_info;
+	vfe31_ctrl->stats_comp = 0;
+	vfe31_ctrl->hfr_mode = HFR_MODE_OFF;
 	return 0;
 
 cmd_init_failed3:

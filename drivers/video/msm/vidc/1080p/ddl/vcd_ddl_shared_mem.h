@@ -63,16 +63,17 @@
 #define VIDC_SM_LEVEL_VC1_ADV_3  (3)
 #define VIDC_SM_LEVEL_VC1_ADV_4  (4)
 
-enum VIDC_SM_frame_skip{
+enum VIDC_SM_frame_skip {
 	VIDC_SM_FRAME_SKIP_DISABLE      = 0,
 	VIDC_SM_FRAME_SKIP_ENABLE_LEVEL = 1,
 	VIDC_SM_FRAME_SKIP_ENABLE_VBV   = 2
 };
-enum VIDC_SM_ref_picture{
+enum VIDC_SM_ref_picture {
 	VIDC_SM_REF_PICT_FRAME_OR_TOP_FIELD   = 0,
 	VIDC_SM_REF_PICT_BOTTOM_FIELD         = 1
 };
 void vidc_sm_get_extended_decode_status(struct ddl_buf_addr *shared_mem,
+	u32 *more_field_needed,
 	u32 *resl_change);
 void vidc_sm_set_frame_tag(struct ddl_buf_addr *shared_mem,
 	u32 frame_tag);

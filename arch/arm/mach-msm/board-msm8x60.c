@@ -964,12 +964,12 @@ static struct regulator *ldo7_1p8;
 static struct regulator *vdd_cx;
 #define PMICID_INT		PM8058_GPIO_IRQ(PM8058_IRQ_BASE, 36)
 notify_vbus_state notify_vbus_state_func_ptr;
+static int usb_phy_susp_dig_vol = 750000;
+static int pmic_id_notif_supported;
 
 #ifdef CONFIG_USB_EHCI_MSM_72K
 #define USB_PMIC_ID_DET_DELAY	msecs_to_jiffies(100)
 struct delayed_work pmic_id_det;
-static int pmic_id_notif_supported;
-static int usb_phy_susp_dig_vol = 750000;
 
 static int __init usb_id_pin_rework_setup(char *support)
 {
@@ -6557,7 +6557,9 @@ static void __init msm8x60_init_buses(void)
 #endif
 
 	if (machine_is_msm8x60_fluid()) {
-#if defined(CONFIG_SMB137B_CHARGER) || defined(CONFIG_SMB137B_CHARGER_MODULE)
+#if (defined(CONFIG_USB_EHCI_MSM_72K) && \
+	(defined(CONFIG_SMB137B_CHARGER) || \
+	 defined(CONFIG_SMB137B_CHARGER_MODULE)))
 		msm_otg_pdata.vbus_power = msm_hsusb_smb137b_vbus_power;
 #endif
 #if defined(CONFIG_SPI_QUP) || defined(CONFIG_SPI_QUP_MODULE)

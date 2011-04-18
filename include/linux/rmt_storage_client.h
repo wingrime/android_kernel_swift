@@ -38,6 +38,7 @@
 #define RMT_STORAGE_CLOSE             2
 #define RMT_STORAGE_SEND_USER_DATA    3
 #define RMT_STORAGE_READ              4
+#define RMT_STORAGE_NOOP              255
 
 #define RMT_STORAGE_MAX_IOVEC_XFR_CNT 5
 #define MAX_NUM_CLIENTS 10

@@ -184,6 +184,16 @@ static struct rmt_storage_client *rmt_storage_get_client(uint32_t handle)
 	return NULL;
 }
 
+static struct rmt_storage_client *
+rmt_storage_get_client_by_path(const char *path)
+{
+	struct rmt_storage_client *rs_client;
+	list_for_each_entry(rs_client, &rmc->client_list, list)
+		if (!strncmp(path, rs_client->path, MAX_PATH_NAME))
+			return rs_client;
+	return NULL;
+}
+
 static struct rmt_shrd_mem_param *rmt_storage_get_shrd_mem(uint32_t sid)
 {
 	struct rmt_shrd_mem *shrd_mem;
@@ -291,7 +301,7 @@ static int rmt_storage_event_open_cb(struct rmt_storage_event *event_args,
 	char *path;
 	int ret;
 	struct rmt_storage_srv *srv;
-	struct rmt_storage_client *rs_client;
+	struct rmt_storage_client *rs_client = NULL;
 #ifdef CONFIG_MSM_RMT_STORAGE_CLIENT_STATS
 	struct rmt_storage_stats *stats;
 #endif
@@ -305,11 +315,6 @@ static int rmt_storage_event_open_cb(struct rmt_storage_event *event_args,
 		return -1;
 
 	pr_info("%s: open callback received\n", __func__);
-	rs_client = kzalloc(sizeof(struct rmt_storage_client), GFP_KERNEL);
-	if (!rs_client) {
-		pr_err("%s: Error allocating rmt storage client\n", __func__);
-		return -ENOMEM;
-	}
 
 	ret = xdr_recv_bytes(xdr, (void **)&path, &len);
 	if (ret || !path) {
@@ -318,8 +323,24 @@ static int rmt_storage_event_open_cb(struct rmt_storage_event *event_args,
 			ret = -1;
 		goto free_rs_client;
 	}
-	memcpy(event_args->path, path, len);
 
+	rs_client = rmt_storage_get_client_by_path(path);
+	if (rs_client) {
+		pr_debug("%s: Handle %d found for %s\n",
+			__func__, rs_client->handle, path);
+		event_args->id = RMT_STORAGE_NOOP;
+		cid = rs_client->handle;
+		goto end_open_cb;
+	}
+
+	rs_client = kzalloc(sizeof(struct rmt_storage_client), GFP_KERNEL);
+	if (!rs_client) {
+		pr_err("%s: Error allocating rmt storage client\n", __func__);
+		ret = -ENOMEM;
+		goto free_path;
+	}
+
+	memcpy(event_args->path, path, len);
 	rs_client->sid = rmt_storage_get_sid(event_args->path);
 	if (!rs_client->sid) {
 		pr_err("%s: No storage id found for %s\n", __func__,
@@ -357,6 +378,7 @@ static int rmt_storage_event_open_cb(struct rmt_storage_event *event_args,
 	list_add_tail(&rs_client->list, &rmc->client_list);
 	spin_unlock(&rmc->lock);
 
+end_open_cb:
 	kfree(path);
 	return cid;
 
@@ -780,6 +802,7 @@ static int rmt_storage_event_alloc_rmt_buf_cb(
 			       __func__);
 	}
 #endif
+	event_args->id = RMT_STORAGE_NOOP;
 	return (int)shrd_mem->start;
 }
 
@@ -850,7 +873,7 @@ static int handle_rmt_storage_call(struct msm_rpc_client *client,
 		goto out;
 	}
 
-	if (req->procedure != RMT_STORAGE_ALLOC_RMT_BUF_CB_TYPE_PROC) {
+	if (kevent->event.id != RMT_STORAGE_NOOP) {
 		put_event(rmc, kevent);
 		atomic_inc(&rmc->total_events);
 		wake_up(&rmc->event_q);

@@ -1265,6 +1265,17 @@ msmsdcc_irq(int irq, void *dev_id)
 			}
 			/* only ansyc interrupt can come when clocks are off */
 			writel(MCI_SDIOINTMASK, host->base + MMCICLEAR);
+			if (host->sdio_gpio_lpm) {
+				/*
+				 * SDIO IRQ must be processed only after
+				 * that gpios are configured to active i.e.,
+				 * after SDCC resume handler is called.
+				 */
+				disable_irq_nosync(host->core_irqres->start);
+				host->sdcc_irq_disabled = 1;
+				spin_unlock(&host->lock);
+				return IRQ_HANDLED;
+			}
 		}
 
 		status = readl(host->base + MMCISTATUS);
@@ -1548,7 +1559,7 @@ msmsdcc_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 	clk |= MCI_CLK_FLOWENA;
 	clk |= MCI_CLK_SELECTIN; /* feedback clock */
 
-	if (host->plat->translate_vdd)
+	if (host->plat->translate_vdd && !host->sdio_gpio_lpm)
 		pwr |= host->plat->translate_vdd(mmc_dev(mmc), ios->vdd);
 
 	switch (ios->power_mode) {
@@ -2887,15 +2898,26 @@ msmsdcc_runtime_suspend(struct device *dev)
 		pm_runtime_put_noidle(dev);
 
 		if (!rc) {
-			/*
-			 * If MMC core level suspend is not supported, turn
-			 * off clocks to allow deep sleep (TCXO shutdown).
-			 */
-			mmc->ios.clock = 0;
-			mmc->ops->set_ios(host->mmc, &host->mmc->ios);
-
 			if (mmc->card && (mmc->card->type == MMC_TYPE_SDIO) &&
 				(mmc->pm_flags & MMC_PM_WAKE_SDIO_IRQ)) {
+				disable_irq(host->core_irqres->start);
+				host->sdcc_irq_disabled = 1;
+				if (host->plat->sdio_lpm_gpio_setup) {
+					host->plat->sdio_lpm_gpio_setup(
+							mmc_dev(mmc), 0);
+					host->sdio_gpio_lpm = 1;
+				}
+
+				/*
+				 * If MMC core level suspend is not supported,
+				 * turn off clocks to allow deep sleep (TCXO
+				 * shutdown).
+				 */
+				mmc->ios.clock = 0;
+				mmc->ops->set_ios(host->mmc, &host->mmc->ios);
+				enable_irq(host->core_irqres->start);
+				host->sdcc_irq_disabled = 0;
+
 				host->sdio_irq_disabled = 0;
 				if (host->plat->sdiowakeup_irq) {
 					enable_irq_wake(
@@ -2919,6 +2941,18 @@ msmsdcc_runtime_resume(struct device *dev)
 	int release_lock = 0;
 
 	if (mmc) {
+		if (mmc->card && mmc->card->type == MMC_TYPE_SDIO) {
+			if (host->sdio_gpio_lpm &&
+				host->plat->sdio_lpm_gpio_setup) {
+				host->plat->sdio_lpm_gpio_setup(mmc_dev(mmc),
+						1);
+				host->sdio_gpio_lpm = 0;
+			}
+			if (host->sdcc_irq_disabled) {
+				enable_irq(host->core_irqres->start);
+				host->sdcc_irq_disabled = 0;
+			}
+		}
 		mmc->ios.clock = host->clk_rate;
 		mmc->ops->set_ios(host->mmc, &host->mmc->ios);
 

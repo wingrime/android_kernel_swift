@@ -9035,9 +9035,6 @@ static int bahama_bt(int on)
 
 	u8 offset = 0; /* index into bahama configs */
 
-	/* Init mutex to get/set FM/BT status respectively */
-	mutex_init(&config.xfer_lock);
-
 	on = on ? 1 : 0;
 	version = read_bahama_ver();
 
@@ -9097,9 +9094,6 @@ static int bahama_bt(int on)
 		marimba_set_bt_status(&config, true);
 	else
 		marimba_set_bt_status(&config, false);
-
-	/* Destroy mutex */
-	mutex_destroy(&config.xfer_lock);
 
 	return 0;
 }

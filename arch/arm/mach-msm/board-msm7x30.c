@@ -97,7 +97,7 @@
 #else
 #define MSM_FB_SIZE            0x500000
 #endif
-#define MSM_PMEM_ADSP_SIZE      0x1800000
+#define MSM_PMEM_ADSP_SIZE      0x1E00000
 #define MSM_FLUID_PMEM_ADSP_SIZE	0x2800000
 #define PMEM_KERNEL_EBI1_SIZE   0x600000
 #define MSM_PMEM_AUDIO_SIZE     0x200000

@@ -50,7 +50,7 @@ struct mt9e013_i2c_reg_conf prev_settings[] = {
 	{0x034C, 0x0660},/*X_OUTPUT_SIZE*/
 	{0x034E, 0x04C8},/*Y_OUTPUT_SIZE*/
 	{0x306E, 0xFCB0},/*DATAPATH_SELECT*/
-	{0x3040, 0x14C3},/*READ_MODE*/
+	{0x3040, 0x04C3},/*READ_MODE*/
 	{0x3178, 0x0000},/*ANALOG_CONTROL5*/
 	{0x3ED0, 0x1E24},/*DAC_LD_4_5*/
 	{0x0400, 0x0002},/*SCALING_MODE*/

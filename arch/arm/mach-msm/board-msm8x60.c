@@ -1922,6 +1922,94 @@ static void config_camera_off_gpios(void)
 	gpio_free(GPIO_EXT_CAMIF_PWR_EN);
 }
 
+#ifdef CONFIG_QS_S5K4E1
+
+#define QS_CAM_HC37_CAM_PD PM8058_GPIO_PM_TO_SYS(26)
+
+static int config_camera_on_gpios_qs_cam_fluid(void)
+{
+	int rc = 0;
+
+	/* request QS_CAM_HC37_CAM_PD as an output to HC37 ASIC pin CAM_PD */
+	rc = gpio_request(QS_CAM_HC37_CAM_PD, "QS_CAM_HC37_CAM_PD");
+	if (rc < 0) {
+		printk(KERN_ERR "%s: QS_CAM_HC37_CAM_PD gpio %d request"
+			" failed\n", __func__, QS_CAM_HC37_CAM_PD);
+		return rc;
+	}
+	gpio_direction_output(QS_CAM_HC37_CAM_PD, 0);
+	msleep(20);
+	gpio_set_value_cansleep(QS_CAM_HC37_CAM_PD, 1);
+	msleep(20);
+
+	/*
+	 * Set GPIO_AUX_CAM_2P7_EN to 1 on North Expander IO2
+	 * to enable 2.7V power to Camera
+	 */
+	rc = gpio_request(GPIO_AUX_CAM_2P7_EN, "CAM_2P7_EN");
+	if (rc < 0) {
+		printk(KERN_ERR "%s: CAMSENSOR gpio %d request"
+			" failed\n", __func__, GPIO_AUX_CAM_2P7_EN);
+		gpio_set_value_cansleep(QS_CAM_HC37_CAM_PD, 0);
+		gpio_free(QS_CAM_HC37_CAM_PD);
+		return rc;
+	}
+	gpio_direction_output(GPIO_AUX_CAM_2P7_EN, 0);
+	msleep(20);
+	gpio_set_value_cansleep(GPIO_AUX_CAM_2P7_EN, 1);
+	msleep(20);
+
+	rc = config_camera_on_gpios_fluid();
+	if (rc < 0) {
+		printk(KERN_ERR "%s: config_camera_on_gpios_fluid"
+		" failed\n", __func__);
+		gpio_set_value_cansleep(QS_CAM_HC37_CAM_PD, 0);
+		gpio_free(QS_CAM_HC37_CAM_PD);
+		gpio_set_value_cansleep(GPIO_AUX_CAM_2P7_EN, 0);
+		gpio_free(GPIO_AUX_CAM_2P7_EN);
+		return rc;
+	}
+	return rc;
+}
+
+static void config_camera_off_gpios_qs_cam_fluid(void)
+{
+	/*
+	 * Set GPIO_AUX_CAM_2P7_EN to 0 on North Expander IO2
+	 * to disable 2.7V power to Camera
+	 */
+	gpio_set_value_cansleep(GPIO_AUX_CAM_2P7_EN, 0);
+	gpio_free(GPIO_AUX_CAM_2P7_EN);
+
+	/* set QS_CAM_HC37_CAM_PD to 0 to power off HC37 ASIC*/
+	gpio_set_value_cansleep(QS_CAM_HC37_CAM_PD, 0);
+	gpio_free(QS_CAM_HC37_CAM_PD);
+
+	config_camera_off_gpios_fluid();
+	return;
+}
+
+static int config_camera_on_gpios_qs_cam(void)
+{
+	int rc = 0;
+
+	if (machine_is_msm8x60_fluid())
+		return config_camera_on_gpios_qs_cam_fluid();
+
+	rc = config_camera_on_gpios();
+	return rc;
+}
+
+static void config_camera_off_gpios_qs_cam(void)
+{
+	if (machine_is_msm8x60_fluid())
+		return config_camera_off_gpios_qs_cam_fluid();
+
+	config_camera_off_gpios();
+	return;
+}
+#endif
+
 static int config_camera_on_gpios_web_cam(void)
 {
 	int rc = 0;
@@ -1964,6 +2052,18 @@ struct msm_camera_device_platform_data msm_camera_device_data = {
 	.ioclk.mclk_clk_rate = 24000000,
 	.ioclk.vfe_clk_rate  = 228570000,
 };
+
+#ifdef CONFIG_QS_S5K4E1
+struct msm_camera_device_platform_data msm_camera_device_data_qs_cam = {
+	.camera_gpio_on  = config_camera_on_gpios_qs_cam,
+	.camera_gpio_off = config_camera_off_gpios_qs_cam,
+	.ioext.csiphy = 0x04800000,
+	.ioext.csisz  = 0x00000400,
+	.ioext.csiirq = CSI_0_IRQ,
+	.ioclk.mclk_clk_rate = 24000000,
+	.ioclk.vfe_clk_rate  = 228570000,
+};
+#endif
 
 struct msm_camera_device_platform_data msm_camera_device_data_web_cam = {
 	.camera_gpio_on  = config_camera_on_gpios_web_cam,
@@ -2083,7 +2183,7 @@ static struct msm_camera_sensor_info msm_camera_sensor_qs_s5k4e1_data = {
 	.sensor_pwd		= 85,
 	.vcm_pwd		= 1,
 	.vcm_enable		= 0,
-	.pdata			= &msm_camera_device_data,
+	.pdata			= &msm_camera_device_data_qs_cam,
 	.resource		= msm_camera_resources,
 	.num_resources	= ARRAY_SIZE(msm_camera_resources),
 	.flash_data		= &flash_qs_s5k4e1,
@@ -4754,16 +4854,6 @@ static int pm8058_gpios_init(void)
 			}
 
 	};
-
-	if (machine_is_msm8x60_fluid()) {
-		rc = pm8058_gpio_config(en_hap_gpio_cfg.gpio,
-				&en_hap_gpio_cfg.cfg);
-		if (rc < 0) {
-			pr_err("%s pmic haptics gpio config failed\n",
-							__func__);
-			return rc;
-		}
-	}
 #endif
 
 #if defined(CONFIG_PMIC8058_OTHC) || defined(CONFIG_PMIC8058_OTHC_MODULE)
@@ -4777,6 +4867,39 @@ static int pm8058_gpios_init(void)
 				.inv_int_pol    = 0,
 			}
 	};
+#endif
+
+#if defined(CONFIG_QS_S5K4E1)
+		{
+			struct pm8058_gpio_cfg qs_hc37_cam_pd_gpio_cfg = {
+			26,
+			{
+				.direction		= PM_GPIO_DIR_OUT,
+				.output_value	= 0,
+				.output_buffer	= PM_GPIO_OUT_BUF_CMOS,
+				.pull			= PM_GPIO_PULL_DN,
+				.out_strength	= PM_GPIO_STRENGTH_HIGH,
+				.function		= PM_GPIO_FUNC_NORMAL,
+				.vin_sel		= 2,
+				.inv_int_pol	= 0,
+			}
+		};
+#endif
+
+#if defined(CONFIG_HAPTIC_ISA1200) || \
+			defined(CONFIG_HAPTIC_ISA1200_MODULE)
+	if (machine_is_msm8x60_fluid()) {
+		rc = pm8058_gpio_config(en_hap_gpio_cfg.gpio,
+				&en_hap_gpio_cfg.cfg);
+		if (rc < 0) {
+			pr_err("%s pmic haptics gpio config failed\n",
+							__func__);
+			return rc;
+		}
+	}
+#endif
+
+#if defined(CONFIG_PMIC8058_OTHC) || defined(CONFIG_PMIC8058_OTHC_MODULE)
 	/* Line_in only for 8660 ffa & surf */
 	if (machine_is_msm8x60_ffa() || machine_is_msm8x60_surf() ||
 		machine_is_msm8x60_charm_surf() ||
@@ -4787,6 +4910,20 @@ static int pm8058_gpios_init(void)
 			pr_err("%s pmic line_in gpio config failed\n",
 							__func__);
 			return rc;
+		}
+	}
+#endif
+
+#if defined(CONFIG_QS_S5K4E1)
+		/* qs_cam_hc37_cam_pd only for 8660 fluid qs camera*/
+		if (machine_is_msm8x60_fluid()) {
+			rc = pm8058_gpio_config(qs_hc37_cam_pd_gpio_cfg.gpio,
+					&qs_hc37_cam_pd_gpio_cfg.cfg);
+			if (rc < 0) {
+				pr_err("%s pmic qs_hc37_cam_pd gpio config failed\n",
+								__func__);
+				return rc;
+			}
 		}
 	}
 #endif

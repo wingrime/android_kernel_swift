@@ -867,7 +867,20 @@ static void rmnet_disconnect_work(struct work_struct *w)
 {
 	/* REVISIT: Push all the data to sdio if anythign is pending */
 }
+static void rmnet_suspend(struct usb_function *f)
+{
+	struct rmnet_dev *dev = container_of(f, struct rmnet_dev, function);
 
+	if (!atomic_read(&dev->online))
+		return;
+	/* This is a workaround for Windows Host bug during suspend.
+	 * Windows 7/xp Hosts are suppose to drop DTR, when Host suspended.
+	 * Since it is not beind done, Hence exclusively dropping the DTR
+	 * from function driver suspend.
+	 */
+	dev->cbits_to_modem &= ~TIOCM_DTR;
+	queue_work(dev->wq, &dev->set_modem_ctl_bits_work);
+}
 static void rmnet_disable(struct usb_function *f)
 {
 	struct rmnet_dev *dev = container_of(f, struct rmnet_dev, function);
@@ -1208,6 +1221,7 @@ int rmnet_sdio_function_add(struct usb_configuration *c)
 	dev->function.setup = rmnet_setup;
 	dev->function.set_alt = rmnet_set_alt;
 	dev->function.disable = rmnet_disable;
+	dev->function.suspend = rmnet_suspend;
 
 	ret = usb_add_function(c, &dev->function);
 	if (ret)

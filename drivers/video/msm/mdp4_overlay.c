@@ -1777,22 +1777,29 @@ static int mdp4_overlay_is_rgb_type(int format)
 	}
 }
 
-static uint32 mdp4_overlay_get_perf_level(uint32 width, uint32 height,
-					  uint32 format, int is_fg)
+static uint32 mdp4_overlay_get_perf_level(struct mdp_overlay *req)
 {
-	if (mdp4_overlay_is_rgb_type(format) && is_fg &&
-			((width * height) <= OVERLAY_WSVGA_SIZE))
+	int is_fg;
+
+	if (req->is_fg && ((req->alpha & 0x0ff) == 0xff))
+		is_fg = 1;
+
+	if (req->flags & MDP_DEINTERLACE)
+		return OVERLAY_PERF_LEVEL1;
+
+	if (mdp4_overlay_is_rgb_type(req->src.format) && is_fg &&
+		((req->src.width * req->src.height) <= OVERLAY_WSVGA_SIZE))
 		return OVERLAY_PERF_LEVEL4;
-	else if (mdp4_overlay_is_rgb_type(format))
+	else if (mdp4_overlay_is_rgb_type(req->src.format))
 		return OVERLAY_PERF_LEVEL1;
 
 	if (ctrl->ov_pipe[OVERLAY_PIPE_VG1].ref_cnt &&
 		ctrl->ov_pipe[OVERLAY_PIPE_VG2].ref_cnt)
 		return OVERLAY_PERF_LEVEL1;
 
-	if (width*height <= OVERLAY_VGA_SIZE)
+	if (req->src.width*req->src.height <= OVERLAY_VGA_SIZE)
 		return OVERLAY_PERF_LEVEL3;
-	else if (width*height <= OVERLAY_720P_TILE_SIZE)
+	else if (req->src.width*req->src.height <= OVERLAY_720P_TILE_SIZE)
 		return OVERLAY_PERF_LEVEL2;
 	else
 		return OVERLAY_PERF_LEVEL1;
@@ -1801,7 +1808,7 @@ static uint32 mdp4_overlay_get_perf_level(uint32 width, uint32 height,
 int mdp4_overlay_set(struct fb_info *info, struct mdp_overlay *req)
 {
 	struct msm_fb_data_type *mfd = (struct msm_fb_data_type *)info->par;
-	int ret, mixer, is_fg = 0;
+	int ret, mixer;
 	struct mdp4_overlay_pipe *pipe;
 
 	if (mfd == NULL) {
@@ -1817,13 +1824,7 @@ int mdp4_overlay_set(struct fb_info *info, struct mdp_overlay *req)
 		return -EINTR;
 	}
 
-	if (req->is_fg &&
-			((req->alpha & 0x0ff) == 0xff))
-		is_fg = 1;
-	perf_level = mdp4_overlay_get_perf_level(req->src.width,
-						req->src.height,
-						req->src.format,
-						is_fg);
+	perf_level = mdp4_overlay_get_perf_level(req);
 
 	if ((mfd->panel_info.type == LCDC_PANEL) && (req->src_rect.h >
 		req->dst_rect.h || req->src_rect.w > req->dst_rect.w)) {

@@ -601,7 +601,9 @@ struct sensor_3d_exp_cfg {
 	uint32_t line;
 	uint16_t r_gain;
 	uint16_t b_gain;
+	uint16_t gr_gain;
 	uint16_t gb_gain;
+	uint16_t gain_adjust;
 };
 struct sensor_3d_cali_data_t{
 	unsigned char left_p_matrix[3][4][8];

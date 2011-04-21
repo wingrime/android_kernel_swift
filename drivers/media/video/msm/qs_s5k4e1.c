@@ -37,10 +37,10 @@
 #define REG_COARSE_INTEGRATION_TIME		0x0202
 /* Gain */
 #define REG_GLOBAL_GAIN					0x0204
-#define REG_GR_GAIN					0x0206
-#define REG_R_GAIN					0x0208
-#define REG_B_GAIN					0x020A
-#define REG_GB_GAIN					0x020C
+#define REG_GR_GAIN					0x020E
+#define REG_R_GAIN					0x0210
+#define REG_B_GAIN					0x0212
+#define REG_GB_GAIN					0x0214
 /* PLL registers */
 #define REG_FRAME_LENGTH_LINES			0x0340
 #define REG_LINE_LENGTH_PCK				0x0342
@@ -75,7 +75,7 @@ struct qs_s5k4e1_work_t {
 
 static struct qs_s5k4e1_work_t *qs_s5k4e1_sensorw;
 static struct i2c_client *qs_s5k4e1_client;
-
+static char lens_eeprom_data[864];
 static bool cali_data_status;
 struct qs_s5k4e1_ctrl_t {
 	const struct  msm_camera_sensor_info *sensordata;
@@ -103,7 +103,7 @@ static uint16_t prev_frame_length_lines;
 static uint16_t snap_line_length_pck;
 static uint16_t snap_frame_length_lines;
 
-static bool CSI_CONFIG;
+static bool CSI_CONFIG, LENS_SHADE_CONFIG;
 static struct qs_s5k4e1_ctrl_t *qs_s5k4e1_ctrl;
 static DECLARE_WAIT_QUEUE_HEAD(qs_s5k4e1_wait_queue);
 DEFINE_MUTEX(qs_s5k4e1_mut);
@@ -119,7 +119,7 @@ static int qs_s5k4e1_i2c_rxdata(unsigned short saddr,
 		{
 			.addr  = saddr,
 			.flags = 0,
-			.len   = length,
+			.len   = 2,
 			.buf   = rxdata,
 		},
 		{
@@ -300,7 +300,7 @@ static int32_t qs_s5k4e1_eeprom_i2c_read(unsigned short raddr,
 {
 	int32_t rc = 0;
 	unsigned short i2caddr = 0xA0 >> 1;
-	unsigned char buf[rlen+2];
+	unsigned char buf[rlen];
 	int i = 0;
 	if (!rdata)
 		return -EIO;
@@ -409,8 +409,6 @@ static int32_t qs_s5k4e1_get_calibration_data(
 	if (rc < 0)
 		goto fail;
 
-	/*Fix: Temporary disable the 3D Calibration data*/
-	goto fail;
 	return 0;
 
 fail:
@@ -418,29 +416,53 @@ fail:
 	return -EIO;
 
 }
-static int32_t qs_s5k4e1_write_left_lsc(char *left_lsc)
+static int32_t qs_s5k4e1_write_left_lsc(char *left_lsc, int rt)
 {
-	bridge_i2c_write_w(0x06, 0x01);
-	qs_s5k4e1_i2c_write_seq_sensor(0x3200, &left_lsc[0], 216);
-	qs_s5k4e1_i2c_write_seq_sensor(0x32D8, &left_lsc[216], 216);
-	/* qs_s5k4e1_i2c_write_b_sensor(0x3096, 0x40); Fix : lsc setting*/
-	return 0;
-}
-
-static int32_t qs_s5k4e1_write_right_lsc(char *right_lsc)
-{
+	struct qs_s5k4e1_i2c_reg_conf *ptr = (struct qs_s5k4e1_i2c_reg_conf *)
+		(qs_s5k4e1_regs.reg_lens + rt);
 	bridge_i2c_write_w(0x06, 0x02);
-	qs_s5k4e1_i2c_write_seq_sensor(0x3200, &right_lsc[0], 216);
-	qs_s5k4e1_i2c_write_seq_sensor(0x32D8, &right_lsc[216], 216);
-	/*qs_s5k4e1_i2c_write_b_sensor(0x3096, 0x40); Fix : lsc setting*/
+	if (!LENS_SHADE_CONFIG) {
+		qs_s5k4e1_i2c_write_b_sensor(0x3096, 0x40);
+		qs_s5k4e1_i2c_write_b_table(ptr, qs_s5k4e1_regs.reg_lens_size);
+
+		qs_s5k4e1_i2c_write_seq_sensor(0x3200, &left_lsc[0], 216);
+		qs_s5k4e1_i2c_write_seq_sensor(0x32D8, &left_lsc[216], 216);
+		qs_s5k4e1_i2c_write_b_sensor(0x3096, 0x60);
+		qs_s5k4e1_i2c_write_b_sensor(0x3096, 0x40);
+	} else
+		qs_s5k4e1_i2c_write_b_table(ptr, qs_s5k4e1_regs.reg_lens_size);
 	return 0;
 }
 
-static int32_t qs_s5k4e1_write_lsc(char *lsc)
+static int32_t qs_s5k4e1_write_right_lsc(char *right_lsc, int rt)
 {
-	qs_s5k4e1_write_left_lsc(&lsc[0]);
-	qs_s5k4e1_write_right_lsc(&lsc[432]);
-	bridge_i2c_write_w(0x06, 0x03);
+	struct qs_s5k4e1_i2c_reg_conf *ptr = (struct qs_s5k4e1_i2c_reg_conf *)
+		(qs_s5k4e1_regs.reg_lens + rt);
+	bridge_i2c_write_w(0x06, 0x01);
+	if (!LENS_SHADE_CONFIG) {
+		qs_s5k4e1_i2c_write_b_sensor(0x3096, 0x40);
+		qs_s5k4e1_i2c_write_b_table(ptr, qs_s5k4e1_regs.reg_lens_size);
+
+		qs_s5k4e1_i2c_write_seq_sensor(0x3200, &right_lsc[0], 216);
+		qs_s5k4e1_i2c_write_seq_sensor(0x32D8, &right_lsc[216], 216);
+		qs_s5k4e1_i2c_write_b_sensor(0x3096, 0x60);
+		qs_s5k4e1_i2c_write_b_sensor(0x3096, 0x40);
+	} else
+		qs_s5k4e1_i2c_write_b_table(ptr, qs_s5k4e1_regs.reg_lens_size);
+	return 0;
+}
+
+static int32_t qs_s5k4e1_write_lsc(char *lsc, int rt)
+{
+	if (qs_s5k4e1_ctrl->cam_mode == MODE_3D) {
+		qs_s5k4e1_write_left_lsc(&lsc[0], rt);
+		qs_s5k4e1_write_right_lsc(&lsc[432], rt);
+		bridge_i2c_write_w(0x06, 0x03);
+	} else if (qs_s5k4e1_ctrl->cam_mode == MODE_2D_LEFT)
+		qs_s5k4e1_write_left_lsc(&lsc[0], rt);
+	else if (qs_s5k4e1_ctrl->cam_mode == MODE_2D_RIGHT)
+		qs_s5k4e1_write_right_lsc(&lsc[432], rt);
+	LENS_SHADE_CONFIG = 1;
 	return 0;
 }
 
@@ -508,12 +530,12 @@ static void qs_s5k4e1_bridge_config(int mode, int rt)
 		bridge_i2c_write_w(0x06, 0x03);
 		bridge_i2c_write_w(0x04, 0x2018);
 		bridge_i2c_write_w(0x50, 0x00);
-	} else if (mode == MODE_2D_LEFT) {
+	} else if (mode == MODE_2D_RIGHT) {
 		bridge_i2c_write_w(0x51, 0x3);
 		bridge_i2c_write_w(0x06, 0x01);
 		bridge_i2c_write_w(0x04, 0x2018);
 		bridge_i2c_write_w(0x50, 0x01);
-	} else if (mode == MODE_2D_RIGHT) {
+	} else if (mode == MODE_2D_LEFT) {
 		bridge_i2c_write_w(0x51, 0x3);
 		bridge_i2c_write_w(0x06, 0x02);
 		bridge_i2c_write_w(0x04, 0x2018);
@@ -649,8 +671,10 @@ static int32_t qs_s5k4e1_write_exp_gain(struct sensor_3d_exp_cfg exp_cfg)
 	rc = qs_s5k4e1_i2c_write_w_sensor(REG_LINE_LENGTH_PCK, ll_pck);
 	rc = qs_s5k4e1_i2c_write_w_sensor(REG_COARSE_INTEGRATION_TIME, line);
 	if ((qs_s5k4e1_ctrl->cam_mode == MODE_3D) && (cali_data_status == 1)) {
-		bridge_i2c_write_w(0x06, 0x02);
-		rc = qs_s5k4e1_i2c_write_w_sensor(REG_GR_GAIN, gain);
+		bridge_i2c_write_w(0x06, 0x01);
+		rc = qs_s5k4e1_i2c_write_w_sensor(REG_GLOBAL_GAIN,
+			 exp_cfg.gain_adjust);
+		rc = qs_s5k4e1_i2c_write_w_sensor(REG_GR_GAIN, exp_cfg.gr_gain);
 		rc = qs_s5k4e1_i2c_write_w_sensor(REG_R_GAIN,
 				exp_cfg.r_gain);
 		rc = qs_s5k4e1_i2c_write_w_sensor(REG_B_GAIN,
@@ -669,8 +693,6 @@ static int32_t qs_s5k4e1_set_pict_exp_gain(struct sensor_3d_exp_cfg exp_cfg)
 	rc = qs_s5k4e1_write_exp_gain(exp_cfg);
 	return rc;
 }
-
-#define DIV_CEIL(x, y) ((x/y + ((x%y) ? 1 : 0))
 
 static int32_t qs_s5k4e1_move_focus(int direction,
 	int32_t num_steps)
@@ -764,19 +786,24 @@ static int32_t qs_s5k4e1_sensor_setting(int update_type, int rt)
 	struct msm_camera_csi_params qs_s5k4e1_csi_params;
 
 	qs_s5k4e1_stop_stream();
-	msleep(30);
+	msleep(80);
 	bridge_i2c_write_w(0x53, 0x00);
-	msleep(30);
+	msleep(80);
 	if (update_type == REG_INIT) {
 		CSI_CONFIG = 0;
+		LENS_SHADE_CONFIG = 0;
 		bridge_i2c_write_w(0x53, 0x01);
 		msleep(30);
 		qs_s5k4e1_bridge_config(qs_s5k4e1_ctrl->cam_mode, rt);
 		msleep(30);
 		qs_s5k4e1_i2c_write_b_table(qs_s5k4e1_regs.rec_settings,
 				qs_s5k4e1_regs.rec_size);
-		msleep(10);
+		msleep(30);
+		qs_s5k4e1_write_lsc(lens_eeprom_data, rt);
+		msleep(60);
 	} else if (update_type == UPDATE_PERIODIC) {
+		qs_s5k4e1_write_lsc(lens_eeprom_data, rt);
+		msleep(20);
 		if (!CSI_CONFIG) {
 			if (qs_s5k4e1_ctrl->cam_mode == MODE_3D)
 				qs_s5k4e1_csi_params.lane_cnt = 4;
@@ -793,12 +820,12 @@ static int32_t qs_s5k4e1_sensor_setting(int update_type, int rt)
 
 		}
 		bridge_i2c_write_w(0x53, 0x01);
-		msleep(30);
+		msleep(50);
 		qs_s5k4e1_i2c_write_b_table(qs_s5k4e1_regs.conf_array[rt].conf,
 			qs_s5k4e1_regs.conf_array[rt].size);
-		msleep(10);
-		qs_s5k4e1_start_stream();
 		msleep(50);
+		qs_s5k4e1_start_stream();
+		msleep(80);
 	}
 	return rc;
 }
@@ -993,7 +1020,7 @@ int qs_s5k4e1_sensor_open_init(const struct msm_camera_sensor_info *data)
 	if (rc < 0)
 		goto init_fail;
 /*Default mode is 3D*/
-	qs_s5k4e1_write_lsc(data->eeprom_data);
+	memcpy(lens_eeprom_data, data->eeprom_data, 864);
 	qs_s5k4e1_ctrl->fps = 30*Q8;
 	qs_s5k4e1_init_focus();
 	if (rc < 0) {
@@ -1297,7 +1324,7 @@ static int qs_s5k4e1_sensor_probe(const struct msm_camera_sensor_info *info,
 	s->s_init = qs_s5k4e1_sensor_open_init;
 	s->s_release = qs_s5k4e1_sensor_release;
 	s->s_config  = qs_s5k4e1_sensor_config;
-	s->s_mount_angle = 90;
+	s->s_mount_angle = 0;
 	s->s_camera_type = BACK_CAMERA_3D;
 	s->s_video_packing = SIDE_BY_SIDE_HALF;
 	s->s_snap_packing = SIDE_BY_SIDE_FULL;

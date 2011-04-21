@@ -119,6 +119,7 @@ static uint32_t rmt_storage_get_sid(const char *path);
 static struct rmt_storage_client_info *rmc;
 
 #ifdef CONFIG_MSM_SDIO_SMEM
+#define MDM_LOCAL_BUF_SZ	(752 * 1024)
 static struct sdio_smem_client *sdio_smem;
 #endif
 
@@ -729,9 +730,10 @@ static int rmt_storage_event_alloc_rmt_buf_cb(
 {
 	struct rmt_storage_client *rs_client;
 	struct rmt_shrd_mem_param *shrd_mem;
-	uint32_t event_type, handle, size, start, vstart;
+	uint32_t event_type, handle, size;
+#ifdef CONFIG_MSM_SDIO_SMEM
 	int ret;
-
+#endif
 	xdr_recv_uint32(xdr, &event_type);
 	if (event_type != RMT_STORAGE_EVNT_ALLOC_RMT_BUF)
 		return -EINVAL;
@@ -756,34 +758,29 @@ static int rmt_storage_event_alloc_rmt_buf_cb(
 		return -EINVAL;
 	}
 
-	/* Check if another client has already allocated memory
-	   for this sid */
 	shrd_mem = rmt_storage_get_shrd_mem(rs_client->sid);
-	if (shrd_mem)
-		return (int) shrd_mem->start;
-
-	/* Allocate memory from heap for MDM only */
-	if (rs_client->srv->prog != MDM_RMT_STORAGE_APIPROG)
-		return -EINVAL;
-
-	vstart = (uint32_t)kzalloc(size, GFP_KERNEL);
-	if (!vstart)
+	if (!shrd_mem) {
+		pr_err("%s: No shared memory entry found\n",
+		       __func__);
 		return -ENOMEM;
-
-	start = __pa(vstart);
-	ret = rmt_storage_add_shrd_mem(rs_client->sid, start, size,
-				       NULL, NULL, rs_client->srv);
-	if (ret < 0)
-		return ret;
-	pr_debug("%s: Allocated %d bytes at phys_addr=0x%x for handle=%d\n",
-		__func__, size, start, rs_client->handle);
+	}
+	if (shrd_mem->size != size) {
+		pr_err("%s: Size mismatch for handle=%d\n",
+		       __func__, rs_client->handle);
+		return -EINVAL;
+	}
+	pr_debug("%s: %d bytes at phys=0x%x for handle=%d found\n",
+		__func__, size, shrd_mem->start, rs_client->handle);
 
 #ifdef CONFIG_MSM_SDIO_SMEM
-	ret = platform_driver_register(&sdio_smem_drv);
-	if (ret)
-		pr_err("%s: Unable to register sdio smem client\n", __func__);
+	if (rs_client->srv->prog == MDM_RMT_STORAGE_APIPROG) {
+		ret = platform_driver_register(&sdio_smem_drv);
+		if (ret)
+			pr_err("%s: Unable to register sdio smem client\n",
+			       __func__);
+	}
 #endif
-	return (int)start;
+	return (int)shrd_mem->start;
 }
 
 static int handle_rmt_storage_call(struct msm_rpc_client *client,
@@ -1619,6 +1616,9 @@ static uint32_t rmt_storage_get_sid(const char *path)
 
 static int __init rmt_storage_init(void)
 {
+#ifdef CONFIG_MSM_SDIO_SMEM
+	void *mdm_local_buf;
+#endif
 	int ret = 0;
 
 	rmc = kzalloc(sizeof(struct rmt_storage_client_info), GFP_KERNEL);
@@ -1650,6 +1650,26 @@ static int __init rmt_storage_init(void)
 	rmc->workq = create_singlethread_workqueue("rmt_storage");
 	if (!rmc->workq)
 		return -ENOMEM;
+#ifdef CONFIG_MSM_SDIO_SMEM
+	mdm_local_buf = kzalloc(MDM_LOCAL_BUF_SZ, GFP_KERNEL);
+	if (!mdm_local_buf) {
+		pr_err("%s: Unable to allocate shadow mem\n", __func__);
+		ret = -ENOMEM;
+		goto unreg_misc;
+	}
+
+	ret = rmt_storage_add_shrd_mem(RAMFS_MDM_STORAGE_ID,
+				       __pa(mdm_local_buf),
+				       MDM_LOCAL_BUF_SZ,
+				       NULL, NULL, &mdm_srv);
+	if (ret) {
+		pr_err("%s: Unable to add shadow mem entry\n", __func__);
+		goto free_mdm_local_buf;
+	}
+
+	pr_debug("%s: Shadow memory at %p (phys=%lx), %d bytes\n", __func__,
+		 mdm_local_buf, __pa(mdm_local_buf), MDM_LOCAL_BUF_SZ);
+#endif
 
 #ifdef CONFIG_MSM_RMT_STORAGE_CLIENT_STATS
 	stats_dentry = debugfs_create_file("rmt_storage_stats", 0444, 0,
@@ -1659,6 +1679,12 @@ static int __init rmt_storage_init(void)
 #endif
 	return 0;
 
+#ifdef CONFIG_MSM_SDIO_SMEM
+free_mdm_local_buf:
+	kfree(mdm_local_buf);
+unreg_misc:
+	misc_deregister(&rmt_storage_device);
+#endif
 unreg_mdm_rpc:
 	platform_driver_unregister(&mdm_srv.plat_drv);
 unreg_msm_rpc:

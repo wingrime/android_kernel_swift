@@ -4490,7 +4490,7 @@ static struct sdio_al_platform_data sdio_al_pdata = {
 	.get_mdm2ap_status = get_mdm2ap_status,
 	.allow_sdioc_version_major_2 = 0,
 	.peer_sdioc_version_minor = 0x0001,
-	.peer_sdioc_version_major = 0x0004,
+	.peer_sdioc_version_major = 0x0003,
 	.peer_sdioc_boot_version_minor = 0x0001,
 	.peer_sdioc_boot_version_major = 0x0002,
 };
@@ -7527,10 +7527,7 @@ int sdc2_register_status_notify(void (*callback)(int, void *),
 }
 #endif
 
-/* Interrupt handler for SDC2 and SDC5 detection
- * This function uses dual-edge interrputs settings in order
- * to get SDIO detection when the GPIO is rising and SDIO removal
- * when the GPIO is falling */
+/* Interrupt handler for SDC2 and SDC5 detection */
 static irqreturn_t msm8x60_multi_sdio_slot_status_irq(int irq, void *dev_id)
 {
 	int status;
@@ -7580,7 +7577,7 @@ static int msm8x60_multi_sdio_init(void)
 
 	ret = request_irq(irq_num,
 		msm8x60_multi_sdio_slot_status_irq,
-		IRQ_TYPE_EDGE_BOTH,
+		IRQF_TRIGGER_RISING,
 		"sdio_multidetection", NULL);
 
 	if (ret) {

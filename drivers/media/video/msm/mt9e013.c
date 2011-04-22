@@ -562,13 +562,14 @@ static int32_t mt9e013_sensor_setting(int update_type, int rt)
 			mt9e013_i2c_write_w_table(mt9e013_regs.reg_120fps,
 				mt9e013_regs.reg_120fps_size);
 		} else if (rt == HFR_120FPS) {
+			msm_camio_vfe_clk_rate_set(266667000);
 			mt9e013_i2c_write_w_table(mt9e013_regs.reg_pll_120fps,
 				mt9e013_regs.reg_pll_120fps_size);
 			mt9e013_i2c_write_w_table(mt9e013_regs.reg_120fps,
 				mt9e013_regs.reg_120fps_size);
 		}
 		if (!CSI_CONFIG) {
-			msm_camio_vfe_clk_rate_set(266667000);
+			msm_camio_vfe_clk_rate_set(192000000);
 			mt9e013_csi_params.data_format = CSI_10BIT;
 			mt9e013_csi_params.lane_cnt = 2;
 			mt9e013_csi_params.lane_assign = 0xe4;

@@ -469,6 +469,8 @@ static void bq27520_hw_config(struct work_struct *work)
 		dev_err(di->dev, "Failed to config Bq27520 ret = %d\n", ret);
 		return;
 	}
+
+	msm_battery_gauge_register(&bq27520_batt_gauge);
 	/* bq27520 is ready for access, update current_battery_status by reading
 	 * from hardware
 	 */
@@ -870,6 +872,7 @@ static int bq27520_battery_remove(struct i2c_client *client)
 	idr_remove(&battery_id, di->id);
 	mutex_unlock(&battery_mutex);
 
+	msm_battery_gauge_unregister(&bq27520_batt_gauge);
 	kfree(di);
 	return 0;
 }
@@ -940,7 +943,6 @@ static int __init bq27520_battery_init(void)
 
 	/* initialize current_battery_status, and register with msm-charger */
 	init_battery_status();
-	msm_battery_gauge_register(&bq27520_batt_gauge);
 
 	ret = i2c_add_driver(&bq27520_battery_driver);
 	if (ret)
@@ -953,7 +955,6 @@ module_init(bq27520_battery_init);
 static void __exit bq27520_battery_exit(void)
 {
 	i2c_del_driver(&bq27520_battery_driver);
-	msm_battery_gauge_unregister(&bq27520_batt_gauge);
 }
 module_exit(bq27520_battery_exit);
 

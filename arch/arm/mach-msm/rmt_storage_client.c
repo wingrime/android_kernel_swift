@@ -119,7 +119,7 @@ static uint32_t rmt_storage_get_sid(const char *path);
 static struct rmt_storage_client_info *rmc;
 
 #ifdef CONFIG_MSM_SDIO_SMEM
-#define MDM_LOCAL_BUF_SZ	(752 * 1024)
+#define MDM_LOCAL_BUF_SZ	0xC0000
 static struct sdio_smem_client *sdio_smem;
 #endif
 

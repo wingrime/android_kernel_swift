@@ -371,9 +371,7 @@ static int sdio_mux_write(struct sk_buff *skb)
 	if (skb->len <= sz) {
 		rc = sdio_write(sdio_mux_ch, skb->data, skb->len);
 		DBG("%s: write returned %d\n", __func__, rc);
-		if (rc)
-			rc = -EAGAIN;
-		else
+		if (rc == 0)
 			DBG_INC_WRITE_CNT(skb->len);
 	} else
 		rc = -ENOMEM;
@@ -426,16 +424,24 @@ static void sdio_mux_write_data(struct work_struct *work)
 		spin_unlock_irqrestore(&sdio_mux_write_lock, flags);
 		rc = sdio_mux_write(skb);
 		spin_lock_irqsave(&sdio_mux_write_lock, flags);
-		if (rc == -EAGAIN) {
-			__skb_queue_head(&sdio_mux_write_pool, skb);
-			reschedule = 1;
-			break;
-		}
-		if (!rc) {
+		if (rc == 0) {
 			hdr = (struct sdio_mux_hdr *)skb->data;
 			if (sdio_ch[hdr->ch_id].write_done)
 				sdio_ch[hdr->ch_id].write_done(
 					sdio_ch[hdr->ch_id].priv, skb);
+		} else if (rc == -EAGAIN || rc == -ENOMEM) {
+			__skb_queue_head(&sdio_mux_write_pool, skb);
+			reschedule = 1;
+			break;
+		} else {
+			hdr = (struct sdio_mux_hdr *)skb->data;
+			pr_err("%s: sdio_mux_write error %d"
+				   " for ch %d, skb=%p\n",
+				__func__, rc, hdr->ch_id, skb);
+			if (sdio_ch[hdr->ch_id].write_done)
+				sdio_ch[hdr->ch_id].write_done(
+					sdio_ch[hdr->ch_id].priv, skb);
+			break;
 		}
 	}
 	spin_unlock_irqrestore(&sdio_mux_write_lock, flags);

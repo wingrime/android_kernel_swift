@@ -1,4 +1,4 @@
-/* Copyright (c) 2010, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2011, Code Aurora Forum. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -48,6 +48,8 @@ enum {
 int msm_sdio_dmux_open(uint32_t id, void *priv,
 		       void (*receive_cb)(void *, struct sk_buff *),
 		       void (*write_done)(void *, struct sk_buff *));
+
+int msm_sdio_is_channel_in_reset(uint32_t id);
 
 int msm_sdio_dmux_close(uint32_t id);
 

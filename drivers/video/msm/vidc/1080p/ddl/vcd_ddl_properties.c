@@ -123,7 +123,7 @@ u32 ddl_get_property(u32 *ddl_handle,
 	if (vcd_status)
 		DDL_MSG_ERROR("ddl_get_prop:FAILED");
 	else
-		DDL_MSG_ERROR("ddl_get_prop:SUCCESS");
+		DDL_MSG_MED("ddl_get_prop:SUCCESS");
 	return vcd_status;
 }
 
@@ -398,7 +398,7 @@ static u32 ddl_set_dec_property(struct ddl_client_context *ddl,
 		break;
 	case VCD_I_METADATA_ENABLE:
 	case VCD_I_METADATA_HEADER:
-		DDL_MSG_ERROR("Meta Data Interface is Requested");
+		DDL_MSG_MED("Meta Data Interface is Requested");
 		vcd_status = ddl_set_metadata_params(ddl, property_hdr,
 			property_value);
 		vcd_status = VCD_S_SUCCESS;

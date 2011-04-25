@@ -60,6 +60,13 @@ void __diag_sdio_send_req(void)
 			else {
 				APPEND_DEBUG('i');
 				sdio_read(driver->sdio_ch, buf, r);
+				if (((!driver->usb_connected) && (driver->
+					logging_mode == USB_MODE)) || (driver->
+					logging_mode == NO_LOGGING_MODE)) {
+					/*Drop the diag payload */
+					driver->in_busy_sdio = 0;
+					return;
+				}
 				APPEND_DEBUG('j');
 				driver->write_ptr_mdm->length = r;
 				driver->in_busy_sdio = 1;
@@ -95,7 +102,8 @@ int diagfwd_connect_sdio(void)
 
 int diagfwd_disconnect_sdio(void)
 {
-	driver->in_busy_sdio = 1;
+	/* Clear variable to Flush remaining data from SDIO channel */
+	driver->in_busy_sdio = 0;
 	usb_diag_free_req(driver->mdm_ch);
 	return 0;
 }

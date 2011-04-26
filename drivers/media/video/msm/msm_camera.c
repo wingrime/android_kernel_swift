@@ -1817,8 +1817,10 @@ static int msm_get_sensor_info(struct msm_sync *sync, void __user *arg)
 	}
 
 	sdata = sync->pdev->dev.platform_data;
-	CDBG("%s: sensor_name %s\n", __func__, sdata->sensor_name);
-
+	if (sync->sctrl.s_camera_type == BACK_CAMERA_3D)
+		info.support_3d = true;
+	else
+		info.support_3d = false;
 	memcpy(&info.name[0],
 		sdata->sensor_name,
 		MAX_SENSOR_NAME);

@@ -764,7 +764,7 @@ static int rmt_storage_event_alloc_rmt_buf_cb(
 		       __func__);
 		return -ENOMEM;
 	}
-	if (shrd_mem->size != size) {
+	if (shrd_mem->size < size) {
 		pr_err("%s: Size mismatch for handle=%d\n",
 		       __func__, rs_client->handle);
 		return -EINVAL;

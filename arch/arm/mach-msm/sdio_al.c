@@ -3177,11 +3177,12 @@ void mmc_remove(struct mmc_card *card)
 	ask_reading_mailbox(sdio_al_dev); /* Wakeup worker */
 
 	if (state != MODEM_RESTART) {
-
-		pr_info(MODULE_NAME ": %s: Stop mailbox timer for card %d",
-			__func__, sdio_al_dev->card->host->index);
-		sdio_al_dev->poll_delay_msec = 0;
-		del_timer_sync(&sdio_al_dev->timer);
+		if (sdio_al_dev->is_timer_initialized) {
+			pr_info(MODULE_NAME ": %s: Stop timer for card %d",
+				__func__, sdio_al_dev->card->host->index);
+			sdio_al_dev->poll_delay_msec = 0;
+			del_timer_sync(&sdio_al_dev->timer);
+		}
 
 		if (!sdio_al->unittest_mode) {
 			pr_info(MODULE_NAME ":%s: notifying clients for "
@@ -3649,7 +3650,7 @@ static int sdio_al_subsys_notifier_cb(struct notifier_block *this,
 	for (i = 0; i < MAX_NUM_OF_SDIO_DEVICES; i++) {
 		struct sdio_al_device *sdio_al_dev = NULL;
 		if (sdio_al->devices[i] == NULL) {
-			pr_info(MODULE_NAME ": %s: NULL device in index %d",
+			pr_debug(MODULE_NAME ": %s: NULL device in index %d",
 			__func__, i);
 			continue;
 		}
@@ -3667,40 +3668,37 @@ static int sdio_al_subsys_notifier_cb(struct notifier_block *this,
 		sdio_al_dev->is_ready = false;
 
 		/* Stop mailbox timer */
-		pr_info(MODULE_NAME ": %s: Stop mailbox timer for card %d",
-			__func__, sdio_al_dev->card->host->index);
-		sdio_al_dev->poll_delay_msec = 0;
-		del_timer_sync(&sdio_al_dev->timer);
+		if (sdio_al_dev->is_timer_initialized) {
+			pr_debug(MODULE_NAME ": %s: Stop timer for card %d",
+				__func__, sdio_al_dev->card->host->index);
+			sdio_al_dev->poll_delay_msec = 0;
+			del_timer_sync(&sdio_al_dev->timer);
+		}
 
 		func1 = sdio_al_dev->func1;
 
-		if (func1) {
+		if (func1)
 			sdio_claim_host(func1);
 
-			if ((sdio_al_dev->is_ok_to_sleep) &&
-			    (!sdio_al_dev->is_err)) {
-				pr_info(MODULE_NAME ": %s: wakeup modem for "
-						    "card %d", __func__,
-					sdio_al_dev->card->host->index);
-				ret = sdio_al_wake_up(sdio_al_dev, 1);
-				if (ret == 0) {
-					pr_info(MODULE_NAME ": %s: "
-							    "sdio_release_irq"
-							    "for card %d",
-						__func__,
-						sdio_al_dev->card->host->index);
-					sdio_release_irq(func1);
-				}
-			} else {
-				pr_info(MODULE_NAME ": %s: sdio_release_irq"
-						    " for card %d",
+		if ((sdio_al_dev->is_ok_to_sleep) && (!sdio_al_dev->is_err)) {
+			pr_debug(MODULE_NAME ": %s: wakeup modem for card %d",
+				__func__, sdio_al_dev->card->host->index);
+			ret = sdio_al_wake_up(sdio_al_dev, 1);
+			if (ret == 0) {
+				pr_debug(MODULE_NAME ": %s: sdio_release_irq"
+						    "for card %d",
 					__func__,
 					sdio_al_dev->card->host->index);
 				sdio_release_irq(func1);
 			}
+		} else {
+			pr_debug(MODULE_NAME ": %s: sdio_release_irq"
+					    " for card %d",
+				__func__, sdio_al_dev->card->host->index);
+			sdio_release_irq(func1);
 		}
 
-		pr_info(MODULE_NAME ": %s: Notifying SDIO clients for card %d",
+		pr_debug(MODULE_NAME ": %s: Notifying SDIO clients for card %d",
 				__func__, sdio_al_dev->card->host->index);
 		if (!sdio_al->unittest_mode)
 			for (j = 0; j < SDIO_AL_MAX_CHANNELS; j++) {
@@ -3713,7 +3711,7 @@ static int sdio_al_subsys_notifier_cb(struct notifier_block *this,
 		if (func1)
 			sdio_release_host(func1);
 
-		pr_info(MODULE_NAME ": %s: Allows sleep for card %d", __func__,
+		pr_debug(MODULE_NAME ": %s: Allows sleep for card %d", __func__,
 			sdio_al_dev->card->host->index);
 		wake_lock(&sdio_al_dev->wake_lock);
 	}

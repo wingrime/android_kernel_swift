@@ -76,7 +76,7 @@ config ARCH_MSM8X60
 	select MSM_BUS_SCALING
 	select MSM_SECURE_IO
 	select MSM_DALRPC
-	select MSM_SCHED_FAST_CPU_ONLINE
+	select MSM_QDSP6_APR
 
 config ARCH_MSM8960
 	bool "MSM8960"
@@ -1411,11 +1411,30 @@ config BT_MSM_PINTEST
 	  This driver provides support for verifying the MSM to BT pin
 	  connectivity.
 
-config MSM_SCHED_FAST_CPU_ONLINE
-	bool "Fast scheduler update for CPU online"
-	depends on ARCH_MSM8X60
+config MSM_FAKE_BATTERY
+		depends on POWER_SUPPLY
+		default n
+		bool "MSM Fake Battery"
+		help
+		 Enables MSM fake battery driver.
+
+config MSM_QDSP6_APR
+	bool "Audio QDSP6 APR support"
+	depends on MSM_SMD
 	default n
 	help
-		Bypass scheduler domain reconstruction when onlining the second
-		CPU on 8X60 to speed up operation.
+	  Enable APR IPC protocol support between
+	  application processor and QDSP6. APR is
+	  used by audio driver to configure QDSP6's
+	  ASM, ADM and AFE.
+
+
+config MSM_AUDIO_QDSP6
+        bool "QDSP6 HW Audio support"
+        select SND_SOC_MSM_QDSP6_INTF
+        default n
+        help
+          Enable HW audio support in QDSP6.
+          QDSP6 can support HW encoder & decoder and audio processing
+
 endif

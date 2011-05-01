@@ -36,6 +36,7 @@
 
 #define SDIO_CH_LOCAL_OPEN       0x1
 #define SDIO_CH_REMOTE_OPEN      0x2
+#define SDIO_CH_IN_RESET         0x4
 
 #define SDIO_MUX_HDR_MAGIC_NO    0x33fc
 
@@ -138,6 +139,9 @@ static struct sdio_partial_pkt_info sdio_partial_pkt;
 #define sdio_ch_is_remote_open(x)			\
 	(sdio_ch[(x)].status & SDIO_CH_REMOTE_OPEN)
 
+#define sdio_ch_is_in_reset(x)			\
+	(sdio_ch[(x)].status & SDIO_CH_IN_RESET)
+
 static inline void skb_set_data(struct sk_buff *skb,
 				unsigned char *data,
 				unsigned int len)
@@ -228,6 +232,16 @@ static void *handle_sdio_mux_command(struct sdio_mux_hdr *hdr,
 	case SDIO_MUX_HDR_CMD_OPEN:
 		spin_lock_irqsave(&sdio_ch[hdr->ch_id].lock, flags);
 		sdio_ch[hdr->ch_id].status |= SDIO_CH_REMOTE_OPEN;
+		sdio_ch[hdr->ch_id].status &= ~SDIO_CH_IN_RESET;
+
+		/* notify client so it can update its status */
+		if (sdio_ch[hdr->ch_id].receive_cb)
+			sdio_ch[hdr->ch_id].receive_cb(
+					sdio_ch[hdr->ch_id].priv, NULL);
+
+		if (sdio_ch[hdr->ch_id].write_done)
+			sdio_ch[hdr->ch_id].write_done(
+					sdio_ch[hdr->ch_id].priv, NULL);
 		spin_unlock_irqrestore(&sdio_ch[hdr->ch_id].lock, flags);
 		rp = hdr + 1;
 		break;
@@ -371,9 +385,7 @@ static int sdio_mux_write(struct sk_buff *skb)
 	if (skb->len <= sz) {
 		rc = sdio_write(sdio_mux_ch, skb->data, skb->len);
 		DBG("%s: write returned %d\n", __func__, rc);
-		if (rc)
-			rc = -EAGAIN;
-		else
+		if (rc == 0)
 			DBG_INC_WRITE_CNT(skb->len);
 	} else
 		rc = -ENOMEM;
@@ -407,41 +419,80 @@ static int sdio_mux_write_cmd(void *data, uint32_t len)
 static void sdio_mux_write_data(struct work_struct *work)
 {
 	int rc, reschedule = 0;
+	int notify = 0;
 	struct sk_buff *skb;
 	unsigned long flags;
 	int avail;
-	struct sdio_mux_hdr *hdr;
+	int ch_id;
 
 	spin_lock_irqsave(&sdio_mux_write_lock, flags);
 	while ((skb = __skb_dequeue(&sdio_mux_write_pool))) {
+		ch_id = ((struct sdio_mux_hdr *)skb->data)->ch_id;
+
 		avail = sdio_write_avail(sdio_mux_ch);
 		if (avail < skb->len) {
 			/* we may have to wait for write avail
 			 * notification from sdio al
 			 */
 			reschedule = 1;
-			__skb_queue_head(&sdio_mux_write_pool, skb);
 			break;
 		}
 		spin_unlock_irqrestore(&sdio_mux_write_lock, flags);
 		rc = sdio_mux_write(skb);
 		spin_lock_irqsave(&sdio_mux_write_lock, flags);
-		if (rc == -EAGAIN) {
-			__skb_queue_head(&sdio_mux_write_pool, skb);
+		if (rc == 0) {
+			if (sdio_ch[ch_id].write_done)
+				sdio_ch[ch_id].write_done(
+						sdio_ch[ch_id].priv, skb);
+			else
+				dev_kfree_skb_any(skb);
+		} else if (rc == -EAGAIN || rc == -ENOMEM) {
+			/* recoverable error - retry again later */
 			reschedule = 1;
 			break;
-		}
-		if (!rc) {
-			hdr = (struct sdio_mux_hdr *)skb->data;
-			if (sdio_ch[hdr->ch_id].write_done)
-				sdio_ch[hdr->ch_id].write_done(
-					sdio_ch[hdr->ch_id].priv, skb);
+		} else {
+			/* unknown error condition - drop the
+			 * skb and reschedule for the
+			 * other skb's
+			 */
+			pr_err("%s: sdio_mux_write error %d"
+				   " for ch %d, skb=%p\n",
+				__func__, rc, ch_id, skb);
+			notify = 1;
+			break;
 		}
 	}
-	spin_unlock_irqrestore(&sdio_mux_write_lock, flags);
 
-	if (reschedule)
-		queue_work(sdio_mux_workqueue, &work_sdio_mux_write);
+	if (reschedule) {
+		if (sdio_ch_is_in_reset(ch_id)) {
+			notify = 1;
+		} else {
+			__skb_queue_head(&sdio_mux_write_pool, skb);
+			queue_work(sdio_mux_workqueue, &work_sdio_mux_write);
+		}
+	}
+
+	if (notify) {
+		if (sdio_ch[ch_id].write_done)
+			sdio_ch[ch_id].write_done(
+				sdio_ch[ch_id].priv, skb);
+		else
+			dev_kfree_skb_any(skb);
+	}
+	spin_unlock_irqrestore(&sdio_mux_write_lock, flags);
+}
+
+int msm_sdio_is_channel_in_reset(uint32_t id)
+{
+	int rc = 0;
+
+	if (id >= SDIO_DMUX_NUM_CHANNELS)
+		return -EINVAL;
+
+	if (sdio_ch_is_in_reset(id))
+		rc = 1;
+
+	return rc;
 }
 
 int msm_sdio_dmux_write(uint32_t id, struct sk_buff *skb)
@@ -460,6 +511,12 @@ int msm_sdio_dmux_write(uint32_t id, struct sk_buff *skb)
 
 	DBG("%s: writing to ch %d len %d\n", __func__, id, skb->len);
 	spin_lock_irqsave(&sdio_ch[id].lock, flags);
+	if (sdio_ch_is_in_reset(id)) {
+		spin_unlock_irqrestore(&sdio_ch[id].lock, flags);
+		pr_err("%s: port is in reset: %d\n", __func__,
+				sdio_ch[id].status);
+		return -ENETRESET;
+	}
 	if (!sdio_ch_is_local_open(id)) {
 		spin_unlock_irqrestore(&sdio_ch[id].lock, flags);
 		pr_err("%s: port not open: %d\n", __func__, sdio_ch[id].status);
@@ -647,28 +704,29 @@ static int sdio_dmux_probe(struct platform_device *pdev)
 	int rc;
 
 	DBG("%s probe called\n", __func__);
-	if (sdio_mux_initialized)
-		return 0;
 
-	/* is one thread gud enough for read and write? */
-	sdio_mux_workqueue = create_singlethread_workqueue("sdio_dmux");
-	if (!sdio_mux_workqueue)
-		return -ENOMEM;
+	if (!sdio_mux_initialized) {
+		sdio_mux_workqueue = create_singlethread_workqueue("sdio_dmux");
+		if (!sdio_mux_workqueue)
+			return -ENOMEM;
 
-	skb_queue_head_init(&sdio_mux_write_pool);
-	spin_lock_init(&sdio_mux_write_lock);
+		skb_queue_head_init(&sdio_mux_write_pool);
+		spin_lock_init(&sdio_mux_write_lock);
 
-	for (rc = 0; rc < SDIO_DMUX_NUM_CHANNELS; ++rc)
-		spin_lock_init(&sdio_ch[rc].lock);
+		for (rc = 0; rc < SDIO_DMUX_NUM_CHANNELS; ++rc)
+			spin_lock_init(&sdio_ch[rc].lock);
 
 
-	wake_lock_init(&sdio_mux_ch_wakelock, WAKE_LOCK_SUSPEND,
-		       "sdio_dmux");
+		wake_lock_init(&sdio_mux_ch_wakelock, WAKE_LOCK_SUSPEND,
+				   "sdio_dmux");
+	}
+
 	rc = sdio_open("SDIO_RMNT", &sdio_mux_ch, NULL, sdio_mux_notify);
 	if (rc < 0) {
 		pr_err("%s: sido open failed %d\n", __func__, rc);
 		wake_lock_destroy(&sdio_mux_ch_wakelock);
 		destroy_workqueue(sdio_mux_workqueue);
+		sdio_mux_initialized = 0;
 		return rc;
 	}
 
@@ -676,8 +734,51 @@ static int sdio_dmux_probe(struct platform_device *pdev)
 	return 0;
 }
 
+static int sdio_dmux_remove(struct platform_device *pdev)
+{
+	int i;
+	unsigned long ch_lock_flags;
+	unsigned long write_lock_flags;
+	struct sk_buff *skb;
+
+	DBG("%s remove called\n", __func__);
+	if (!sdio_mux_initialized)
+		return 0;
+
+	/* set reset state for any open channels */
+	for (i = 0; i < SDIO_DMUX_NUM_CHANNELS; ++i) {
+		spin_lock_irqsave(&sdio_ch[i].lock, ch_lock_flags);
+		if (sdio_ch_is_open(i)) {
+			sdio_ch[i].status |= SDIO_CH_IN_RESET;
+			sdio_ch[i].status &= ~SDIO_CH_REMOTE_OPEN;
+
+			/* cancel any pending writes */
+			spin_lock_irqsave(&sdio_mux_write_lock,
+					write_lock_flags);
+			while ((skb = __skb_dequeue(&sdio_mux_write_pool))) {
+				if (sdio_ch[i].write_done)
+					sdio_ch[i].write_done(
+							sdio_ch[i].priv, skb);
+				else
+					dev_kfree_skb_any(skb);
+			}
+			spin_unlock_irqrestore(&sdio_mux_write_lock,
+					write_lock_flags);
+
+			/* notify client so it can update its status */
+			if (sdio_ch[i].receive_cb)
+				sdio_ch[i].receive_cb(
+						sdio_ch[i].priv, NULL);
+		}
+		spin_unlock_irqrestore(&sdio_ch[i].lock, ch_lock_flags);
+	}
+
+	return 0;
+}
+
 static struct platform_driver sdio_dmux_driver = {
 	.probe		= sdio_dmux_probe,
+	.remove   = sdio_dmux_remove,
 	.driver		= {
 		.name	= "SDIO_RMNT",
 		.owner	= THIS_MODULE,

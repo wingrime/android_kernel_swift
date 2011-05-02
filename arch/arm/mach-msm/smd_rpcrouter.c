@@ -166,17 +166,6 @@ static DECLARE_WORK(work_create_rpcrouter_pdev, do_create_rpcrouter_pdev);
 #define RR_STATE_BODY    2
 #define RR_STATE_ERROR   3
 
-/* After restart notification, local ep keep
- * state for server restart and for ep notify.
- * Server restart cleared by R-R new svr msg.
- * NTFY cleared by calling msm_rpc_clear_netreset
-*/
-
-#define RESTART_NORMAL 0
-#define RESTART_PEND_SVR 1
-#define RESTART_PEND_NTFY 2
-#define RESTART_PEND_NTFY_SVR 3
-
 /* State for remote ep following restart */
 #define RESTART_QUOTA_ABORT  1
 
@@ -398,6 +387,47 @@ static void modem_reset_startup(void)
 	}
 
 	spin_unlock_irqrestore(&local_endpoints_lock, flags);
+}
+
+/*
+ * Blocks and waits for endpoint if a reset is in progress.
+ *
+ * @returns
+ *    ENETRESET     Reset is in progress and a notification needed
+ *    ERESTARTSYS   Signal occurred
+ *    0             Reset is not in progress
+ */
+static int wait_for_restart_and_notify(struct msm_rpc_endpoint *ept)
+{
+	unsigned long flags;
+	int ret = 0;
+	DEFINE_WAIT(__wait);
+
+	for (;;) {
+		prepare_to_wait(&ept->restart_wait, &__wait,
+				TASK_INTERRUPTIBLE);
+
+		spin_lock_irqsave(&ept->restart_lock, flags);
+		if (ept->restart_state == RESTART_NORMAL) {
+			spin_unlock_irqrestore(&ept->restart_lock, flags);
+			break;
+		} else if (ept->restart_state & RESTART_PEND_NTFY) {
+			ept->restart_state &= ~RESTART_PEND_NTFY;
+			spin_unlock_irqrestore(&ept->restart_lock, flags);
+			ret = -ENETRESET;
+			break;
+		}
+		if (signal_pending(current) &&
+		   ((!(ept->flags & MSM_RPC_UNINTERRUPTIBLE)))) {
+			spin_unlock_irqrestore(&ept->restart_lock, flags);
+			ret = -ERESTARTSYS;
+			break;
+		}
+		spin_unlock_irqrestore(&ept->restart_lock, flags);
+		schedule();
+	}
+	finish_wait(&ept->restart_wait, &__wait);
+	return ret;
 }
 
 static struct rr_server *rpcrouter_create_server(uint32_t pid,
@@ -1220,7 +1250,8 @@ static int msm_rpc_write_pkt(
 	uint32_t event_id;
 #endif
 	uint32_t pacmark;
-	unsigned long flags;
+	unsigned long flags = 0;
+	int rc;
 	struct rpcrouter_xprt_info *xprt_info;
 	int needed;
 
@@ -1261,6 +1292,9 @@ static int msm_rpc_write_pkt(
 		(!(ept->flags & MSM_RPC_UNINTERRUPTIBLE))) {
 		return -ERESTARTSYS;
 	}
+	rc = wait_for_restart_and_notify(ept);
+	if (rc)
+		return rc;
 
 	if (r_ept) {
 		for (;;) {
@@ -1774,27 +1808,24 @@ int __msm_rpc_read(struct msm_rpc_endpoint *ept,
 	unsigned long flags;
 	int rc;
 
-	spin_lock_irqsave(&ept->restart_lock, flags);
-	if (ept->restart_state !=  RESTART_NORMAL) {
-		ept->restart_state &= ~RESTART_PEND_NTFY;
-		spin_unlock_irqrestore(&ept->restart_lock, flags);
-		IO("ENETRESET on ept %p\n", ept);
-		return -ENETRESET;
-	}
-	spin_unlock_irqrestore(&ept->restart_lock, flags);
+	rc = wait_for_restart_and_notify(ept);
+	if (rc)
+		return rc;
 
 	IO("READ on ept %p\n", ept);
 	if (ept->flags & MSM_RPC_UNINTERRUPTIBLE) {
 		if (timeout < 0) {
 			wait_event(ept->wait_q, (ept_packet_available(ept) ||
-						   ept->forced_wakeup));
+						   ept->forced_wakeup ||
+						   ept->restart_state));
 			if (!msm_rpc_clear_netreset(ept))
 				return -ENETRESET;
 		} else {
 			rc = wait_event_timeout(
 				ept->wait_q,
 				(ept_packet_available(ept) ||
-				 ept->forced_wakeup),
+				 ept->forced_wakeup ||
+				 ept->restart_state),
 				timeout);
 			if (!msm_rpc_clear_netreset(ept))
 				return -ENETRESET;
@@ -1805,7 +1836,8 @@ int __msm_rpc_read(struct msm_rpc_endpoint *ept,
 		if (timeout < 0) {
 			rc = wait_event_interruptible(
 				ept->wait_q, (ept_packet_available(ept) ||
-					      ept->forced_wakeup));
+					ept->forced_wakeup ||
+					ept->restart_state));
 			if (!msm_rpc_clear_netreset(ept))
 				return -ENETRESET;
 			if (rc < 0)
@@ -1814,7 +1846,8 @@ int __msm_rpc_read(struct msm_rpc_endpoint *ept,
 			rc = wait_event_interruptible_timeout(
 				ept->wait_q,
 				(ept_packet_available(ept) ||
-				 ept->forced_wakeup),
+				 ept->forced_wakeup ||
+				 ept->restart_state),
 				timeout);
 			if (!msm_rpc_clear_netreset(ept))
 				return -ENETRESET;

@@ -103,4 +103,11 @@ int sdio_cmux_tiocmset(int id, unsigned int set, unsigned int clear);
  */
 int is_remote_open(int id);
 
+/*
+ * sdio_cmux_is_channel_reset - Check whether the channel is in reset state
+ *
+ * @id: Channel id to be checked
+ */
+int sdio_cmux_is_channel_reset(int id);
+
 #endif /* __SDIO_CMUX__ */

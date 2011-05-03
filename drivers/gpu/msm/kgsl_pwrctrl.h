@@ -73,6 +73,7 @@ struct kgsl_pwrctrl {
 	const char *regulator_name;
 	const char *irq_name;
 	const char *src_clk_name;
+	bool pwrrail_first;
 };
 
 void kgsl_pwrctrl_clk(struct kgsl_device *device, unsigned int pwrflag);

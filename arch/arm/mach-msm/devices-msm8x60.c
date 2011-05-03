@@ -630,6 +630,7 @@ static struct kgsl_device_platform_data kgsl_3d0_pdata = {
 #ifdef CONFIG_MSM_BUS_SCALING
 		.nap_allowed = true,
 #endif
+		.pwrrail_first = true,
 	},
 	.clk = {
 		.name = {
@@ -691,6 +692,7 @@ static struct kgsl_device_platform_data kgsl_2d0_pdata = {
 #ifdef CONFIG_MSM_BUS_SCALING
 		.nap_allowed = true,
 #endif
+		.pwrrail_first = true,
 	},
 	.clk = {
 		.name = {
@@ -748,6 +750,7 @@ static struct kgsl_device_platform_data kgsl_2d1_pdata = {
 #ifdef CONFIG_MSM_BUS_SCALING
 		.nap_allowed = true,
 #endif
+		.pwrrail_first = true,
 	},
 	.clk = {
 		.name = {

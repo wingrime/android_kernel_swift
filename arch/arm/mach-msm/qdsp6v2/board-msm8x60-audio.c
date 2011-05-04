@@ -56,6 +56,7 @@ static void snddev_hsed_config_restore_setting(void);
 #define SNDDEV_GPIO_CLASS_D1_EN 229
 
 #define SNDDEV_GPIO_MIC2_ANCR_SEL 294
+#define SNDDEV_GPIO_MIC1_ANCL_SEL 295
 
 static struct resource msm_cdcclk_ctl_resources[] = {
 	{
@@ -501,6 +502,15 @@ static int msm_snddev_enable_amic_power(void)
 		}
 		gpio_direction_output(SNDDEV_GPIO_MIC2_ANCR_SEL, 0);
 
+		ret = gpio_request(SNDDEV_GPIO_MIC1_ANCL_SEL, "MIC1_ANCL_SEL");
+		if (ret) {
+			pr_err("%s: mic1 ancl gpio %d request failed\n",
+				__func__, SNDDEV_GPIO_MIC1_ANCL_SEL);
+			gpio_free(SNDDEV_GPIO_MIC2_ANCR_SEL);
+			return ret;
+		}
+		gpio_direction_output(SNDDEV_GPIO_MIC1_ANCL_SEL, 0);
+
 	} else {
 		ret = pm8058_micbias_enable(OTHC_MICBIAS_2,
 				OTHC_SIGNAL_ALWAYS_ON);
@@ -518,12 +528,70 @@ static void msm_snddev_disable_amic_power(void)
 	if (machine_is_msm8x60_fluid()) {
 		ret = pm8058_micbias_enable(OTHC_MICBIAS_0,
 				OTHC_SIGNAL_OFF);
+		gpio_free(SNDDEV_GPIO_MIC1_ANCL_SEL);
 		gpio_free(SNDDEV_GPIO_MIC2_ANCR_SEL);
 	} else
 		ret = pm8058_micbias_enable(OTHC_MICBIAS_2, OTHC_SIGNAL_OFF);
 
 	if (ret)
 		pr_err("%s: Disabling amic power failed\n", __func__);
+#endif
+}
+
+static int msm_snddev_enable_anc_power(void)
+{
+	int ret = 0;
+#ifdef CONFIG_PMIC8058_OTHC
+	ret = pm8058_micbias_enable(OTHC_MICBIAS_2,
+		OTHC_SIGNAL_ALWAYS_ON);
+	if (ret)
+		pr_err("%s: Enabling anc micbias 2 failed\n", __func__);
+
+	if (machine_is_msm8x60_fluid()) {
+
+		ret = pm8058_micbias_enable(OTHC_MICBIAS_0,
+				OTHC_SIGNAL_ALWAYS_ON);
+		if (ret)
+			pr_err("%s: Enabling anc micbias 0 failed\n", __func__);
+
+		ret = gpio_request(SNDDEV_GPIO_MIC2_ANCR_SEL, "MIC2_ANCR_SEL");
+		if (ret) {
+			pr_err("%s: mic2 ancr gpio %d request failed\n",
+				__func__, SNDDEV_GPIO_MIC2_ANCR_SEL);
+			return ret;
+		}
+		gpio_direction_output(SNDDEV_GPIO_MIC2_ANCR_SEL, 1);
+
+		ret = gpio_request(SNDDEV_GPIO_MIC1_ANCL_SEL, "MIC1_ANCL_SEL");
+		if (ret) {
+			pr_err("%s: mic1 ancl gpio %d request failed\n",
+				__func__, SNDDEV_GPIO_MIC1_ANCL_SEL);
+			gpio_free(SNDDEV_GPIO_MIC2_ANCR_SEL);
+			return ret;
+		}
+		gpio_direction_output(SNDDEV_GPIO_MIC1_ANCL_SEL, 1);
+
+	}
+#endif
+	return ret;
+}
+
+static void msm_snddev_disable_anc_power(void)
+{
+#ifdef CONFIG_PMIC8058_OTHC
+	int ret;
+
+	ret = pm8058_micbias_enable(OTHC_MICBIAS_2, OTHC_SIGNAL_OFF);
+
+	if (machine_is_msm8x60_fluid()) {
+		ret |= pm8058_micbias_enable(OTHC_MICBIAS_0,
+				OTHC_SIGNAL_OFF);
+		gpio_free(SNDDEV_GPIO_MIC2_ANCR_SEL);
+		gpio_free(SNDDEV_GPIO_MIC1_ANCL_SEL);
+	}
+
+	if (ret)
+		pr_err("%s: Disabling anc power failed\n", __func__);
 #endif
 }
 
@@ -698,8 +766,8 @@ static struct snddev_icodec_data snddev_anc_headset_data = {
 	.profile = &headset_anc_profile,
 	.channel_mode = 2,
 	.default_sample_rate = 48000,
-	.pamp_on = msm_snddev_enable_amic_power,
-	.pamp_off = msm_snddev_disable_amic_power,
+	.pamp_on = msm_snddev_enable_anc_power,
+	.pamp_off = msm_snddev_disable_anc_power,
 	.voltage_on = msm_snddev_voltage_on,
 	.voltage_off = msm_snddev_voltage_off,
 };

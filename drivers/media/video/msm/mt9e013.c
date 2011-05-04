@@ -339,7 +339,7 @@ static int32_t mt9e013_write_exp_gain(uint16_t gain, uint32_t line)
 		line = (uint32_t) (line * mt9e013_ctrl->fps_divider /
 						   0x00000400);
 	} else {
-		line = (uint32_t) (line * 2 * mt9e013_ctrl->pict_fps_divider /
+		line = (uint32_t) (line * mt9e013_ctrl->pict_fps_divider /
 						   0x00000400);
 	}
 

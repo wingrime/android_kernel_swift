@@ -827,7 +827,7 @@ static int read_mailbox(struct sdio_al_device *sdio_al_dev, int from_isr)
 	u32 new_write_avail = 0;
 	u32 old_write_avail = 0;
 	u32 any_read_avail = 0;
-	u32 any_no_write_avail = 0;
+	u32 any_write_pending = 0;
 	int i;
 	u32 rx_notify_bitmask = 0;
 	u32 tx_notify_bitmask = 0;
@@ -949,8 +949,8 @@ static int read_mailbox(struct sdio_al_device *sdio_al_dev, int from_isr)
 		   write avail and cannot sleep. Ignore SMEM channel that has
 		   only one direction. */
 		if (strcmp(ch->name, "SDIO_SMEM"))
-			any_no_write_avail |=
-				(new_write_avail <= ch->min_write_avail);
+			any_write_pending |=
+			(new_write_avail < ch->ch_config.max_tx_threshold);
 	}
 
 	for (i = 0; i < SDIO_AL_MAX_CHANNELS; i++) {
@@ -970,7 +970,7 @@ static int read_mailbox(struct sdio_al_device *sdio_al_dev, int from_isr)
 
 
 	if ((rx_notify_bitmask == 0) && (tx_notify_bitmask == 0) &&
-	    !any_read_avail && !any_no_write_avail) {
+	    !any_read_avail && !any_write_pending) {
 		DATA_DEBUG(MODULE_NAME ":Nothing to Notify for card %d\n",
 			   sdio_al_dev->card->host->index);
 		if (is_inactive_time_expired(sdio_al_dev))

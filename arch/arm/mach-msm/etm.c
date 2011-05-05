@@ -94,32 +94,13 @@ struct etm_config_struct {
 	uint32_t etm_0d_vd_single_addr_comp;
 	uint32_t etm_0e_vd_mmd;
 	uint32_t etm_0f_vd_control;
-	uint32_t etm_10_addr_comp_value_1;
-	uint32_t etm_11_addr_comp_value_2;
-	uint32_t etm_12_addr_comp_value_3;
-	uint32_t etm_13_addr_comp_value_4;
-	uint32_t etm_14_addr_comp_value_5;
-	uint32_t etm_15_addr_comp_value_6;
-	uint32_t etm_16_addr_comp_value_7;
-	uint32_t etm_17_addr_comp_value_8;
-	uint32_t etm_20_addr_access_type_1;
-	uint32_t etm_21_addr_access_type_2;
-	uint32_t etm_22_addr_access_type_3;
-	uint32_t etm_23_addr_access_type_4;
-	uint32_t etm_24_addr_access_type_5;
-	uint32_t etm_25_addr_access_type_6;
-	uint32_t etm_26_addr_access_type_7;
-	uint32_t etm_27_addr_access_type_8;
-	uint32_t etm_30_data_comp_value_1;
-	uint32_t etm_32_data_comp_value_2;
-	uint32_t etm_40_data_comp_mask_1;
-	uint32_t etm_42_data_comp_mask_2;
-	uint32_t etm_50_counter_reload_value_1;
-	uint32_t etm_51_counter_reload_value_2;
-	uint32_t etm_54_counter_enable_1;
-	uint32_t etm_55_counter_enable_2;
-	uint32_t etm_58_counter_reload_event_1;
-	uint32_t etm_59_counter_reload_event_2;
+	uint32_t etm_addr_comp_value[8]; /* 10 to 17 */
+	uint32_t etm_addr_access_type[8]; /* 20 to 27 */
+	uint32_t etm_data_comp_value[2]; /* 30 and 32 */
+	uint32_t etm_data_comp_mask[2]; /* 40 and 42 */
+	uint32_t etm_counter_reload_value[2]; /* 50 to 51 */
+	uint32_t etm_counter_enable[2]; /* 54 to 55 */
+	uint32_t etm_counter_reload_event[2]; /* 58 to 59 */
 	uint32_t etm_60_seq_event_1_to_2;
 	uint32_t etm_61_seq_event_2_to_1;
 	uint32_t etm_62_seq_event_2_to_3;
@@ -154,33 +135,32 @@ static struct etm_config_struct etm_config = {
 	.etm_0e_vd_mmd                  = 0x00000000,
 	/* etm_0f_vd_control 0x00010000: exclude none */
 	.etm_0f_vd_control              = 0x00010000,
-	.etm_10_addr_comp_value_1       = 0x50337038,
-	.etm_11_addr_comp_value_2       = 0x00000000,
-	.etm_12_addr_comp_value_3       = 0x00000000,
-	.etm_13_addr_comp_value_4       = 0x00000000,
-	.etm_14_addr_comp_value_5       = 0x00000000,
-	.etm_15_addr_comp_value_6       = 0x00000000,
-	.etm_16_addr_comp_value_7       = 0x00000000,
-	.etm_17_addr_comp_value_8       = 0x00000000,
-	/* etm_20_addr_access_type_1 0x0000001E: word, data store */
-	.etm_20_addr_access_type_1      = 0x0000001E,
-	.etm_21_addr_access_type_2      = 0x00000000,
-	.etm_22_addr_access_type_3      = 0x00000000,
-	.etm_23_addr_access_type_4      = 0x00000000,
-	.etm_24_addr_access_type_5      = 0x00000000,
-	.etm_25_addr_access_type_6      = 0x00000000,
-	.etm_26_addr_access_type_7      = 0x00000000,
-	.etm_27_addr_access_type_8      = 0x00000000,
-	.etm_30_data_comp_value_1       = 0x00000000,
-	.etm_32_data_comp_value_2       = 0x00000000,
-	.etm_40_data_comp_mask_1        = 0x00000000,
-	.etm_42_data_comp_mask_2        = 0x00000000,
-	.etm_50_counter_reload_value_1  = 0x00000000,
-	.etm_51_counter_reload_value_2  = 0x00000000,
-	.etm_54_counter_enable_1        = 0x0002406F,
-	.etm_55_counter_enable_2        = 0x0002406F,
-	.etm_58_counter_reload_event_1  = 0x0000406F,
-	.etm_59_counter_reload_event_2  = 0x0000406F,
+	.etm_addr_comp_value[0]         = 0x00000000,
+	.etm_addr_comp_value[1]         = 0x00000000,
+	.etm_addr_comp_value[2]         = 0x00000000,
+	.etm_addr_comp_value[3]         = 0x00000000,
+	.etm_addr_comp_value[4]         = 0x00000000,
+	.etm_addr_comp_value[5]         = 0x00000000,
+	.etm_addr_comp_value[6]         = 0x00000000,
+	.etm_addr_comp_value[7]         = 0x00000000,
+	.etm_addr_access_type[0]        = 0x00000000,
+	.etm_addr_access_type[1]        = 0x00000000,
+	.etm_addr_access_type[2]        = 0x00000000,
+	.etm_addr_access_type[3]        = 0x00000000,
+	.etm_addr_access_type[4]        = 0x00000000,
+	.etm_addr_access_type[5]        = 0x00000000,
+	.etm_addr_access_type[6]        = 0x00000000,
+	.etm_addr_access_type[7]        = 0x00000000,
+	.etm_data_comp_value[0]         = 0x00000000,
+	.etm_data_comp_value[1]         = 0x00000000,
+	.etm_data_comp_mask[0]          = 0x00000000,
+	.etm_data_comp_mask[1]          = 0x00000000,
+	.etm_counter_reload_value[0]    = 0x00000000,
+	.etm_counter_reload_value[1]    = 0x00000000,
+	.etm_counter_enable[0]          = 0x0002406F,
+	.etm_counter_enable[1]          = 0x0002406F,
+	.etm_counter_reload_event[0]    = 0x0000406F,
+	.etm_counter_reload_event[1]    = 0x0000406F,
 	.etm_60_seq_event_1_to_2        = 0x0000406F,
 	.etm_61_seq_event_2_to_1        = 0x0000406F,
 	.etm_62_seq_event_2_to_3        = 0x0000406F,
@@ -191,8 +171,8 @@ static struct etm_config_struct etm_config = {
 	.etm_6f_cid_comp_mask           = 0x00000000,
 	.etm_78_sync_freq               = 0x00000400,
 	.swconfig                       = 0x00000002,
-	/* etb_trig_cnt 0x00000020: record 32 bytes after trigger */
-	.etb_trig_cnt                   = 0x00000020,
+	/* etb_trig_cnt 0x00000000: ignore trigger */
+	.etb_trig_cnt                   = 0x00000000,
 	/* etb_init_ptr 0x00000010: 16 marker bytes */
 	.etb_init_ptr                   = 0x00000010,
 };
@@ -337,32 +317,32 @@ static void __cpu_enable_trace(void *unused)
 	etm_write_reg(0x0d, etm_config.etm_0d_vd_single_addr_comp);
 	etm_write_reg(0x0e, etm_config.etm_0e_vd_mmd);
 	etm_write_reg(0x0f, etm_config.etm_0f_vd_control);
-	etm_write_reg(0x10, etm_config.etm_10_addr_comp_value_1);
-	etm_write_reg(0x11, etm_config.etm_11_addr_comp_value_2);
-	etm_write_reg(0x12, etm_config.etm_12_addr_comp_value_3);
-	etm_write_reg(0x13, etm_config.etm_13_addr_comp_value_4);
-	etm_write_reg(0x14, etm_config.etm_14_addr_comp_value_5);
-	etm_write_reg(0x15, etm_config.etm_15_addr_comp_value_6);
-	etm_write_reg(0x16, etm_config.etm_16_addr_comp_value_7);
-	etm_write_reg(0x17, etm_config.etm_17_addr_comp_value_8);
-	etm_write_reg(0x20, etm_config.etm_20_addr_access_type_1);
-	etm_write_reg(0x21, etm_config.etm_21_addr_access_type_2);
-	etm_write_reg(0x22, etm_config.etm_22_addr_access_type_3);
-	etm_write_reg(0x23, etm_config.etm_23_addr_access_type_4);
-	etm_write_reg(0x24, etm_config.etm_24_addr_access_type_5);
-	etm_write_reg(0x25, etm_config.etm_25_addr_access_type_6);
-	etm_write_reg(0x26, etm_config.etm_26_addr_access_type_7);
-	etm_write_reg(0x27, etm_config.etm_27_addr_access_type_8);
-	etm_write_reg(0x30, etm_config.etm_30_data_comp_value_1);
-	etm_write_reg(0x32, etm_config.etm_32_data_comp_value_2);
-	etm_write_reg(0x40, etm_config.etm_40_data_comp_mask_1);
-	etm_write_reg(0x42, etm_config.etm_42_data_comp_mask_2);
-	etm_write_reg(0x50, etm_config.etm_50_counter_reload_value_1);
-	etm_write_reg(0x51, etm_config.etm_51_counter_reload_value_2);
-	etm_write_reg(0x54, etm_config.etm_54_counter_enable_1);
-	etm_write_reg(0x55, etm_config.etm_55_counter_enable_2);
-	etm_write_reg(0x58, etm_config.etm_58_counter_reload_event_1);
-	etm_write_reg(0x59, etm_config.etm_59_counter_reload_event_2);
+	etm_write_reg(0x10, etm_config.etm_addr_comp_value[0]);
+	etm_write_reg(0x11, etm_config.etm_addr_comp_value[1]);
+	etm_write_reg(0x12, etm_config.etm_addr_comp_value[2]);
+	etm_write_reg(0x13, etm_config.etm_addr_comp_value[3]);
+	etm_write_reg(0x14, etm_config.etm_addr_comp_value[4]);
+	etm_write_reg(0x15, etm_config.etm_addr_comp_value[5]);
+	etm_write_reg(0x16, etm_config.etm_addr_comp_value[6]);
+	etm_write_reg(0x17, etm_config.etm_addr_comp_value[7]);
+	etm_write_reg(0x20, etm_config.etm_addr_access_type[0]);
+	etm_write_reg(0x21, etm_config.etm_addr_access_type[1]);
+	etm_write_reg(0x22, etm_config.etm_addr_access_type[2]);
+	etm_write_reg(0x23, etm_config.etm_addr_access_type[3]);
+	etm_write_reg(0x24, etm_config.etm_addr_access_type[4]);
+	etm_write_reg(0x25, etm_config.etm_addr_access_type[5]);
+	etm_write_reg(0x26, etm_config.etm_addr_access_type[6]);
+	etm_write_reg(0x27, etm_config.etm_addr_access_type[7]);
+	etm_write_reg(0x30, etm_config.etm_data_comp_value[0]);
+	etm_write_reg(0x32, etm_config.etm_data_comp_value[1]);
+	etm_write_reg(0x40, etm_config.etm_data_comp_mask[0]);
+	etm_write_reg(0x42, etm_config.etm_data_comp_mask[1]);
+	etm_write_reg(0x50, etm_config.etm_counter_reload_value[0]);
+	etm_write_reg(0x51, etm_config.etm_counter_reload_value[1]);
+	etm_write_reg(0x54, etm_config.etm_counter_enable[0]);
+	etm_write_reg(0x55, etm_config.etm_counter_enable[1]);
+	etm_write_reg(0x58, etm_config.etm_counter_reload_event[0]);
+	etm_write_reg(0x59, etm_config.etm_counter_reload_event[1]);
 	etm_write_reg(0x60, etm_config.etm_60_seq_event_1_to_2);
 	etm_write_reg(0x61, etm_config.etm_61_seq_event_2_to_1);
 	etm_write_reg(0x62, etm_config.etm_62_seq_event_2_to_3);
@@ -499,7 +479,7 @@ static int etm_dev_open(struct inode *inode, struct file *file)
 }
 
 static ssize_t etm_dev_read(struct file *file, char __user *data,
-			    size_t len, loff_t *ppos)
+				size_t len, loff_t *ppos)
 {
 	if (next_cpu_to_dump == -1) {
 		get_cpu();
@@ -528,18 +508,175 @@ static ssize_t etm_dev_read(struct file *file, char __user *data,
 	return len;
 }
 
-static ssize_t etm_dev_write(struct file *file, const char __user *data,
-			     size_t len, loff_t *ppos)
+static void setup_range_filter(char addr_type, char range, uint32_t reg1,
+				uint32_t addr1, uint32_t reg2, uint32_t addr2)
 {
-	char command;
+	etm_config.etm_addr_comp_value[reg1] = addr1;
+	etm_config.etm_addr_comp_value[reg2] = addr2;
 
-	if (copy_from_user(&command, data, 1))
+	etm_config.etm_07_te_single_addr_comp |= (1 << reg1);
+	etm_config.etm_07_te_single_addr_comp |= (1 << reg2);
+
+	etm_config.etm_09_te_control |= (1 << (reg1/2));
+	if (range == 'i')
+		etm_config.etm_09_te_control &= ~(1 << 24);
+	else if (range == 'e')
+		etm_config.etm_09_te_control |= (1 << 24);
+
+	if (addr_type == 'i') {
+		etm_config.etm_addr_access_type[reg1] = 0x99;
+		etm_config.etm_addr_access_type[reg2] = 0x99;
+	} else if (addr_type == 'd') {
+		etm_config.etm_addr_access_type[reg1] = 0x9C;
+		etm_config.etm_addr_access_type[reg2] = 0x9C;
+	}
+}
+
+static void setup_start_stop_filter(char addr_type, char start_stop,
+				uint32_t reg, uint32_t addr)
+{
+	etm_config.etm_addr_comp_value[reg] = addr;
+
+	if (start_stop == 's')
+		etm_config.etm_06_te_start_stop |= (1 << reg);
+	else if (start_stop == 't')
+		etm_config.etm_06_te_start_stop |= (1 << (reg + 16));
+
+	etm_config.etm_09_te_control |= (1 << 25);
+
+	if (addr_type == 'i')
+		etm_config.etm_addr_access_type[reg] = 0x99;
+	else if (addr_type == 'd')
+		etm_config.etm_addr_access_type[reg] = 0x9C;
+}
+
+static void setup_viewdata_range_filter(char range, uint32_t reg1,
+				uint32_t addr1, uint32_t reg2, uint32_t addr2)
+{
+	etm_config.etm_addr_comp_value[reg1] = addr1;
+	etm_config.etm_addr_comp_value[reg2] = addr2;
+
+	if (range == 'i') {
+		etm_config.etm_0d_vd_single_addr_comp |= (1 << reg1);
+		etm_config.etm_0d_vd_single_addr_comp |= (1 << reg2);
+		etm_config.etm_0f_vd_control |= (1 << (reg1/2));
+	} else if (range == 'e') {
+		etm_config.etm_0d_vd_single_addr_comp |= (1 << (reg1 + 16));
+		etm_config.etm_0d_vd_single_addr_comp |= (1 << (reg2 + 16));
+		etm_config.etm_0f_vd_control |= (1 << ((reg1/2) + 8));
+	}
+	etm_config.etm_0f_vd_control &= ~(1 << 16);
+
+	etm_config.etm_addr_access_type[reg1] = 0x9C;
+	etm_config.etm_addr_access_type[reg2] = 0x9C;
+}
+
+static void setup_viewdata_start_stop_filter(char start_stop, uint32_t reg,
+				uint32_t addr)
+{
+	etm_config.etm_addr_comp_value[reg] = addr;
+
+	if (start_stop == 's')
+		etm_config.etm_06_te_start_stop |= (1 << reg);
+	else if (start_stop == 't')
+		etm_config.etm_06_te_start_stop |= (1 << (reg + 16));
+
+	etm_config.etm_addr_access_type[reg] = 0x9C;
+}
+
+static void setup_access_type(uint32_t reg, uint32_t value)
+{
+	etm_config.etm_addr_access_type[reg] &= 0xFFFFFFF8;
+	value &= 0x7;
+	etm_config.etm_addr_access_type[reg] |= value;
+}
+
+static void reset_filter(void)
+{
+	etm_config.etm_00_control			= 0x0000D84E;
+	/* etm_02_trigger_event 0x00000000: address comparator 0 matches */
+	etm_config.etm_02_trigger_event		= 0x00000000;
+	etm_config.etm_06_te_start_stop		= 0x00000000;
+	etm_config.etm_07_te_single_addr_comp	= 0x00000000;
+	/* etm_08_te_event 0x0000006F: always true */
+	etm_config.etm_08_te_event		= 0x0000006F;
+	/* etm_09_te_control 0x01000000: exclude none */
+	etm_config.etm_09_te_control		= 0x01000000;
+	etm_config.etm_0a_fifofull_region		= 0x00000000;
+	etm_config.etm_0b_fifofull_level		= 0x00000000;
+	/* etm_0c_vd_event 0x0000006F: always true */
+	etm_config.etm_0c_vd_event                = 0x0000006F;
+	etm_config.etm_0d_vd_single_addr_comp     = 0x00000000;
+	etm_config.etm_0e_vd_mmd                  = 0x00000000;
+	/* etm_0f_vd_control 0x00010000: exclude none */
+	etm_config.etm_0f_vd_control              = 0x00010000;
+	etm_config.etm_addr_comp_value[0]         = 0x00000000;
+	etm_config.etm_addr_comp_value[1]         = 0x00000000;
+	etm_config.etm_addr_comp_value[2]         = 0x00000000;
+	etm_config.etm_addr_comp_value[3]         = 0x00000000;
+	etm_config.etm_addr_comp_value[4]         = 0x00000000;
+	etm_config.etm_addr_comp_value[5]         = 0x00000000;
+	etm_config.etm_addr_comp_value[6]         = 0x00000000;
+	etm_config.etm_addr_comp_value[7]         = 0x00000000;
+	etm_config.etm_addr_access_type[0]        = 0x00000000;
+	etm_config.etm_addr_access_type[1]        = 0x00000000;
+	etm_config.etm_addr_access_type[2]        = 0x00000000;
+	etm_config.etm_addr_access_type[3]        = 0x00000000;
+	etm_config.etm_addr_access_type[4]        = 0x00000000;
+	etm_config.etm_addr_access_type[5]        = 0x00000000;
+	etm_config.etm_addr_access_type[6]        = 0x00000000;
+	etm_config.etm_addr_access_type[7]        = 0x00000000;
+	etm_config.etm_data_comp_value[0]         = 0x00000000;
+	etm_config.etm_data_comp_value[1]         = 0x00000000;
+	etm_config.etm_data_comp_mask[0]          = 0x00000000;
+	etm_config.etm_data_comp_mask[1]          = 0x00000000;
+	etm_config.etm_counter_reload_value[0]    = 0x00000000;
+	etm_config.etm_counter_reload_value[1]    = 0x00000000;
+	etm_config.etm_counter_enable[0]          = 0x0002406F;
+	etm_config.etm_counter_enable[1]          = 0x0002406F;
+	etm_config.etm_counter_reload_event[0]    = 0x0000406F;
+	etm_config.etm_counter_reload_event[1]    = 0x0000406F;
+	etm_config.etm_60_seq_event_1_to_2        = 0x0000406F;
+	etm_config.etm_61_seq_event_2_to_1        = 0x0000406F;
+	etm_config.etm_62_seq_event_2_to_3        = 0x0000406F;
+	etm_config.etm_63_seq_event_3_to_1        = 0x0000406F;
+	etm_config.etm_64_seq_event_3_to_2        = 0x0000406F;
+	etm_config.etm_65_seq_event_1_to_3        = 0x0000406F;
+	etm_config.etm_6c_cid_comp_value_1        = 0x00000000;
+	etm_config.etm_6f_cid_comp_mask           = 0x00000000;
+	etm_config.etm_78_sync_freq               = 0x00000400;
+	etm_config.swconfig                       = 0x00000002;
+	/* etb_trig_cnt 0x00000020: ignore trigger */
+	etm_config.etb_trig_cnt                   = 0x00000000;
+	/* etb_init_ptr 0x00000010: 16 marker bytes */
+	etm_config.etb_init_ptr                   = 0x00000010;
+}
+
+#define MAX_COMMAND_STRLEN  40
+static ssize_t etm_dev_write(struct file *file, const char __user *data,
+				size_t len, loff_t *ppos)
+{
+	char command[MAX_COMMAND_STRLEN];
+	int strlen;
+	unsigned long value;
+	unsigned long reg1, reg2;
+	unsigned long addr1, addr2;
+
+	strlen = strnlen_user(data, MAX_COMMAND_STRLEN);
+	pr_debug("etm: string length: %d", strlen);
+	if (strlen == 0 || strlen == (MAX_COMMAND_STRLEN+1)) {
+		pr_err("etm: error in strlen: %d", strlen);
 		return -EFAULT;
+	}
+	/* includes the null character */
+	if (copy_from_user(command, data, strlen)) {
+		pr_err("etm: error in copy_from_user: %d", strlen);
+		return -EFAULT;
+	}
 
-	if (command != '0' && command != '1')
-		return -EINVAL;
+	pr_debug("etm: input = %s", command);
 
-	switch (command) {
+	switch (command[0]) {
 	case '0':
 		if (trace_enabled) {
 			disable_trace();
@@ -552,8 +689,129 @@ static ssize_t etm_dev_write(struct file *file, const char __user *data,
 			pr_info("etm: tracing enabled\n");
 		}
 		break;
+	case 'f':
+		switch (command[2]) {
+		case 'i':
+		case 'd':
+			switch (command[4]) {
+			case 'i':
+				if (sscanf(&command[6], "%lx:%lx:%lx:%lx\\0",
+					&reg1, &addr1, &reg2, &addr2) != 4)
+					goto err_out;
+				if (reg1 > 7 || reg2 > 7 || (reg1 % 2))
+					goto err_out;
+				setup_range_filter(command[2], 'i',
+					reg1, addr1, reg2, addr2);
+				break;
+			case 'e':
+				if (sscanf(&command[6], "%lx:%lx:%lx:%lx\\0",
+					&reg1, &addr1, &reg2, &addr2) != 4)
+					goto err_out;
+				if (reg1 > 7 || reg2 > 7 || (reg1 % 2)
+					|| command[2] == 'd')
+					goto err_out;
+				setup_range_filter(command[2], 'e',
+					reg1, addr1, reg2, addr2);
+				break;
+			case 's':
+				if (sscanf(&command[6], "%lx:%lx\\0",
+					&reg1, &addr1) != 2)
+					goto err_out;
+				if (reg1 > 7)
+					goto err_out;
+				setup_start_stop_filter(command[2], 's',
+					reg1, addr1);
+				break;
+			case 't':
+				if (sscanf(&command[6], "%lx:%lx\\0",
+						&reg1, &addr1) != 2)
+					goto err_out;
+				if (reg1 > 7)
+					goto err_out;
+				setup_start_stop_filter(command[2], 't',
+					reg1, addr1);
+				break;
+			default:
+				goto err_out;
+			}
+			break;
+		case 'r':
+			reset_filter();
+			break;
+		default:
+			goto err_out;
+		}
+		break;
+	case 'v':
+		switch (command[2]) {
+		case 'd':
+			switch (command[4]) {
+			case 'i':
+				if (sscanf(&command[6], "%lx:%lx:%lx:%lx\\0",
+					&reg1, &addr1, &reg2, &addr2) != 4)
+					goto err_out;
+				if (reg1 > 7 || reg2 > 7 || (reg1 % 2))
+					goto err_out;
+				setup_viewdata_range_filter('i',
+					reg1, addr1, reg2, addr2);
+				break;
+			case 'e':
+				if (sscanf(&command[6], "%lx:%lx:%lx:%lx\\0",
+					&reg1, &addr1, &reg2, &addr2) != 4)
+					goto err_out;
+				if (reg1 > 7 || reg2 > 7 || (reg1 % 2))
+					goto err_out;
+				setup_viewdata_range_filter('e',
+					reg1, addr1, reg2, addr2);
+				break;
+			case 's':
+				if (sscanf(&command[6], "%lx:%lx\\0",
+					&reg1, &addr1) != 2)
+					goto err_out;
+				if (reg1 > 7)
+					goto err_out;
+				setup_viewdata_start_stop_filter('s',
+					reg1, addr1);
+				break;
+			case 't':
+				if (sscanf(&command[6], "%lx:%lx\\0",
+					&reg1, &addr1) != 2)
+					goto err_out;
+				if (reg1 > 7)
+					goto err_out;
+				setup_viewdata_start_stop_filter('t',
+					reg1, addr1);
+				break;
+			default:
+				goto err_out;
+			}
+			break;
+		default:
+			goto err_out;
+		}
+		break;
+	case 'a':
+		switch (command[2]) {
+		case 't':
+			if (sscanf(&command[4], "%lx:%lx\\0",
+					&reg1, &value) != 2)
+				goto err_out;
+			if (reg1 > 7 || value > 6)
+				goto err_out;
+			setup_access_type(reg1, value);
+			break;
+		default:
+			goto err_out;
+		}
+		break;
+	default:
+		goto err_out;
 	}
+
 	return len;
+
+err_out:
+	return -EFAULT;
 }
 
 static int etm_dev_release(struct inode *inode, struct file *file)

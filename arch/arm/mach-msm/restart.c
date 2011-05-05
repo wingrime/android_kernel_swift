@@ -125,6 +125,9 @@ EXPORT_SYMBOL(msm_set_restart_mode);
 static void msm_power_off(void)
 {
 	printk(KERN_NOTICE "Powering off the SoC\n");
+#ifdef CONFIG_MSM_DLOAD_MODE
+	set_dload_mode(0);
+#endif
 	pm8058_reset_pwr_off(0);
 	pm8901_reset_pwr_off(0);
 	writel(0, PSHOLD_CTL_SU);
@@ -191,6 +194,10 @@ static int __init msm_restart_init(void)
 #ifdef CONFIG_MSM_DLOAD_MODE
 	atomic_notifier_chain_register(&panic_notifier_list, &panic_blk);
 	dload_mode_addr = imem + DLOAD_MODE_ADDR;
+
+	/* Reset detection is switched on below.*/
+	set_dload_mode(1);
+	reset_detection = 1;
 #endif
 	restart_reason = imem + RESTART_REASON_ADDR;
 	pm_power_off = msm_power_off;

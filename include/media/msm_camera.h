@@ -553,7 +553,9 @@ struct msm_snapshot_pp_status {
 #define SENSOR_PREVIEW_MODE		0
 #define SENSOR_SNAPSHOT_MODE		1
 #define SENSOR_RAW_SNAPSHOT_MODE	2
-#define SENSOR_VIDEO_120FPS_MODE	3
+#define SENSOR_HFR_60FPS_MODE 3
+#define SENSOR_HFR_90FPS_MODE 4
+#define SENSOR_HFR_120FPS_MODE 5
 
 #define SENSOR_QTR_SIZE			0
 #define SENSOR_FULL_SIZE		1
@@ -601,7 +603,9 @@ struct sensor_3d_exp_cfg {
 	uint32_t line;
 	uint16_t r_gain;
 	uint16_t b_gain;
+	uint16_t gr_gain;
 	uint16_t gb_gain;
+	uint16_t gain_adjust;
 };
 struct sensor_3d_cali_data_t{
 	unsigned char left_p_matrix[3][4][8];

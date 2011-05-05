@@ -123,7 +123,7 @@ u32 ddl_get_property(u32 *ddl_handle,
 	if (vcd_status)
 		DDL_MSG_ERROR("ddl_get_prop:FAILED");
 	else
-		DDL_MSG_ERROR("ddl_get_prop:SUCCESS");
+		DDL_MSG_MED("ddl_get_prop:SUCCESS");
 	return vcd_status;
 }
 
@@ -398,7 +398,7 @@ static u32 ddl_set_dec_property(struct ddl_client_context *ddl,
 		break;
 	case VCD_I_METADATA_ENABLE:
 	case VCD_I_METADATA_HEADER:
-		DDL_MSG_ERROR("Meta Data Interface is Requested");
+		DDL_MSG_MED("Meta Data Interface is Requested");
 		vcd_status = ddl_set_metadata_params(ddl, property_hdr,
 			property_value);
 		vcd_status = VCD_S_SUCCESS;
@@ -891,6 +891,7 @@ static u32 ddl_get_dec_property(struct ddl_client_context *ddl,
 	struct vcd_property_hdr *property_hdr, void *property_value)
 {
 	struct ddl_decoder_data *decoder = &ddl->codec_data.decoder;
+	struct vcd_property_frame_size *fz_size;
 	u32 vcd_status = VCD_ERR_ILLEGAL_PARM;
 	DDL_MSG_HIGH("property_hdr->prop_id:%x\n", property_hdr->prop_id);
 	switch (property_hdr->prop_id) {
@@ -899,6 +900,14 @@ static u32 ddl_get_dec_property(struct ddl_client_context *ddl,
 			property_hdr->sz) {
 			ddl_calculate_stride(&decoder->client_frame_size,
 				!decoder->progressive_only);
+			fz_size =
+			&decoder->client_frame_size;
+			fz_size->stride =
+			DDL_TILE_ALIGN(fz_size->width,
+				DDL_TILE_ALIGN_WIDTH);
+			fz_size->scan_lines =
+			DDL_TILE_ALIGN(fz_size->height,
+				DDL_TILE_ALIGN_HEIGHT);
 			*(struct vcd_property_frame_size *)
 				property_value =
 					decoder->client_frame_size;

@@ -97,7 +97,7 @@
 #else
 #define MSM_FB_SIZE            0x500000
 #endif
-#define MSM_PMEM_ADSP_SIZE      0x1800000
+#define MSM_PMEM_ADSP_SIZE      0x1E00000
 #define MSM_FLUID_PMEM_ADSP_SIZE	0x2800000
 #define PMEM_KERNEL_EBI1_SIZE   0x600000
 #define MSM_PMEM_AUDIO_SIZE     0x200000
@@ -6655,7 +6655,7 @@ static struct mmc_platform_data msm7x30_sdc3_data = {
 	.msmsdcc_fmin	= 144000,
 	.msmsdcc_fmid	= 24576000,
 	.msmsdcc_fmax	= 49152000,
-	.nonremovable	= 1,
+	.nonremovable	= 0,
 };
 #endif
 
@@ -7049,6 +7049,16 @@ static int isa1200_power(int vreg_on)
 			goto vreg_fail;
 		}
 	}
+
+	/* vote for DO buffer */
+	rc = pmapp_clock_vote("VIBR", PMAPP_CLOCK_ID_DO,
+		vreg_on ? PMAPP_CLOCK_VOTE_ON : PMAPP_CLOCK_VOTE_OFF);
+	if (rc)	{
+		pr_err("%s: unable to %svote for d0 clk\n",
+			__func__, vreg_on ? "" : "de-");
+		goto vreg_fail;
+	}
+
 	return 0;
 
 vreg_fail:

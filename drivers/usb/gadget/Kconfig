@@ -855,9 +855,32 @@ config USB_ANDROID
 config USB_ANDROID_ACM
 	boolean "Android gadget ACM serial function"
 	depends on USB_ANDROID
+	depends on !(USB_F_SERIAL || USB_F_SERIAL_SDIO || USB_F_SERIAL_SMD)
 	default n
 	help
 	  Provides ACM serial function for android gadget driver.
+
+config USB_ANDROID_ACM_SDIO
+	boolean "generic serial function driver over SDIO"
+	depends on USB_ANDROID && MSM_SDIO_CMUX && MSM_SDIO_AL
+	depends on !(USB_F_SERIAL || USB_F_SERIAL_SDIO || USB_F_SERIAL_SMD)
+	default n
+	help
+	  Gadget ACM serial driver is one way to communicate with
+	  modem device. This option enables ACM driver to communicate
+	  with modem over SDIO.
+          Say "y" to link the driver staticall
+
+config USB_ANDROID_ACM_SMD
+	boolean "generic serial function driver over SMD"
+	depends on USB_ANDROID && MSM_SMD
+	depends on !(USB_F_SERIAL || USB_F_SERIAL_SDIO || USB_F_SERIAL_SMD)
+	default n
+	help
+	  Gadget ACM serial driver is one way to communicate with
+	  modem device. This option enables ACM driver to communicate
+	  with modem over SMD.
+          Say "y" to link the driver statically
 
 config USB_ANDROID_ADB
 	boolean "Android gadget adb function"

@@ -57,6 +57,22 @@
 #define RPCROUTER_XPRT_EVENT_OPEN  2
 #define RPCROUTER_XPRT_EVENT_CLOSE 3
 
+/* Restart states for endpoint.
+ *
+ * Two different bits are specified here, one for
+ * the remote server notification (RESTART_PEND_SVR)
+ * and one for client notification (RESTART_PEND_NTFY).
+ * The client notification is used to ensure that
+ * the client gets notified by an ENETRESET return
+ * code at least once, even if they miss the actual
+ * reset event.  The server notification is used to
+ * properly handle the reset state of the endpoint.
+ */
+#define RESTART_NORMAL 0x0
+#define RESTART_PEND_SVR 0x1
+#define RESTART_PEND_NTFY 0x2
+#define RESTART_PEND_NTFY_SVR (RESTART_PEND_SVR | RESTART_PEND_NTFY)
+
 union rr_control_msg {
 	uint32_t cmd;
 	struct {

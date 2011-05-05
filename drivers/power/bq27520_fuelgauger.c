@@ -125,7 +125,8 @@ struct bq27520_device_info {
 	const struct bq27520_platform_data	*pdata;
 	struct work_struct			counter;
 	/* 300ms delay is needed after bq27520 is powered up
-	and before any successful I2C transaction */
+	 * and before any successful I2C transaction
+	 */
 	struct  delayed_work			hw_config;
 	uint32_t				irq;
 };
@@ -139,12 +140,13 @@ enum {
 };
 
 struct bq27520_status {
-/* Informations owned and maintained by Bq27520 driver, updated by poller
-or SOC_INT interrupt, decoupling from I/Oing hardware directly */
+	/* Informations owned and maintained by Bq27520 driver, updated
+	 * by poller or SOC_INT interrupt, decoupling from I/Oing
+	 * hardware directly
+	 */
 	int			status[NUM_OF_STATUS];
 	spinlock_t		lock;
-	struct timer_list	polling;
-	struct work_struct	poller;
+	struct delayed_work	poller;
 };
 
 static struct bq27520_status current_battery_status;
@@ -291,7 +293,8 @@ static void bq27520_coulomb_counter_work(struct work_struct *work)
 	di = container_of(work, struct bq27520_device_info, counter);
 
 	/* retrieve 30 values from FIFO of coulomb data logging buffer
-	 and average over time */
+	 * and average over time
+	 */
 	do {
 		ret = bq27520_read(BQ27520_REG_LOGBUF, &temp, 0, di);
 		if (ret < 0)
@@ -401,7 +404,8 @@ static void update_current_battery_status(int data)
 }
 
 /* only if battery charging satus changes then notify msm_charger. otherwise
-only refresh current_batter_status */
+ * only refresh current_batter_status
+ */
 static int if_notify_msm_charger(int *data)
 {
 	int ret = 0, flags = 0, status = 0;
@@ -436,13 +440,9 @@ static void battery_status_poller(struct work_struct *work)
 	update_current_battery_status(status);
 	if (temp)
 		msm_charger_notify_event(NULL, CHG_BATT_STATUS_CHANGE);
-}
 
-static void bq27520_timer_func(unsigned long data)
-{
-	schedule_work(&current_battery_status.poller);
-	mod_timer(&current_battery_status.polling,
-				jiffies + BQ27520_POLLING_STATUS);
+	schedule_delayed_work(&current_battery_status.poller,
+				BQ27520_POLLING_STATUS);
 }
 
 static void bq27520_hw_config(struct work_struct *work)
@@ -459,7 +459,8 @@ static void bq27520_hw_config(struct work_struct *work)
 		return;
 	}
 	/* bq27520 is ready for access, update current_battery_status by reading
-	from hardware */
+	 * from hardware
+	 */
 	if_notify_msm_charger(&status);
 	update_current_battery_status(status);
 	msm_charger_notify_event(NULL, CHG_BATT_STATUS_CHANGE);
@@ -467,14 +468,10 @@ static void bq27520_hw_config(struct work_struct *work)
 	enable_irq(di->irq);
 
 	/* poll battery status every 3 seconds, if charging status changes,
-	notify msm_charger TBD */
-	INIT_WORK(&current_battery_status.poller, battery_status_poller);
-	init_timer(&current_battery_status.polling);
-	current_battery_status.polling.function = &bq27520_timer_func;
-	current_battery_status.polling.data = (unsigned long)di;
-	current_battery_status.polling.expires = jiffies +
-						BQ27520_POLLING_STATUS;
-	add_timer(&current_battery_status.polling);
+	 * notify msm_charger
+	 */
+	schedule_delayed_work(&current_battery_status.poller,
+				BQ27520_POLLING_STATUS);
 
 	if (di->pdata->enable_dlog) {
 		schedule_work(&di->counter);
@@ -833,6 +830,8 @@ static int bq27520_battery_probe(struct i2c_client *client,
 	if (pdata->enable_dlog)
 		INIT_WORK(&di->counter, bq27520_coulomb_counter_work);
 
+	INIT_DELAYED_WORK(&current_battery_status.poller,
+			battery_status_poller);
 	INIT_DELAYED_WORK(&di->hw_config, bq27520_hw_config);
 	schedule_delayed_work(&di->hw_config, BQ27520_INIT_DELAY);
 
@@ -854,10 +853,8 @@ static int bq27520_battery_remove(struct i2c_client *client)
 {
 	struct bq27520_device_info *di = i2c_get_clientdata(client);
 
-	del_timer_sync(&timer);
-	del_timer_sync(&current_battery_status.polling);
-
 	if (di->pdata->enable_dlog) {
+		del_timer_sync(&timer);
 		cancel_work_sync(&di->counter);
 		bq27520_cntl_cmd(di, BQ27520_SUBCMD_DISABLE_DLOG);
 		udelay(66);
@@ -865,7 +862,7 @@ static int bq27520_battery_remove(struct i2c_client *client)
 
 	bq27520_cntl_cmd(di, BQ27520_SUBCMD_DISABLE_IT);
 	cancel_delayed_work_sync(&di->hw_config);
-	cancel_work_sync(&current_battery_status.poller);
+	cancel_delayed_work_sync(&current_battery_status.poller);
 
 	bq27520_dev_setup(false, di);
 	bq27520_power(false, di);
@@ -880,6 +877,40 @@ static int bq27520_battery_remove(struct i2c_client *client)
 	return 0;
 }
 
+#ifdef CONFIG_PM
+static int bq27520_suspend(struct device *dev)
+{
+	struct bq27520_device_info *di = dev_get_drvdata(dev);
+
+	disable_irq_nosync(di->irq);
+	if (di->pdata->enable_dlog) {
+		del_timer_sync(&timer);
+		cancel_work_sync(&di->counter);
+	}
+
+	cancel_delayed_work_sync(&current_battery_status.poller);
+	return 0;
+}
+
+static int bq27520_resume(struct device *dev)
+{
+	struct bq27520_device_info *di = dev_get_drvdata(dev);
+
+	enable_irq(di->irq);
+	if (di->pdata->enable_dlog)
+		add_timer(&timer);
+
+	schedule_delayed_work(&current_battery_status.poller,
+				BQ27520_POLLING_STATUS);
+	return 0;
+}
+
+static const struct dev_pm_ops bq27520_pm_ops = {
+	.suspend = bq27520_suspend,
+	.resume = bq27520_resume,
+};
+#endif
+
 static const struct i2c_device_id bq27520_id[] = {
 	{ "bq27520", 1 },
 	{},
@@ -889,6 +920,10 @@ MODULE_DEVICE_TABLE(i2c, BQ27520_id);
 static struct i2c_driver bq27520_battery_driver = {
 	.driver = {
 		.name = "bq27520-battery",
+		.owner = THIS_MODULE,
+#ifdef CONFIG_PM
+		.pm = &bq27520_pm_ops,
+#endif
 	},
 	.probe = bq27520_battery_probe,
 	.remove = bq27520_battery_remove,

@@ -23,7 +23,7 @@
 #include <linux/usb/android_composite.h>
 #include <linux/msm_ssbi.h>
 #include <linux/mfd/pm8xxx/pm8921.h>
-#include <mach/irqs.h>
+#include <linux/spi/spi.h>
 
 #include <asm/mach-types.h>
 #include <asm/mach/arch.h>
@@ -38,12 +38,16 @@
 #include <mach/socinfo.h>
 #include <mach/usb_gadget_fserial.h>
 #include <mach/rpm.h>
+#include <mach/irqs.h>
+#include <mach/gpio.h>
 
 #include "timer.h"
 #include "devices.h"
 #include "devices-msm8x60.h"
 #include "gpiomux.h"
 #include "board-msm8960.h"
+
+#define KS8851_IRQ_GPIO		38
 
 static struct gpiomux_setting gsbi1 = {
 	.func = GPIOMUX_FUNC_1,
@@ -55,6 +59,21 @@ static struct gpiomux_setting gsbi4 = {
 	.func = GPIOMUX_FUNC_1,
 	.drv = GPIOMUX_DRV_8MA,
 	.pull = GPIOMUX_PULL_NONE,
+};
+
+static struct gpiomux_setting gpio_eth_irq_config = {
+	.pull = GPIOMUX_PULL_NONE,
+	.drv = GPIOMUX_DRV_8MA,
+	.func = GPIOMUX_FUNC_GPIO,
+};
+
+struct msm_gpiomux_config msm8960_gpiomux_configs[NR_GPIO_IRQS] = {
+	{
+		.gpio = KS8851_IRQ_GPIO,
+		.settings = {
+			[GPIOMUX_SUSPENDED] = &gpio_eth_irq_config,
+		}
+	},
 };
 
 static struct msm_gpiomux_config msm8960_gsbi_configs[] __initdata = {
@@ -95,8 +114,6 @@ static struct msm_gpiomux_config msm8960_gsbi_configs[] __initdata = {
 		},
 	},
 };
-
-struct msm_gpiomux_config msm8960_gpiomux_configs[NR_GPIO_IRQS] = {};
 
 static int __init gpiomux_init(void)
 {
@@ -325,6 +342,16 @@ static struct msm_rpm_platform_data msm_rpm_data = {
 };
 #endif
 
+static struct spi_board_info spi_board_info[] __initdata = {
+	{
+		.modalias               = "ks8851",
+		.irq                    = MSM_GPIO_TO_INT(KS8851_IRQ_GPIO),
+		.max_speed_hz           = 19200000,
+		.bus_num                = 0,
+		.chip_select            = 0,
+		.mode                   = SPI_MODE_0,
+	},
+};
 
 static struct platform_device *sim_devices[] __initdata = {
 	&msm_device_dmov,
@@ -538,6 +565,14 @@ static struct msm_ssbi_platform_data msm8960_ssbi_pm8921_pdata __devinitdata = {
 	},
 };
 
+static void ethernet_init(void)
+{
+	int ret;
+	ret = gpio_request(KS8851_IRQ_GPIO, "ks8851_irq");
+	if (ret)
+		pr_err("ks8851 gpio_request failed: %d\n", ret);
+}
+
 static void __init msm8960_sim_init(void)
 {
 	if (socinfo_init() < 0)
@@ -575,11 +610,13 @@ static void __init msm8960_rumi3_init(void)
 
 	msm_clock_init(msm_clocks_8960, msm_num_clocks_8960);
 	gpiomux_init();
+	ethernet_init();
 	msm8960_device_ssbi_pm8921.dev.platform_data =
 				&msm8960_ssbi_pm8921_pdata;
 	pm8921_platform_data.num_regulators = msm_pm8921_regulator_pdata_len;
 	msm8960_device_qup_spi_gsbi1.dev.platform_data =
 				&msm8960_qup_spi_gsbi1_pdata;
+	spi_register_board_info(spi_board_info, ARRAY_SIZE(spi_board_info));
 	msm8960_i2c_init();
 	platform_add_devices(rumi3_devices, ARRAY_SIZE(rumi3_devices));
 	msm8960_init_mmc();

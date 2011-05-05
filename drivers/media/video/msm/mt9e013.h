@@ -118,6 +118,9 @@ enum mt9e013_test_mode_t {
 enum mt9e013_resolution_t {
 	QTR_SIZE,
 	FULL_SIZE,
+	HFR_60FPS,
+	HFR_90FPS,
+	HFR_120FPS,
 	INVALID_SIZE
 };
 enum mt9e013_setting {
@@ -171,9 +174,17 @@ struct mt9e013_reg {
 	const unsigned short rec_size;
 	const struct mt9e013_i2c_reg_conf *reg_pll;
 	const unsigned short reg_pll_size;
+	const struct mt9e013_i2c_reg_conf *reg_pll_60fps;
+	const unsigned short reg_pll_60fps_size;
+	const struct mt9e013_i2c_reg_conf *reg_pll_120fps;
+	const unsigned short reg_pll_120fps_size;
 	const struct mt9e013_i2c_reg_conf *reg_prev;
 	const unsigned short reg_prev_size;
 	const struct mt9e013_i2c_reg_conf *reg_snap;
 	const unsigned short reg_snap_size;
+	const struct mt9e013_i2c_reg_conf *reg_60fps;
+	const unsigned short reg_60fps_size;
+	const struct mt9e013_i2c_reg_conf *reg_120fps;
+	const unsigned short reg_120fps_size;
 };
 #endif /* MT9E013_H */

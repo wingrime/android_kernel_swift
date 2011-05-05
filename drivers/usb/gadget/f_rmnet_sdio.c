@@ -592,7 +592,7 @@ static void rmnet_start_rx(struct rmnet_dev *dev)
 		list_del(&req->list);
 
 		spin_unlock_irqrestore(&dev->lock, flags);
-		status = rmnet_rx_submit(dev, req, GFP_KERNEL);
+		status = rmnet_rx_submit(dev, req, GFP_ATOMIC);
 		spin_lock_irqsave(&dev->lock, flags);
 
 		if (status) {

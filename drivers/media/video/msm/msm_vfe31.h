@@ -170,6 +170,7 @@
 #define VFE_AF_PINGPONG_STATUS_BIT       0x100
 #define VFE_AWB_PINGPONG_STATUS_BIT      0x200
 
+#define HFR_MODE_OFF 1
 
 enum VFE31_DMI_RAM_SEL {
 	 NO_MEM_SELECTED          = 0,
@@ -190,14 +191,6 @@ enum VFE31_DMI_RAM_SEL {
 enum  VFE_STATE {
 	VFE_STATE_IDLE,
 	VFE_STATE_ACTIVE
-};
-
-enum  vfe_recording_state {
-	VFE_REC_STATE_IDLE,
-	VFE_REC_STATE_START_REQUESTED,
-	VFE_REC_STATE_STARTED,
-	VFE_REC_STATE_STOP_REQUESTED,
-	VFE_REC_STATE_STOPPED,
 };
 
 #define V31_DUMMY_0               0
@@ -332,7 +325,7 @@ enum  vfe_recording_state {
 #define V31_OUT_CLAMP_OFF         0x00000524
 #define V31_OUT_CLAMP_LEN         8
 
-#define V31_OPERATION_CFG_LEN     28
+#define V31_OPERATION_CFG_LEN     32
 
 #define V31_AXI_OUT_OFF           0x00000038
 #define V31_AXI_OUT_LEN           188
@@ -801,7 +794,6 @@ enum VFE31_MESSAGE_ID {
 	MSG_ID_CAMIF_ERROR,
 	MSG_ID_BUS_OVERFLOW,
 	MSG_ID_SOF_ACK,
-	MSG_ID_STOP_REC_ACK,
 };
 
 struct vfe_msg_stats{
@@ -833,6 +825,7 @@ struct vfe31_irq_status {
 	uint32_t camifStatus;
 	uint32_t demosaicStatus;
 	uint32_t asfMaxEdge;
+	uint32_t vfePingPongStatus;
 };
 
 struct vfe_msg_output {
@@ -1031,7 +1024,8 @@ struct vfe31_ctrl_type {
 	atomic_t stop_ack_pending;
 	int8_t reset_ack_pending;
 	int8_t update_ack_pending;
-	enum vfe_recording_state recording_state;
+	int8_t req_start_video_rec;
+	int8_t req_stop_video_rec;
 	int8_t output0_available;
 	int8_t output1_available;
 	int8_t update_gamma;
@@ -1046,6 +1040,7 @@ struct vfe31_ctrl_type {
 	struct resource *vfeio;
 
 	uint32_t stats_comp;
+	uint32_t hfr_mode;
 	atomic_t vstate;
 	uint32_t vfe_capture_count;
 	uint32_t sync_timer_repeat_count;

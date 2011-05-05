@@ -179,6 +179,7 @@ struct ept_queue_item {
 #define ULPI_INT_RISE_CLR       0x0F
 #define ULPI_INT_FALL_CLR       0x12
 #define ULPI_PRE_EMPHASIS_MASK	(3 << 4)
+#define ULPI_HSDRVSLOPE_MASK	(0x0F)
 #define ULPI_DRV_AMPL_MASK	(3 << 2)
 #define ULPI_ONCLOCK	       (1 << 6)
 #define ULPI_IDPU	      (1 << 0)

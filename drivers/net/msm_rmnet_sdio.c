@@ -86,6 +86,7 @@ struct rmnet_private {
 	struct tasklet_struct tsklt;
 	u32 operation_mode; /* IOCTL specified mode (protocol, QoS header) */
 	uint8_t device_up;
+	uint8_t in_reset;
 };
 
 #ifdef CONFIG_MSM_RMNET_DEBUG
@@ -246,6 +247,25 @@ static int count_this_packet(void *_hdr, int len)
 	return 1;
 }
 
+static int sdio_update_reset_state(struct net_device *dev)
+{
+	struct rmnet_private *p = netdev_priv(dev);
+	int	new_state;
+
+	new_state = msm_sdio_is_channel_in_reset(p->ch_id);
+
+	if (p->in_reset != new_state) {
+		p->in_reset = (uint8_t)new_state;
+
+		if (p->in_reset)
+			netif_carrier_off(dev);
+		else
+			netif_carrier_on(dev);
+		return 1;
+	}
+	return 0;
+}
+
 /* Rx Callback, Called in Work Queue context */
 static void sdio_recv_notify(void *dev, struct sk_buff *skb)
 {
@@ -281,9 +301,13 @@ static void sdio_recv_notify(void *dev, struct sk_buff *skb)
 
 		/* Deliver to network stack */
 		netif_rx(skb);
-	} else
-		pr_err("[%s] %s: No skb received",
-			((struct net_device *)dev)->name, __func__);
+	} else {
+		spin_lock_irqsave(&p->lock, flags);
+		if (!sdio_update_reset_state((struct net_device *)dev))
+			pr_err("[%s] %s: No skb received",
+				((struct net_device *)dev)->name, __func__);
+		spin_unlock_irqrestore(&p->lock, flags);
+	}
 }
 
 static int _rmnet_xmit(struct sk_buff *skb, struct net_device *dev)
@@ -293,6 +317,12 @@ static int _rmnet_xmit(struct sk_buff *skb, struct net_device *dev)
 	struct QMI_QOS_HDR_S *qmih;
 	u32 opmode;
 	unsigned long flags;
+
+	if (!netif_carrier_ok(dev)) {
+		pr_err("[%s] %s: channel in reset",
+			dev->name, __func__);
+		goto xmit_out;
+	}
 
 	/* For QoS mode, prepend QMI header and assign flow ID from skb->mark */
 	spin_lock_irqsave(&p->lock, flags);
@@ -328,16 +358,24 @@ static int _rmnet_xmit(struct sk_buff *skb, struct net_device *dev)
 
 	return 0;
 xmit_out:
-	/* data xmited, safe to release skb */
 	dev_kfree_skb_any(skb);
+	p->stats.tx_errors++;
 	return 0;
 }
 
 static void sdio_write_done(void *dev, struct sk_buff *skb)
 {
-	DBG1("%s: write complete\n", __func__);
-	dev_kfree_skb_any(skb);
-	netif_wake_queue(dev);
+	struct rmnet_private *p = netdev_priv(dev);
+
+	if (skb)
+		dev_kfree_skb_any(skb);
+
+	if (!p->in_reset) {
+		DBG1("%s: write complete skb=%p\n",	__func__, skb);
+		netif_wake_queue(dev);
+	} else {
+		DBG1("%s: write in reset skb=%p\n",	__func__, skb);
+	}
 }
 
 static int __rmnet_open(struct net_device *dev)

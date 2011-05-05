@@ -325,6 +325,7 @@ struct msmsdcc_host {
 
 	unsigned int sdcc_irq_disabled;
 	struct timer_list req_tout_timer;
+	bool sdio_gpio_lpm;
 };
 
 int msmsdcc_set_pwrsave(struct mmc_host *mmc, int pwrsave);

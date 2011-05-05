@@ -455,6 +455,15 @@ static int32_t q6asm_mmapcallback(struct apr_client_data *data, void *priv)
 	uint32_t token;
 	uint32_t *payload = data->payload;
 
+	if (data->opcode == RESET_EVENTS) {
+		pr_debug("q6asm_mmapcallback: Reset event is received: %d %d\n",
+				data->reset_event, data->reset_proc);
+		apr_reset(this_mmap.apr);
+		this_mmap.apr = NULL;
+		atomic_set(&this_mmap.cmd_state, 0);
+		return 0;
+	}
+
 	pr_debug("%s:ptr0[0x%x]ptr1[0x%x]opcode[0x%x]"
 		"token[0x%x]payload_s[%d] src[%d] dest[%d]\n", __func__,
 		payload[0], payload[1], data->opcode, data->token,
@@ -492,11 +501,20 @@ static int32_t q6asm_callback(struct apr_client_data *data, void *priv)
 	unsigned long dsp_flags;
 	uint32_t *payload;
 
+
 	if ((ac == NULL) || (data == NULL)) {
 		pr_err("ac or priv NULL\n");
 		return -EINVAL;
 	}
 	payload = data->payload;
+
+	if (data->opcode == RESET_EVENTS) {
+		apr_reset(ac->apr);
+		q6asm_session_free(ac);
+		pr_debug("q6asm_callback: Reset event is received: %d %d\n",
+				data->reset_event, data->reset_proc);
+		return 0;
+	}
 
 	pr_debug("%s: session[%d]opcode[0x%x] \
 		token[0x%x]payload_s[%d] src[%d] dest[%d]\n", __func__,
@@ -1956,6 +1974,57 @@ fail_cmd:
 	return -EINVAL;
 }
 
+int q6asm_read_nolock(struct audio_client *ac)
+{
+	struct asm_stream_cmd_read read;
+	struct audio_buffer        *ab;
+	int dsp_buf;
+	struct audio_port_data     *port;
+	int rc;
+	if (!ac || ac->apr == NULL) {
+		pr_err("APR handle NULL\n");
+		return -EINVAL;
+	}
+	if (ac->io_mode == SYNC_IO_MODE) {
+		port = &ac->port[OUT];
+
+		q6asm_add_hdr_async(ac, &read.hdr, sizeof(read), FALSE);
+
+
+		dsp_buf = port->dsp_buf;
+		ab = &port->buf[dsp_buf];
+
+		pr_debug("%s:session[%d]dsp-buf[%d][%p]cpu_buf[%d][%p]\n",
+					__func__,
+					ac->session,
+					dsp_buf,
+					(void *)port->buf[dsp_buf].data,
+					port->cpu_buf,
+					(void *)port->buf[port->cpu_buf].phys);
+
+		read.hdr.opcode = ASM_DATA_CMD_READ;
+		read.buf_add = ab->phys;
+		read.buf_size = ab->size;
+		read.uid = port->dsp_buf;
+		read.hdr.token = port->dsp_buf;
+
+		port->dsp_buf = (port->dsp_buf + 1) & (port->max_buf_cnt - 1);
+		pr_debug("%s:buf add[0x%x] token[%d] uid[%d]\n", __func__,
+					read.buf_add,
+					read.hdr.token,
+					read.uid);
+		rc = apr_send_pkt(ac->apr, (uint32_t *) &read);
+		if (rc < 0) {
+			pr_err("read op[0x%x]rc[%d]\n", read.hdr.opcode, rc);
+			goto fail_cmd;
+		}
+		return 0;
+	}
+fail_cmd:
+	return -EINVAL;
+}
+
+
 static void q6asm_add_hdr_async(struct audio_client *ac, struct apr_hdr *hdr,
 			uint32_t pkt_size, uint32_t cmd_flg)
 {
@@ -2098,6 +2167,62 @@ int q6asm_write(struct audio_client *ac, uint32_t len, uint32_t msw_ts,
 							write.hdr.token,
 							write.uid);
 		mutex_unlock(&port->lock);
+
+		rc = apr_send_pkt(ac->apr, (uint32_t *) &write);
+		if (rc < 0) {
+			pr_err("write op[0x%x]rc[%d]\n", write.hdr.opcode, rc);
+			goto fail_cmd;
+		}
+		pr_debug("%s: WRITE SUCCESS\n", __func__);
+		return 0;
+	}
+fail_cmd:
+	return -EINVAL;
+}
+
+int q6asm_write_nolock(struct audio_client *ac, uint32_t len, uint32_t msw_ts,
+			uint32_t lsw_ts, uint32_t flags)
+{
+	int rc = 0;
+	struct asm_stream_cmd_write write;
+	struct audio_port_data *port;
+	struct audio_buffer    *ab;
+	int dsp_buf = 0;
+
+	if (!ac || ac->apr == NULL) {
+		pr_err("APR handle NULL\n");
+		return -EINVAL;
+	}
+	pr_debug("%s: session[%d] len=%d", __func__, ac->session, len);
+	if (ac->io_mode == SYNC_IO_MODE) {
+		port = &ac->port[IN];
+
+		q6asm_add_hdr_async(ac, &write.hdr, sizeof(write),
+					FALSE);
+
+		dsp_buf = port->dsp_buf;
+		ab = &port->buf[dsp_buf];
+
+		write.hdr.token = port->dsp_buf;
+		write.hdr.opcode = ASM_DATA_CMD_WRITE;
+		write.buf_add = ab->phys;
+		write.avail_bytes = len;
+		write.uid = port->dsp_buf;
+		write.msw_ts = msw_ts;
+		write.lsw_ts = lsw_ts;
+		/* Use 0xFF00 for disabling timestamps */
+		if (flags == 0xFF00)
+			write.uflags = (0x00000000 | (flags & 0x800000FF));
+		else
+			write.uflags = (0x80000000 | flags);
+		port->dsp_buf = (port->dsp_buf + 1) & (port->max_buf_cnt - 1);
+
+		pr_debug("%s:ab->phys[0x%x]bufadd[0x%x]token[0x%x]buf_id[0x%x]"
+							, __func__,
+							ab->phys,
+							write.buf_add,
+							write.hdr.token,
+							write.uid);
 
 		rc = apr_send_pkt(ac->apr, (uint32_t *) &write);
 		if (rc < 0) {

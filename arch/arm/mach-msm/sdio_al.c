@@ -582,7 +582,7 @@ static u32 remove_handled_rx_packet(struct sdio_channel *ch);
 static int set_pipe_threshold(struct sdio_al_device *sdio_al_dev,
 			      int pipe_index, int threshold);
 static int sdio_al_wake_up(struct sdio_al_device *sdio_al_dev,
-			   u32 enable_wake_up_func);
+			   u32 not_from_int);
 static int sdio_al_client_setup(struct sdio_al_device *sdio_al_dev);
 static int enable_mask_irq(struct sdio_al_device *sdio_al_dev,
 			   int func_num, int enable, u8 bit_offset);
@@ -2022,7 +2022,7 @@ static void restart_timer(struct sdio_al_device *sdio_al_dev)
  *  5. Start the mailbox and inactivity timer again
  */
 static int sdio_al_wake_up(struct sdio_al_device *sdio_al_dev,
-			   u32 enable_wake_up_func)
+			   u32 not_from_int)
 {
 	int ret = 0, i;
 	struct sdio_func *wk_func =
@@ -2037,7 +2037,7 @@ static int sdio_al_wake_up(struct sdio_al_device *sdio_al_dev,
 
 	/* Wake up sequence */
 	wake_lock(&sdio_al_dev->wake_lock);
-	if (enable_wake_up_func) {
+	if (not_from_int) {
 		LPM_DEBUG(MODULE_NAME ": Wake up card %d (not by interrupt)",
 			sdio_al_dev->card->host->index);
 	} else {
@@ -2073,14 +2073,12 @@ static int sdio_al_wake_up(struct sdio_al_device *sdio_al_dev,
 		goto error_exit;
 	}
 
-	if (enable_wake_up_func) {
-		/* Enable Wake up Function */
-		ret = sdio_al_enable_func_retry(wk_func, "wakeup func");
-		if (ret) {
-			pr_err(MODULE_NAME ":sdio_enable_func() err=%d\n",
-			       -ret);
-			goto error_exit;
-		}
+	/* Enable Wake up Function */
+	ret = sdio_al_enable_func_retry(wk_func, "wakeup func");
+	if (ret) {
+		pr_err(MODULE_NAME ":sdio_enable_func() err=%d\n",
+		       -ret);
+		goto error_exit;
 	}
 	/* Mark NOT OK_TOSLEEP */
 	sdio_al_dev->is_ok_to_sleep = 0;
@@ -2089,8 +2087,7 @@ static int sdio_al_wake_up(struct sdio_al_device *sdio_al_dev,
 		pr_err(MODULE_NAME ":write_lpm_info() failed, err=%d\n",
 			       -ret);
 		sdio_al_dev->is_ok_to_sleep = 1;
-		if (enable_wake_up_func)
-			sdio_disable_func(wk_func);
+		sdio_disable_func(wk_func);
 		goto error_exit;
 	}
 
@@ -2105,8 +2102,7 @@ static int sdio_al_wake_up(struct sdio_al_device *sdio_al_dev,
 					   ch->read_threshold);
 		}
 	}
-	if (enable_wake_up_func)
-		sdio_disable_func(wk_func);
+	sdio_disable_func(wk_func);
 
 	/* Start the timer again*/
 	restart_inactive_time(sdio_al_dev);

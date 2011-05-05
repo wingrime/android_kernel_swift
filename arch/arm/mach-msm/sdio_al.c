@@ -3394,8 +3394,6 @@ static void sdio_al_print_info(void)
 	int i = 0;
 	int j = 0;
 	int ret = 0;
-	struct list_head *pos;
-	struct rx_packet_size *p = NULL;
 	struct sdio_mailbox *mailbox = NULL;
 	struct sdio_mailbox *hw_mailbox = NULL;
 	struct peer_sdioc_channel_config *ch_config = NULL;
@@ -3498,12 +3496,6 @@ static void sdio_al_print_info(void)
 				ch->total_rx_bytes, ch->total_tx_bytes,
 				ch->read_avail, ch->write_avail,
 				ch->rx_pending_bytes);
-
-			list_for_each(pos, &(ch->rx_size_list_head)) {
-				p = list_entry(pos,
-						struct rx_packet_size, list);
-				pr_err(MODULE_NAME ": size=0x%x\n", p->size);
-			}
 		} /* end loop over all channels */
 
 	} /* end loop over all devices */

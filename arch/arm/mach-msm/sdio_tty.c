@@ -75,64 +75,70 @@ static void sdio_tty_read(struct work_struct *work)
 		return;
 	}
 
-	if (test_bit(TTY_THROTTLED, &sdio_tty_drv->tty_str->flags)) {
-		DEBUG_MSG(sdio_tty_drv,
-			  SDIO_TTY_MODULE_NAME ": %s: TTY_THROTTLED bit is "
-					       "set, exit", __func__);
-		return;
-	}
+	/* Read the data from teh SDIO channel as long as there is available
+	   data */
+	while (1) {
+		if (test_bit(TTY_THROTTLED, &sdio_tty_drv->tty_str->flags)) {
+			DEBUG_MSG(sdio_tty_drv,
+				  SDIO_TTY_MODULE_NAME ": %s: TTY_THROTTLED bit"
+						       " is set, exit",
+				  __func__);
+			return;
+		}
 
-	read_avail = sdio_read_avail(sdio_tty_drv->ch);
+		total_push = 0;
+		read_avail = sdio_read_avail(sdio_tty_drv->ch);
 
-	DEBUG_MSG(sdio_tty_drv, SDIO_TTY_MODULE_NAME
-				     ": %s: read_avail is %d", __func__,
-				     read_avail);
+		DEBUG_MSG(sdio_tty_drv, SDIO_TTY_MODULE_NAME
+					     ": %s: read_avail is %d", __func__,
+					     read_avail);
 
-	if (read_avail == 0) {
-		DEBUG_MSG(sdio_tty_drv,
-			  SDIO_TTY_MODULE_NAME ": %s: read_avail is 0",
-			  __func__);
-		return;
-	}
+		if (read_avail == 0) {
+			DEBUG_MSG(sdio_tty_drv,
+				  SDIO_TTY_MODULE_NAME ": %s: read_avail is 0",
+				  __func__);
+			return;
+		}
 
-	if (read_avail > SDIO_TTY_MAX_PACKET_SIZE) {
-		pr_err(SDIO_TTY_MODULE_NAME ": %s: read_avail(%d) is bigger "
-					    "than SDIO_TTY_MAX_PACKET_SIZE(%d)",
-		       __func__, read_avail, SDIO_TTY_MAX_PACKET_SIZE);
-		return;
-	}
+		if (read_avail > SDIO_TTY_MAX_PACKET_SIZE) {
+			pr_err(SDIO_TTY_MODULE_NAME ": %s: read_avail(%d) is "
+				"bigger than SDIO_TTY_MAX_PACKET_SIZE(%d)",
+			       __func__, read_avail, SDIO_TTY_MAX_PACKET_SIZE);
+			return;
+		}
 
-	ret = sdio_read(sdio_tty_drv->ch,
-			sdio_tty_drv->read_buf,
-			read_avail);
-	if (ret < 0) {
-		pr_err(SDIO_TTY_MODULE_NAME ": %s: sdio_read error (%d)",
-		       __func__, ret);
-		return;
-	}
+		ret = sdio_read(sdio_tty_drv->ch,
+				sdio_tty_drv->read_buf,
+				read_avail);
+		if (ret < 0) {
+			pr_err(SDIO_TTY_MODULE_NAME ": %s: sdio_read error(%d)",
+			       __func__, ret);
+			return;
+		}
 
-	left = read_avail;
-	do {
-		num_push = tty_insert_flip_string(
-			sdio_tty_drv->tty_str,
-			sdio_tty_drv->read_buf+total_push,
-			left);
-		total_push += num_push;
-		left -= num_push;
+		left = read_avail;
+		do {
+			num_push = tty_insert_flip_string(
+				sdio_tty_drv->tty_str,
+				sdio_tty_drv->read_buf+total_push,
+				left);
+			total_push += num_push;
+			left -= num_push;
+			tty_flip_buffer_push(sdio_tty_drv->tty_str);
+		} while (left != 0);
+
+		if (total_push != read_avail) {
+			pr_err(SDIO_TTY_MODULE_NAME ": %s: failed, total_push"
+						    "(%d) != read_avail(%d)\n",
+			       __func__, total_push, read_avail);
+		}
+
 		tty_flip_buffer_push(sdio_tty_drv->tty_str);
-	} while (left != 0);
 
-	if (total_push != read_avail) {
-		pr_err(SDIO_TTY_MODULE_NAME ": %s: failed, total_push(%d) != "
-				   "read_avail(%d)\n",
-		       __func__, total_push, read_avail);
+		DEBUG_MSG(sdio_tty_drv,
+			  SDIO_TTY_MODULE_NAME ": %s: End of read %d bytes",
+				__func__, read_avail);
 	}
-
-	tty_flip_buffer_push(sdio_tty_drv->tty_str);
-
-	DEBUG_MSG(sdio_tty_drv,
-		  SDIO_TTY_MODULE_NAME ": %s: End of read %d bytes",
-			__func__, read_avail);
 }
 
 /**

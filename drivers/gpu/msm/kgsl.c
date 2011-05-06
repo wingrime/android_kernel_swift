@@ -587,7 +587,8 @@ static int kgsl_release(struct inode *inodep, struct file *filep)
 		next = next + 1;
 	}
 
-	if (atomic_dec_return(&device->open_count) == -1) {
+	device->open_count--;
+	if (device->open_count == 0) {
 		result = device->ftbl.device_stop(device);
 		kgsl_cmdstream_close(device);
 		device->state = KGSL_STATE_INIT;
@@ -639,7 +640,7 @@ static int kgsl_open(struct inode *inodep, struct file *filep)
 		KGSL_DRV_ERR(device, "kzalloc failed(%d)\n",
 			sizeof(struct kgsl_device_private));
 		result = -ENOMEM;
-		goto done;
+		goto err_pmruntime;
 	}
 
 	dev_priv->device = device;
@@ -649,25 +650,34 @@ static int kgsl_open(struct inode *inodep, struct file *filep)
 	dev_priv->process_priv = kgsl_get_process_private(dev_priv);
 	if (dev_priv->process_priv ==  NULL) {
 		result = -ENOMEM;
-		goto done;
+		goto err_freedevpriv;
 	}
 
 	mutex_lock(&device->mutex);
 	kgsl_check_suspended(device);
 
-	if (atomic_inc_and_test(&device->open_count)) {
+	if (device->open_count == 0) {
 		result = device->ftbl.device_start(device, true);
-		if (!result) {
-			device->state = KGSL_STATE_ACTIVE;
-			KGSL_PWR_WARN(device,
-				"state -> ACTIVE, device %d\n", minor);
-		}
-	}
 
+		if (result) {
+			mutex_unlock(&device->mutex);
+			goto err_putprocess;
+		}
+		device->state = KGSL_STATE_ACTIVE;
+		KGSL_PWR_WARN(device,
+				"state -> ACTIVE, device %d\n", minor);
+	}
+	device->open_count++;
 	mutex_unlock(&device->mutex);
-done:
-	if (result != 0)
-		kgsl_release(inodep, filep);
+	return result;
+
+err_putprocess:
+	kgsl_put_process_private(device, dev_priv->process_priv);
+err_freedevpriv:
+	filep->private_data = NULL;
+	kfree(dev_priv);
+err_pmruntime:
+	pm_runtime_put(&device->pdev->dev);
 	return result;
 }
 
@@ -1889,7 +1899,6 @@ kgsl_register_device(struct kgsl_device *device)
 	dev_set_drvdata(&device->pdev->dev, device);
 
 	/* Generic device initialization */
-	atomic_set(&device->open_count, -1);
 	atomic_inc(&kgsl_driver.device_count);
 
 	/* sysfs and debugfs initalization - failure here is non fatal */

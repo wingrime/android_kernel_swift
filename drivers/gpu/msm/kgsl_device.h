@@ -156,7 +156,7 @@ struct kgsl_device {
 	struct work_struct idle_check_ws;
 	struct timer_list idle_timer;
 	struct kgsl_pwrctrl pwrctrl;
-	atomic_t open_count;
+	int open_count;
 
 	struct atomic_notifier_head ts_notifier_list;
 	struct mutex mutex;

@@ -82,6 +82,7 @@ KGSL_PAGETABLE_ENTRY_SIZE, PAGE_SIZE)
 #else
 #define KGSL_PAGETABLE_COUNT 1
 #endif
+extern int kgsl_pagetable_count;
 
 /* Casting using container_of() for structures that kgsl owns. */
 #define KGSL_CONTAINER_OF(ptr, type, member) \

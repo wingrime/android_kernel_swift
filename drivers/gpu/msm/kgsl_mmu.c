@@ -302,9 +302,9 @@ kgsl_ptpool_get(struct kgsl_memdesc *memdesc)
 	spin_lock_irqsave(&kgsl_driver.ptpool.lock, flags);
 
 	pt = find_next_zero_bit(kgsl_driver.ptpool.bitmap,
-				KGSL_PAGETABLE_COUNT, 0);
+				kgsl_pagetable_count, 0);
 
-	if (pt >= KGSL_PAGETABLE_COUNT) {
+	if (pt >= kgsl_pagetable_count) {
 		spin_unlock_irqrestore(&kgsl_driver.ptpool.lock, flags);
 		return -ENOMEM;
 	}

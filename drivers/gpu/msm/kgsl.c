@@ -49,6 +49,14 @@
 
 static struct dentry *kgsl_debugfs_dir;
 
+#undef MODULE_PARAM_PREFIX
+#define MODULE_PARAM_PREFIX "kgsl."
+
+int kgsl_pagetable_count = KGSL_PAGETABLE_COUNT;
+module_param_named(ptcount, kgsl_pagetable_count, int, 0);
+MODULE_PARM_DESC(kgsl_pagetable_count,
+"Minimum number of pagetables for KGSL to allocate at initialization time");
+
 static void kgsl_put_phys_file(struct file *file);
 
 /* Allocate a new context id */
@@ -1771,7 +1779,7 @@ struct kgsl_driver kgsl_driver  = {
 static void
 kgsl_ptpool_cleanup(void)
 {
-	int size = KGSL_PAGETABLE_COUNT * KGSL_PAGETABLE_SIZE;
+	int size = kgsl_pagetable_count * KGSL_PAGETABLE_SIZE;
 
 	if (kgsl_driver.ptpool.hostptr)
 		dma_free_coherent(NULL, size, kgsl_driver.ptpool.hostptr,
@@ -1788,7 +1796,7 @@ kgsl_ptpool_cleanup(void)
 static int __devinit
 kgsl_ptpool_init(void)
 {
-	int size = KGSL_PAGETABLE_COUNT * KGSL_PAGETABLE_SIZE;
+	int size = kgsl_pagetable_count * KGSL_PAGETABLE_SIZE;
 
 	if (size > SZ_4M) {
 		size = SZ_4M;
@@ -1811,12 +1819,12 @@ kgsl_ptpool_init(void)
 	/* Allocate room for the bitmap */
 
 	kgsl_driver.ptpool.bitmap =
-		kzalloc((KGSL_PAGETABLE_COUNT / BITS_PER_BYTE) + 1,
+		kzalloc((kgsl_pagetable_count / BITS_PER_BYTE) + 1,
 			GFP_KERNEL);
 
 	if (kgsl_driver.ptpool.bitmap == NULL) {
 		KGSL_CORE_ERR("kzalloc(%d) failed\n",
-			(KGSL_PAGETABLE_COUNT / BITS_PER_BYTE) + 1);
+			(kgsl_pagetable_count / BITS_PER_BYTE) + 1);
 
 		dma_free_coherent(NULL, size, kgsl_driver.ptpool.hostptr,
 				  kgsl_driver.ptpool.physaddr);

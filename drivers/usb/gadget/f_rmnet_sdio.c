@@ -675,6 +675,10 @@ static void rmnet_data_receive_cb(void *priv, struct sk_buff *skb)
 	struct rmnet_dev *dev = priv;
 	unsigned long flags;
 
+	/* SDIO mux sends NULL SKB when link state changes */
+	if (!skb)
+		return;
+
 	if (!atomic_read(&dev->online)) {
 		dev_kfree_skb_any(skb);
 		return;
@@ -701,6 +705,10 @@ static void rmnet_data_receive_cb(void *priv, struct sk_buff *skb)
 static void rmnet_data_write_done(void *priv, struct sk_buff *skb)
 {
 	struct rmnet_dev *dev = priv;
+
+	/* SDIO mux sends NULL SKB when link state changes */
+	if (!skb)
+		return;
 
 	dev_kfree_skb_any(skb);
 	/* this function is called from

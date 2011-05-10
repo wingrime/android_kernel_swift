@@ -23,6 +23,7 @@
 #include <asm/atomic.h>
 #include <mach/qdsp6v2/apr_audio.h>
 #include <mach/qdsp6v2/q6afe.h>
+#include <mach/qdsp6v2/audio_dev_ctl.h>
 #include "audio_acdb.h"
 #include "rtac.h"
 
@@ -71,6 +72,7 @@ static int32_t adm_callback(struct apr_client_data *data, void *priv)
 			data->token, index);
 
 		if (data->opcode == APR_BASIC_RSP_RESULT) {
+			pr_debug("APR_BASIC_RSP_RESULT\n");
 			switch (payload[0]) {
 			case ADM_CMD_SET_PARAMS:
 #ifdef CONFIG_MSM8X60_RTAC
@@ -84,6 +86,7 @@ static int32_t adm_callback(struct apr_client_data *data, void *priv)
 			case ADM_CMD_MEMORY_MAP_REGIONS:
 			case ADM_CMD_MEMORY_UNMAP_REGIONS:
 			case ADM_CMD_MATRIX_MAP_ROUTINGS:
+				pr_debug("ADM_CMD_MATRIX_MAP_ROUTINGS\n");
 				atomic_set(&this_adm.copp_stat[index], 1);
 				wake_up(&this_adm.wait);
 				break;
@@ -107,6 +110,7 @@ static int32_t adm_callback(struct apr_client_data *data, void *priv)
 			break;
 #ifdef CONFIG_MSM8X60_RTAC
 		case ADM_CMDRSP_GET_PARAMS:
+			pr_debug("ADM_CMDRSP_GET_PARAMS\n");
 			rtac_make_adm_callback(payload,
 				data->payload_size);
 			break;
@@ -304,8 +308,8 @@ int adm_matrix_map(int session_id, int path, int num_copps, int *port_id)
 	route.hdr.token = port_id[0];
 	route.hdr.opcode = ADM_CMD_MATRIX_MAP_ROUTINGS;
 	route.num_sessions = 1;
-	route.sessions[0].id = session_id;
-	route.sessions[0].num_copps = num_copps;
+	route.r.session[0].id = session_id;
+	route.r.session[0].num_copps = num_copps;
 
 	for (i = 0; i < num_copps; i++) {
 		int tmp;
@@ -314,7 +318,7 @@ int adm_matrix_map(int session_id, int path, int num_copps, int *port_id)
 		pr_debug("%s: port_id[%d]: %d, index: %d\n", __func__, i,
 			 port_id[i], tmp);
 
-		route.sessions[0].copp_id[i] =
+		route.r.session[0].copp_id[i] =
 					atomic_read(&this_adm.copp_id[tmp]);
 	}
 
@@ -360,6 +364,85 @@ int adm_matrix_map(int session_id, int path, int num_copps, int *port_id)
 
 fail_cmd:
 
+	return ret;
+}
+
+int adm_route_mcopp(int session_id, void *payload, int path, int route_flag)
+{
+	struct adm_routings_command     route;
+	struct route_payload *tmp = payload;
+	int ret = 0;
+	int i = 0;
+	int port_id = tmp->copp_ids[tmp->num_copps-1];
+
+	pr_debug("%s:%d:", __func__, __LINE__);
+
+	route.hdr.hdr_field = APR_HDR_FIELD(APR_MSG_TYPE_SEQ_CMD,
+		       APR_HDR_LEN(APR_HDR_SIZE), APR_PKT_VER);
+	route.hdr.pkt_size = sizeof(route);
+	route.hdr.src_svc = 0;
+	route.hdr.src_domain = APR_DOMAIN_APPS;
+	route.hdr.src_port = port_id;
+	route.hdr.dest_svc = APR_SVC_ADM;
+	route.hdr.dest_domain = APR_DOMAIN_ADSP;
+	route.hdr.dest_port = atomic_read(&this_adm.copp_id[port_id]);
+	route.hdr.token = port_id;
+	route.hdr.opcode = ADM_CMD_MATRIX_MAP_ROUTINGS;
+	if (route_flag == ONE_TO_MANY) {
+		pr_debug("num_copps = %d\n", tmp->num_copps);
+		route.num_sessions = 1;
+		route.r.session[0].id = session_id;
+		route.r.session[0].num_copps = tmp->num_copps;
+		for (i = 0; i < tmp->num_copps; i++) {
+			int index;
+			index = tmp->copp_ids[i];
+			route.r.session[0].copp_id[i] =
+			atomic_read(&this_adm.copp_id[index]);
+		}
+		if (tmp->num_copps % 2)
+			route.r.session[0].copp_id[i] = 0;
+	} else if (route_flag == MANY_TO_ONE) {
+		route.num_sessions = tmp->num_sessions;
+		pr_debug("No of sessions = %d\n", tmp->num_sessions);
+		for (i = 0; i < tmp->num_sessions; i++) {
+			route.r.sessions[i].id = tmp->session_ids[i];
+			route.r.sessions[i].num_copps = 1;
+			route.r.sessions[i].copp_id =
+			atomic_read(&this_adm.copp_id[port_id]);
+			route.r.sessions[i].pad = 0;
+		}
+	}
+	switch (path) {
+	case 0x1:
+		route.path = AUDIO_RX;
+		break;
+	case 0x2:
+	case 0x3:
+		route.path = AUDIO_TX;
+		break;
+	default:
+		pr_err("%s: Wrong path set[%d]\n", __func__, path);
+		break;
+	}
+	atomic_set(&this_adm.copp_stat[port_id], 0);
+
+	ret = apr_send_pkt(this_adm.apr, (uint32_t *)&route);
+	if (ret < 0) {
+		pr_err("%s: ADM routing for port %d failed\n",
+		__func__, port_id);
+		ret = -EINVAL;
+		return ret;
+	}
+	ret = wait_event_timeout(this_adm.wait,
+			atomic_read(&this_adm.copp_stat[port_id]),
+			msecs_to_jiffies(TIMEOUT_MS));
+	if (!ret) {
+		pr_err("%s: ADM cmd Route failed for port %d\n",
+			__func__, port_id);
+		ret = -EINVAL;
+		return ret;
+	}
+	send_adm_cal(port_id, path);
 	return ret;
 }
 

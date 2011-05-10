@@ -764,7 +764,7 @@ static int pcm_route_put_rx(struct snd_kcontrol *kcontrol,
 		(((u64)0x1) << session_id) << (MAX_BIT_PER_CLIENT * \
 			((int)AUDDEV_CLNT_DEC-1));
 	if (!set) {
-		session_route.playback_session[session_id]
+		session_route.playback_session[session_id][dev_info->copp_id]
 			= DEVICE_IGNORE;
 		broadcast_event(AUDDEV_EVT_DEV_RLS,
 				route_cfg.dev_id,
@@ -775,7 +775,8 @@ static int pcm_route_put_rx(struct snd_kcontrol *kcontrol,
 	pr_debug("%s:Routing playback session %d to %s\n",
 				 __func__, (session_id),
 				dev_info->name);
-	session_route.playback_session[session_id] = dev_info->copp_id;
+	session_route.playback_session[session_id][dev_info->copp_id] =
+							dev_info->copp_id;
 	if (dev_info->opened) {
 		dev_info->sessions = dev_info->sessions | session_mask;
 		broadcast_event(AUDDEV_EVT_DEV_RDY,
@@ -817,7 +818,7 @@ static int pcm_route_put_tx(struct snd_kcontrol *kcontrol,
 		(((u64)0x1) << session_id) << (MAX_BIT_PER_CLIENT * \
 			((int)AUDDEV_CLNT_ENC-1));
 	if (!set) {
-		session_route.capture_session[session_id]
+		session_route.capture_session[session_id][dev_info->copp_id]
 			= DEVICE_IGNORE;
 		broadcast_event(AUDDEV_EVT_DEV_RLS,
 				route_cfg.dev_id,
@@ -826,7 +827,8 @@ static int pcm_route_put_tx(struct snd_kcontrol *kcontrol,
 		return 0;
 	}
 
-	session_route.capture_session[session_id] = dev_info->copp_id;
+	session_route.capture_session[session_id][dev_info->copp_id] =
+							dev_info->copp_id;
 	if (dev_info->opened) {
 		dev_info->sessions = dev_info->sessions | session_mask;
 		broadcast_event(AUDDEV_EVT_DEV_RDY,

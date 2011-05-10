@@ -49,6 +49,7 @@ struct audio_dev_ctrl_state {
 };
 
 static struct audio_dev_ctrl_state audio_dev_ctrl;
+static struct route_payload payload;
 struct event_listner event;
 
 #define PLAYBACK 0x1
@@ -321,10 +322,64 @@ unsigned short msm_snddev_route_dec(int popp_id)
 }
 EXPORT_SYMBOL(msm_snddev_route_dec);
 
+/*To check one->many case*/
+int msm_check_multicopp_per_stream(int session_id)
+{
+	int i = 0;
+	int flag = 0;
+	payload.session_ids[0] = session_id;
+	pr_debug("%s: session_id=%d\n", __func__, session_id);
+	mutex_lock(&routing_info.copp_list_mutex);
+	for (i = 0; i < AFE_MAX_PORTS; i++) {
+		if (routing_info.copp_list[session_id][i] == DEVICE_IGNORE)
+			continue;
+		else {
+			pr_debug("Device enabled\n");
+			payload.copp_ids[flag++] =
+				routing_info.copp_list[session_id][i];
+		}
+	}
+	mutex_unlock(&routing_info.copp_list_mutex);
+	if (flag > 1) {
+		pr_debug("Multiple copp per stream case num_copps=%d\n", flag);
+		payload.num_copps = flag;
+	} else {
+		pr_debug("Stream routed to single copp\n");
+	}
+	return flag;
+}
+
+/*To check many->one case*/
+int msm_check_multistream_per_copp(int copp_id)
+{
+	int i = 0;
+	int flag = 0;
+	payload.copp_ids[0] = copp_id;
+	pr_debug("%s: copp_id=%d\n", __func__, copp_id);
+	mutex_lock(&routing_info.copp_list_mutex);
+	for (i = 1; i < MAX_SESSIONS; i++) {
+		if (routing_info.copp_list[i][copp_id] == DEVICE_IGNORE)
+			continue;
+		else {
+			pr_debug("Session %d on copp %d\n", i, copp_id);
+			payload.session_ids[flag++] = i;
+		}
+	}
+	mutex_unlock(&routing_info.copp_list_mutex);
+	if (flag > 1) {
+		pr_debug("Multiple streams per copp case\n");
+		payload.num_sessions = flag;
+	} else {
+		pr_debug("Single stream routed to copp\n");
+	}
+	return flag;
+}
+
 int msm_snddev_set_dec(int popp_id, int copp_id, int set,
 					int rate, int mode)
 {
 	int rc = 0, i = 0;
+	int rc2 = 0;
 
 	if ((popp_id >= MAX_SESSIONS) || (popp_id <= 0)) {
 		pr_err("%s: Invalid session id %d\n", __func__, popp_id);
@@ -338,17 +393,59 @@ int msm_snddev_set_dec(int popp_id, int copp_id, int set,
 		if (rc < 0) {
 			pr_err("%s: adm open fail rc[%d]\n", __func__, rc);
 			rc = -EINVAL;
-			goto fail_cmd;
-		}
-
-		rc = adm_matrix_map(popp_id, PLAYBACK, 1, &copp_id);
-		if (rc < 0) {
-			pr_err("%s: matrix map failed rc[%d]\n", __func__, rc);
-			adm_close(copp_id);
-			rc = -EINVAL;
-			goto fail_cmd;
+			mutex_unlock(&routing_info.adm_mutex);
+			return rc;
 		}
 		msm_set_copp_id(popp_id, copp_id);
+		pr_debug("%s:Session id=%d copp_id=%d\n",
+			__func__, popp_id, copp_id);
+		rc = msm_check_multicopp_per_stream(popp_id);
+		pr_err("rc = %d\n", rc);
+		rc2 = msm_check_multistream_per_copp(copp_id);
+		pr_err("rc2 = %d\n", rc2);
+
+		if (rc == 1 && rc2 == 1) {
+			pr_debug("Calling one to one routing\n");
+			rc = adm_matrix_map(popp_id, PLAYBACK, 1, &copp_id);
+			if (rc < 0) {
+				pr_err("%s: matrix map failed rc[%d]\n",
+					__func__, rc);
+				adm_close(copp_id);
+				rc = -EINVAL;
+				mutex_unlock(&routing_info.adm_mutex);
+				return rc;
+			}
+		} else {
+			if (rc > 1) {
+				pr_debug("Calling one to many routing rc =%d\n",
+						rc);
+				pr_debug("No of copps = %d\n",
+						payload.num_copps);
+				rc = adm_route_mcopp(popp_id, (void *)&payload,
+							PLAYBACK, ONE_TO_MANY);
+				if (rc < 0) {
+					pr_err("%s: adm_route_mcopp fail"
+						"rc[%d]\n", __func__, rc);
+					rc = -EINVAL;
+					mutex_unlock(&routing_info.adm_mutex);
+					return rc;
+				}
+			} else if (rc2 > 1) {
+				pr_debug("Calling many to one routing rc2=%d\n",
+						rc2);
+				pr_debug("No of sessions = %d\n",
+						payload.num_sessions);
+				rc = adm_route_mcopp(popp_id, (void *)&payload,
+							PLAYBACK, MANY_TO_ONE);
+				if (rc < 0) {
+					pr_err("%s: adm_route_mcopp fail"
+						"rc[%d]\n", __func__, rc);
+					rc = -EINVAL;
+					mutex_unlock(&routing_info.adm_mutex);
+					return rc;
+				}
+			}
+		}
 	} else {
 		for (i = 0; i < AFE_MAX_PORTS; i++) {
 			if (routing_info.copp_list[popp_id][i] == copp_id) {
@@ -358,7 +455,8 @@ int msm_snddev_set_dec(int popp_id, int copp_id, int set,
 						"rc[%d]\n",
 						__func__, copp_id, rc);
 					rc = -EINVAL;
-					goto fail_cmd;
+					mutex_unlock(&routing_info.adm_mutex);
+					return rc;
 				}
 				msm_clear_copp_id(popp_id, copp_id);
 				break;
@@ -370,7 +468,6 @@ int msm_snddev_set_dec(int popp_id, int copp_id, int set,
 		/* Signal uplink playback. */
 		rc = voice_start_playback(set);
 	}
-fail_cmd:
 	mutex_unlock(&routing_info.adm_mutex);
 	return rc;
 }

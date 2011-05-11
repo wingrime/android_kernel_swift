@@ -53,8 +53,7 @@ struct completion mdp_ppp_comp;
 struct semaphore mdp_ppp_mutex;
 struct semaphore mdp_pipe_ctrl_mutex;
 
-unsigned long mdp_timer_duration = (HZ);   /* 1 sec */
-/* unsigned long mdp_mdp_timer_duration=0; */
+unsigned long mdp_timer_duration = (HZ);   /* 1 second */
 
 boolean mdp_ppp_waiting = FALSE;
 uint32 mdp_tv_underflow_cnt;

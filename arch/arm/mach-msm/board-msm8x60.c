@@ -89,6 +89,7 @@
 #include <linux/regulator/machine.h>
 #include <mach/sdio_al.h>
 #include <mach/rpm.h>
+#include <mach/rpm-regulator.h>
 
 #include "devices.h"
 #include "devices-msm8x60.h"
@@ -99,7 +100,6 @@
 #include "rpm_log.h"
 #include "timer.h"
 #include "saw-regulator.h"
-#include "rpm-regulator.h"
 #include "gpiomux.h"
 #include "gpiomux-8x60.h"
 #include "rpm_stats.h"

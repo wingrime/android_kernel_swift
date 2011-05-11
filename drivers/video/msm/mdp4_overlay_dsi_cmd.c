@@ -497,6 +497,7 @@ void mdp4_overlay0_done_dsi_cmd(struct mdp_dma_data *dma)
 		complete(&dma->comp);
 		if (busy_wait_cnt)
 			busy_wait_cnt--;
+		mdp_pipe_ctrl(MDP_OVERLAY0_BLOCK, MDP_BLOCK_POWER_OFF, TRUE);
 		return;
 	}
 

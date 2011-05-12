@@ -533,7 +533,11 @@ void sdio_al_register_lpm_cb(void *device_handle,
 		return;
 	}
 
-	sdio_al_dev->lpm_callback = lpm_callback;
+	if (lpm_callback) {
+		sdio_al_dev->lpm_callback = lpm_callback;
+		lpm_callback((void *)sdio_al_dev,
+					   sdio_al_dev->is_ok_to_sleep);
+	}
 	LPM_DEBUG(MODULE_NAME ": %s - device %d registered for wakeup "
 	"callback\n", __func__, sdio_al_dev->card->host->index);
 }
@@ -555,27 +559,27 @@ void sdio_al_unregister_lpm_cb(void *device_handle)
 }
 
 static void sdio_al_vote_for_sleep(struct sdio_al_device *sdio_al_dev,
-				   int is_vote_for_wakeup)
+				   int is_vote_for_sleep)
 {
 	pr_debug(MODULE_NAME ": %s()", __func__);
 
-	if (is_vote_for_wakeup) {
+	if (is_vote_for_sleep) {
+		LPM_DEBUG(MODULE_NAME ": %s - sdio vote for Sleep", __func__);
+		wake_unlock(&sdio_al_dev->wake_lock);
+	} else {
 		LPM_DEBUG(MODULE_NAME ": %s - sdio vote against sleep",
 			  __func__);
 		wake_lock(&sdio_al_dev->wake_lock);
-	} else {
-		LPM_DEBUG(MODULE_NAME ": %s - sdio vote for Sleep", __func__);
-		wake_unlock(&sdio_al_dev->wake_lock);
 	}
 
 	if (sdio_al_dev->lpm_callback != NULL) {
-		LPM_DEBUG(MODULE_NAME ": %s - is_vote_for_wakeup=%d for "
+		LPM_DEBUG(MODULE_NAME ": %s - is_vote_for_sleep=%d for "
 			"card#%d, calling callback...",
 			__func__,
-			is_vote_for_wakeup,
+			is_vote_for_sleep,
 			sdio_al_dev->card->host->index);
 		sdio_al_dev->lpm_callback((void *)sdio_al_dev,
-					   is_vote_for_wakeup);
+					   is_vote_for_sleep);
 	}
 }
 
@@ -703,7 +707,7 @@ static void sdio_al_sleep(struct sdio_al_device *sdio_al_dev,
 			    "Sleep now.\n",
 		sdio_al_dev->card->host->index);
 	/* Release wakelock */
-	sdio_al_vote_for_sleep(sdio_al_dev, 0);
+	sdio_al_vote_for_sleep(sdio_al_dev, 1);
 }
 
 
@@ -1424,6 +1428,8 @@ static int read_sdioc_software_header(struct sdio_al_device *sdio_al_dev,
 {
 	int ret;
 	int i;
+	int test_version = 0;
+	int sdioc_test_version = 0;
 
 	pr_debug(MODULE_NAME ":reading sdioc sw header.\n");
 
@@ -1438,6 +1444,14 @@ static int read_sdioc_software_header(struct sdio_al_device *sdio_al_dev,
 		pr_info(MODULE_NAME ":SDIOC SW unittest signature. 0x%x\n",
 			header->signature);
 		sdio_al->unittest_mode = true;
+		/* Verify test code compatibility with the modem */
+		sdioc_test_version = (header->version & 0xFF00) >> 8;
+		test_version = sdio_al->pdata->peer_sdioc_version_minor >> 8;
+		if (test_version != sdioc_test_version)
+			pr_err(MODULE_NAME ":HOST(0x%x) and CLIENT(0x%x) "
+			       "testing VERSION don't match, tests may fail\n",
+			       test_version,
+			       sdioc_test_version);
 	}
 
 	if ((header->signature != (u32) PEER_SDIOC_SW_MAILBOX_SIGNATURE) &&
@@ -1943,7 +1957,7 @@ static int sdio_al_wake_up(struct sdio_al_device *sdio_al_dev,
 	}
 
 	/* Wake up sequence */
-	sdio_al_vote_for_sleep(sdio_al_dev, 1);
+	sdio_al_vote_for_sleep(sdio_al_dev, 0);
 	if (not_from_int) {
 		LPM_DEBUG(MODULE_NAME ": Wake up card %d (not by interrupt)",
 			sdio_al_dev->card->host->index);
@@ -2025,7 +2039,7 @@ static int sdio_al_wake_up(struct sdio_al_device *sdio_al_dev,
 	return ret;
 error_exit:
 	sdio_al_dev->is_err = true;
-	sdio_al_vote_for_sleep(sdio_al_dev, 0);
+	sdio_al_vote_for_sleep(sdio_al_dev, 1);
 	msmsdcc_set_pwrsave(sdio_al_dev->card->host, 1);
 	WARN_ON(ret);
 	sdio_al_print_info();
@@ -2182,7 +2196,7 @@ static void sdio_al_tear_down(void)
 			flush_workqueue(sdio_al_dev->workqueue);
 			destroy_workqueue(sdio_al_dev->workqueue);
 
-			sdio_al_vote_for_sleep(sdio_al_dev, 0);
+			sdio_al_vote_for_sleep(sdio_al_dev, 1);
 
 			if (!sdio_al_dev->func1) {
 				pr_err(MODULE_NAME ": %s: NULL func1\n",
@@ -3002,7 +3016,7 @@ static int sdio_al_card_probe(struct mmc_card *card)
 
 	wake_lock_init(&sdio_al_dev->wake_lock, WAKE_LOCK_SUSPEND, MODULE_NAME);
 	/* Don't allow sleep until all required clients register */
-	sdio_al_vote_for_sleep(sdio_al_dev, 1);
+	sdio_al_vote_for_sleep(sdio_al_dev, 0);
 
 	sdio_claim_host(sdio_al_dev->func1);
 

@@ -91,6 +91,12 @@ enum sdio_test_results {
 	TEST_PASSED
 };
 
+enum sdio_lpm_vote_state {
+	SDIO_NO_VOTE,
+	SDIO_VOTE_FOR_SLEEP,
+	SDIO_VOTE_AGAINST_SLEEP
+};
+
 struct test_channel {
 	struct sdio_channel *ch;
 
@@ -957,38 +963,40 @@ static void sdio_test_lpm_timer_handler(unsigned long data)
 		return;
 	}
 
-	atomic_set(&tch->wakeup_client, 1);
-	wake_up(&tch->wait_q);
+	/* Verfiy that we voted for sleep */
+	if (tch->is_ok_to_sleep) {
+		tch->test_result = TEST_PASSED;
+		pr_info(TEST_MODULE_NAME ": %s - 8K voted for sleep\n",
+			__func__);
+	} else {
+		tch->test_result = TEST_FAILED;
+		pr_info(TEST_MODULE_NAME ": %s - 8K voted against sleep\n",
+			__func__);
+
+	}
+	sdio_al_unregister_lpm_cb(tch->sdio_al_device);
+
+	if (tch->test_type == SDIO_TEST_LPM_HOST_WAKER) {
+		atomic_set(&tch->wakeup_client, 1);
+		wake_up(&tch->wait_q);
+	}
+
 }
 
-int sdio_test_wakeup_callback(void *device_handle, int is_vote_for_wakeup)
+int sdio_test_wakeup_callback(void *device_handle, int is_vote_for_sleep)
 {
 	int i = 0;
 
-	pr_info(TEST_MODULE_NAME ": %s is_vote_for_wakeup=%d!!!",
-		__func__, is_vote_for_wakeup);
+	pr_info(TEST_MODULE_NAME ": %s is_vote_for_sleep=%d!!!",
+		__func__, is_vote_for_sleep);
 
 	for (i = 0; i < SDIO_MAX_CHANNELS; i++) {
 		struct test_channel *tch = test_ctx->test_ch_arr[i];
 
 		if ((!tch) || (!tch->is_used) || (!tch->ch_ready))
 			continue;
-		if (tch->sdio_al_device == device_handle) {
-			tch->is_ok_to_sleep = !is_vote_for_wakeup;
-			if (!is_vote_for_wakeup) {
-				tch->test_result = TEST_PASSED;
-				pr_info(TEST_MODULE_NAME ": %s -"
-					"8K votes for sleep\n",
-					__func__);
-				sdio_al_unregister_lpm_cb(
-				    device_handle);
-			} else {
-				tch->test_result = TEST_FAILED;
-				pr_info(TEST_MODULE_NAME ": %s -"
-					"8K votes for wakeup\n",
-					__func__);
-			}
-		}
+		if (tch->sdio_al_device == device_handle)
+			tch->is_ok_to_sleep = is_vote_for_sleep;
 	}
 	return 0;
 }
@@ -1051,16 +1059,15 @@ static int test_start(void)
 			}
 		}
 
+		if ((tch->ch_ready) && (tch->ch_id != SDIO_SMEM))
+			send_config_msg(tch);
+
 		if ((tch->test_type == SDIO_TEST_LPM_HOST_WAKER) ||
 		    (tch->test_type == SDIO_TEST_LPM_CLIENT_WAKER))
 			sdio_al_register_lpm_cb(tch->sdio_al_device,
 					 sdio_test_wakeup_callback);
 
-		if ((tch->ch_ready) && (tch->ch_id != SDIO_SMEM))
-			send_config_msg(tch);
-
-		if ((tch->test_type == SDIO_TEST_LPM_HOST_WAKER) &&
-		    (tch->timer_interval_ms > 0)) {
+		if (tch->timer_interval_ms > 0) {
 			pr_info(TEST_MODULE_NAME ": %s - init timer, ms=%d\n",
 				__func__, tch->timer_interval_ms);
 			init_timer(&tch->timer);
@@ -1288,13 +1295,13 @@ ssize_t test_write(struct file *filp, const char __user *buf, size_t size,
 		pr_info(TEST_MODULE_NAME " --LPM Test For Device 0. Client "
 			"wakes the Host --.\n");
 		set_params_lpm_test(test_ctx->test_ch_arr[SDIO_RMNT],
-				    SDIO_TEST_LPM_CLIENT_WAKER, 0);
+				    SDIO_TEST_LPM_CLIENT_WAKER, 40);
 		break;
 	case 12:
 		pr_info(TEST_MODULE_NAME " --LPM Test For Device 1. Client "
 			"wakes the Host --.\n");
 		set_params_lpm_test(test_ctx->test_ch_arr[SDIO_RPC],
-				    SDIO_TEST_LPM_CLIENT_WAKER, 0);
+				    SDIO_TEST_LPM_CLIENT_WAKER, 40);
 		break;
 	case 13:
 		pr_info(TEST_MODULE_NAME " --LPM Test For Device 0. Host "

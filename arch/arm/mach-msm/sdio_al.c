@@ -3002,7 +3002,7 @@ static int sdio_al_client_setup(struct sdio_al_device *sdio_al_dev)
  *  Probe to claim the SDIO card.
  *
  */
-static int mmc_probe(struct mmc_card *card)
+static int sdio_al_card_probe(struct mmc_card *card)
 {
 	int ret = 0;
 	struct sdio_al_device *sdio_al_dev = NULL;
@@ -3132,7 +3132,7 @@ exit:
  *  Release the SDIO card.
  *
  */
-void mmc_remove(struct mmc_card *card)
+void sdio_al_card_remove(struct mmc_card *card)
 {
 	int i;
 	struct sdio_al_device *sdio_al_dev = NULL;
@@ -3218,12 +3218,12 @@ void mmc_remove(struct mmc_card *card)
 		card->host->index);
 }
 
-static struct mmc_driver mmc_driver = {
+static struct mmc_driver sdio_al_mmc_driver = {
 	.drv		= {
 		.name   = "sdio_al",
 	},
-	.probe		= mmc_probe,
-	.remove		= mmc_remove,
+	.probe		= sdio_al_card_probe,
+	.remove		= sdio_al_card_remove,
 };
 
 
@@ -3771,7 +3771,7 @@ static int __init sdio_al_init(void)
 
 	sdio_register_driver(&sdio_al_sdiofn_driver);
 
-	ret = mmc_register_driver(&mmc_driver);
+	ret = mmc_register_driver(&sdio_al_mmc_driver);
 	if (ret)
 		pr_err(MODULE_NAME ": mmc_register_driver failed: %d\n", ret);
 exit:
@@ -3806,7 +3806,7 @@ static void __exit sdio_al_exit(void)
 
 	kfree(sdio_al);
 
-	mmc_unregister_driver(&mmc_driver);
+	mmc_unregister_driver(&sdio_al_mmc_driver);
 
 #ifdef CONFIG_DEBUG_FS
 	sdio_al_debugfs_cleanup();

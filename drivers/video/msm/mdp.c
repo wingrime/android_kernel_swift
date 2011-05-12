@@ -53,8 +53,7 @@ struct completion mdp_ppp_comp;
 struct semaphore mdp_ppp_mutex;
 struct semaphore mdp_pipe_ctrl_mutex;
 
-unsigned long mdp_timer_duration = (HZ);   /* 1 sec */
-/* unsigned long mdp_mdp_timer_duration=0; */
+unsigned long mdp_timer_duration = (HZ);   /* 1 second */
 
 boolean mdp_ppp_waiting = FALSE;
 uint32 mdp_tv_underflow_cnt;
@@ -1315,6 +1314,9 @@ static int mdp_probe(struct platform_device *pdev)
 
 #ifdef CONFIG_FB_MSM_MIPI_DSI
 	case MIPI_VIDEO_PANEL:
+#ifdef CONFIG_FB_MSM_MDP40
+		mdp_timer_duration = 0;
+#endif
 		pdata->on = mdp4_dsi_video_on;
 		pdata->off = mdp4_dsi_video_off;
 		mfd->hw_refresh = TRUE;
@@ -1332,6 +1334,7 @@ static int mdp_probe(struct platform_device *pdev)
 	case MIPI_CMD_PANEL:
 		mfd->dma_fnc = mdp4_dsi_cmd_overlay;
 #ifdef CONFIG_FB_MSM_MDP40
+		mdp_timer_duration = 0;
 		mipi = &mfd->panel_info.mipi;
 		configure_mdp_core_clk_table((mipi->dsi_pclk_rate) * 3 / 2);
 #endif

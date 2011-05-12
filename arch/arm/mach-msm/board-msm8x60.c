@@ -9358,6 +9358,18 @@ static void __init msm8x60_init(struct msm_board_data *board_data)
 		msm_spm_init(msm_spm_data_v1, ARRAY_SIZE(msm_spm_data_v1));
 
 	/*
+	 * Set regulators 8901_l4 and 8901_l6 to be always on in HPM for SURF
+	 * devices so that the RPM doesn't drop into a low power mode that an
+	 * un-reworked SURF cannot resume from.
+	 */
+	if (machine_is_msm8x60_surf()) {
+		rpm_vreg_init_pdata[RPM_VREG_ID_PM8901_L4]
+			.init_data.constraints.always_on = 1;
+		rpm_vreg_init_pdata[RPM_VREG_ID_PM8901_L6]
+			.init_data.constraints.always_on = 1;
+	}
+
+	/*
 	 * Disable regulator info printing so that regulator registration
 	 * messages do not enter the kmsg log.
 	 */

@@ -9529,6 +9529,10 @@ static void __init msm8x60_init(struct msm_board_data *board_data)
 	if (machine_is_msm8x60_fluid()) {
 		msm_adc_pdata.dev_names = msm_adc_fluid_device_names;
 		msm_adc_pdata.num_adc = ARRAY_SIZE(msm_adc_fluid_device_names);
+		if (SOCINFO_VERSION_MAJOR(soc_platform_version) < 3)
+			msm_adc_pdata.gpio_config = APROC_CONFIG;
+		else
+			msm_adc_pdata.gpio_config = MPROC_CONFIG;
 	}
 	msm_adc_pdata.target_hw = MSM_8x60;
 #endif

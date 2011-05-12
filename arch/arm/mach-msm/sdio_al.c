@@ -20,12 +20,13 @@
  *
  * To be used with Qualcomm's SDIO-Client connected to this host.
  */
+#include <sdio_al_private.h>
+
 #include <linux/module.h>
 #include <linux/scatterlist.h>
 #include <linux/workqueue.h>
 #include <linux/wait.h>
 #include <linux/delay.h>
-#include <linux/platform_device.h>
 #include <linux/fs.h>
 #include <linux/slab.h>
 #include <linux/wakelock.h>
@@ -45,7 +46,6 @@
 
 #include <mach/dma.h>
 #include <mach/gpio.h>
-#include <mach/sdio_al.h>
 #include <mach/subsystem_notif.h>
 
 #include "../../../drivers/mmc/host/msm_sdcc.h"
@@ -147,7 +147,6 @@
 #define SD_IO_RW_EXTENDED_QCOM 54
 
 #define TIME_TO_WAIT_US 500
-#define SDIO_PREFIX "SDIO_"
 
 #define DATA_DEBUG(x...) if (sdio_al->debug.debug_data_on) pr_info(x)
 #define LPM_DEBUG(x...) if (sdio_al->debug.debug_lpm_on) pr_info(x)
@@ -248,41 +247,12 @@ struct rx_packet_size {
 	struct list_head	list;
 };
 
-/**
- * Peer SDIO-Client channel configuration.
- *
- *  @is_ready - channel is ready and the data is valid.
- *
- *  @max_rx_threshold - maximum rx threshold, according to the
- *  		      total buffers size on the peer pipe.
- *  @max_tx_threshold - maximum tx threshold, according to the
- *  		      total buffers size on the peer pipe.
- *  @tx_buf_size - size of a single buffer on the peer pipe; a
- *  		 transfer smaller than the buffer size still
- *  		 make the buffer unusable for the next transfer.
- * @max_packet_size
- * @is_host_ok_to_sleep - Host marks this bit when it's okay to
- *      		sleep (no pending transactions)
- */
-struct peer_sdioc_channel_config {
-	u32 is_ready;
-	u32 max_rx_threshold; /* Downlink */
-	u32 max_tx_threshold; /* Uplink */
-	u32 tx_buf_size;
-	u32 max_packet_size;
-	u32 is_host_ok_to_sleep;
-	u32 is_packet_mode;
-	u32 reserved[25];
-};
-
 #define PEER_SDIOC_SW_MAILBOX_SIGNATURE 0xFACECAFE
 #define PEER_SDIOC_SW_MAILBOX_UT_SIGNATURE 0x5D107E57
 #define PEER_SDIOC_SW_MAILBOX_BOOT_SIGNATURE 0xDEADBEEF
 
 /* Allow support in old sdio version */
 #define PEER_SDIOC_OLD_VERSION_MAJOR	0x0002
-
-#define PEER_CHANNEL_NAME_SIZE		4
 
 #define MAX_NUM_OF_SDIO_DEVICES		2
 
@@ -313,128 +283,6 @@ struct peer_sdioc_sw_mailbox {
 	struct peer_sdioc_sw_header sw_header;
 	struct peer_sdioc_channel_config ch_config[SDIO_AL_MAX_CHANNELS];
 };
-
-/**
- *  SDIO Channel context.
- *
- *  @name - channel name. Used by the caller to open the
- *  	  channel.
- *
- *  @read_threshold - Threshold on SDIO-Client mailbox for Rx
- *  				Data available bytes. When the limit exceed
- *  				the SDIO-Client generates an interrupt to the
- *  				host.
- *
- *  @write_threshold - Threshold on SDIO-Client mailbox for Tx
- *  				Data available bytes. When the limit exceed
- *  				the SDIO-Client generates an interrupt to the
- *  				host.
- *
- *  @def_read_threshold - Default theshold on SDIO-Client for Rx
- *
- *  @min_write_avail - Threshold of minimal available bytes
- *  					 to write. Below that threshold the host
- *  					 will initiate reading the mailbox.
- *
- *  @poll_delay_msec - Delay between polling the mailbox. When
- *  				 the SDIO-Client doesn't generates EOT
- *  				 interrupt for Rx Available bytes, the host
- *  				 should poll the SDIO-Client mailbox.
- *
- *  @is_packet_mode - The host get interrupt when a packet is
- *  				available at the SDIO-client (pipe EOT
- *  				indication).
- *
- *  @num - channel number.
- *
- *  @notify - Client's callback. Should not call sdio read/write.
- *
- *  @priv - Client's private context, provided to callback.
- *
- *  @is_valid - Channel is used (we have a list of
- *		SDIO_AL_MAX_CHANNELS and not all of them are in
- *		use).
- *
- *  @is_open - Channel is open.
- *
- *  @func - SDIO Function handle.
- *
- *  @rx_pipe_index - SDIO-Client Pipe Index for Rx Data.
- *
- *  @tx_pipe_index - SDIO-Client Pipe Index for Tx Data.
- *
- *  @ch_lock - Channel lock to protect channel specific Data
- *
- *  @rx_pending_bytes - Total number of Rx pending bytes, at Rx
- *  				  packet list. Maximum of 16KB-1 limited by
- *  				  SDIO-Client specification.
- *
- *  @read_avail - Available bytes to read.
- *
- *  @write_avail - Available bytes to write.
- *
- *  @rx_size_list_head - The head of Rx Pending Packets List.
- *
- *  @pdev - platform device - clients to probe for the sdio-al.
- *
- *  @signature - Context Validity check.
- *
- *  @sdio_al_dev - a pointer to the sdio_al_device instance of
- *   this channel
- *
- */
-#define CHANNEL_NAME_SIZE (sizeof(SDIO_PREFIX) + PEER_CHANNEL_NAME_SIZE)
-struct sdio_channel {
-	/* Channel Configuration Parameters*/
-	char name[CHANNEL_NAME_SIZE];
-	int read_threshold;
-	int write_threshold;
-	int def_read_threshold;
-	int min_write_avail;
-	int poll_delay_msec;
-	int is_packet_mode;
-
-	struct peer_sdioc_channel_config ch_config;
-
-	/* Channel Info */
-	int num;
-
-	void (*notify)(void *priv, unsigned channel_event);
-	void *priv;
-
-	int is_valid;
-	int is_open;
-
-	struct sdio_func *func;
-
-	int rx_pipe_index;
-	int tx_pipe_index;
-
-	struct mutex ch_lock;
-
-	u32 read_avail;
-	u32 write_avail;
-
-	u32 peer_tx_buf_size;
-
-	u16 rx_pending_bytes;
-
-	struct list_head rx_size_list_head;
-
-	struct platform_device pdev;
-
-	u32 total_rx_bytes;
-	u32 total_tx_bytes;
-
-	u32 signature;
-
-	struct sdio_al_device *sdio_al_dev;
-
-	int last_any_read_avail;
-	int last_read_avail;
-	int last_old_read_avail;
-};
-
 
 /**
  *  SDIO Abstraction Layer driver context.
@@ -548,6 +396,7 @@ struct sdio_al_device {
 
 	int state;
 	struct sdio_func *func1;
+	int (*lpm_callback)(void *, int);
 };
 
 /*
@@ -671,6 +520,64 @@ static void sdio_al_debugfs_cleanup(void)
        debugfs_remove(sdio_al->debug.sdio_al_debug_root);
 }
 #endif
+
+void sdio_al_register_lpm_cb(void *device_handle,
+				       int(*lpm_callback)(void *, int))
+{
+	struct sdio_al_device *sdio_al_dev =
+		(struct sdio_al_device *) device_handle;
+
+	if (!sdio_al_dev) {
+		pr_err(MODULE_NAME ": %s - device_handle is NULL\n",
+			__func__);
+		return;
+	}
+
+	sdio_al_dev->lpm_callback = lpm_callback;
+	LPM_DEBUG(MODULE_NAME ": %s - device %d registered for wakeup "
+	"callback\n", __func__, sdio_al_dev->card->host->index);
+}
+
+void sdio_al_unregister_lpm_cb(void *device_handle)
+{
+	struct sdio_al_device *sdio_al_dev =
+		(struct sdio_al_device *) device_handle;
+
+	if (!sdio_al_dev) {
+		pr_err(MODULE_NAME ": %s - device_handle is NULL\n",
+			__func__);
+		return;
+	}
+
+	sdio_al_dev->lpm_callback = NULL;
+	LPM_DEBUG(MODULE_NAME ": %s - device %d unregister for wakeup "
+	"callback\n", __func__, sdio_al_dev->card->host->index);
+}
+
+static void sdio_al_vote_for_sleep(struct sdio_al_device *sdio_al_dev,
+				   int is_vote_for_wakeup)
+{
+	pr_debug(MODULE_NAME ": %s()", __func__);
+
+	if (is_vote_for_wakeup) {
+		LPM_DEBUG(MODULE_NAME ": %s - sdio vote against sleep",
+			  __func__);
+		wake_lock(&sdio_al_dev->wake_lock);
+	} else {
+		LPM_DEBUG(MODULE_NAME ": %s - sdio vote for Sleep", __func__);
+		wake_unlock(&sdio_al_dev->wake_lock);
+	}
+
+	if (sdio_al_dev->lpm_callback != NULL) {
+		LPM_DEBUG(MODULE_NAME ": %s - is_vote_for_wakeup=%d for "
+			"card#%d, calling callback...",
+			__func__,
+			is_vote_for_wakeup,
+			sdio_al_dev->card->host->index);
+		sdio_al_dev->lpm_callback((void *)sdio_al_dev,
+					   is_vote_for_wakeup);
+	}
+}
 
 /**
  *  Write SDIO-Client lpm information
@@ -796,7 +703,7 @@ static void sdio_al_sleep(struct sdio_al_device *sdio_al_dev,
 			    "Sleep now.\n",
 		sdio_al_dev->card->host->index);
 	/* Release wakelock */
-	wake_unlock(&sdio_al_dev->wake_lock);
+	sdio_al_vote_for_sleep(sdio_al_dev, 0);
 }
 
 
@@ -2036,7 +1943,7 @@ static int sdio_al_wake_up(struct sdio_al_device *sdio_al_dev,
 	}
 
 	/* Wake up sequence */
-	wake_lock(&sdio_al_dev->wake_lock);
+	sdio_al_vote_for_sleep(sdio_al_dev, 1);
 	if (not_from_int) {
 		LPM_DEBUG(MODULE_NAME ": Wake up card %d (not by interrupt)",
 			sdio_al_dev->card->host->index);
@@ -2118,7 +2025,7 @@ static int sdio_al_wake_up(struct sdio_al_device *sdio_al_dev,
 	return ret;
 error_exit:
 	sdio_al_dev->is_err = true;
-	wake_unlock(&sdio_al_dev->wake_lock);
+	sdio_al_vote_for_sleep(sdio_al_dev, 0);
 	msmsdcc_set_pwrsave(sdio_al_dev->card->host, 1);
 	WARN_ON(ret);
 	sdio_al_print_info();
@@ -2275,7 +2182,7 @@ static void sdio_al_tear_down(void)
 			flush_workqueue(sdio_al_dev->workqueue);
 			destroy_workqueue(sdio_al_dev->workqueue);
 
-			wake_lock(&sdio_al_dev->wake_lock);
+			sdio_al_vote_for_sleep(sdio_al_dev, 0);
 
 			if (!sdio_al_dev->func1) {
 				pr_err(MODULE_NAME ": %s: NULL func1\n",
@@ -3095,7 +3002,7 @@ static int sdio_al_card_probe(struct mmc_card *card)
 
 	wake_lock_init(&sdio_al_dev->wake_lock, WAKE_LOCK_SUSPEND, MODULE_NAME);
 	/* Don't allow sleep until all required clients register */
-	wake_lock(&sdio_al_dev->wake_lock);
+	sdio_al_vote_for_sleep(sdio_al_dev, 1);
 
 	sdio_claim_host(sdio_al_dev->func1);
 

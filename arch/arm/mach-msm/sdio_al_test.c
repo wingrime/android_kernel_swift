@@ -32,8 +32,9 @@
 #include <linux/random.h>
 #include <linux/platform_device.h>
 #include <mach/sdio_smem.h>
+#include <linux/wakelock.h>
 
-#include <mach/sdio_al.h>
+#include <sdio_al_private.h>
 #include <linux/debugfs.h>
 
 /** Module name string */
@@ -45,23 +46,28 @@
 #define MAX_XFER_SIZE (16*1024)
 #define SMEM_MAX_XFER_SIZE 0xBC000
 
-#define CHANNEL_NAME_SIZE 9
-
 #define TEST_DBG(x...) if (test_ctx->runtime_debug) pr_info(x)
 
+enum sdio_test_case_type {
+	SDIO_TEST_LOOPBACK_HOST,
+	SDIO_TEST_LOOPBACK_CLIENT,
+	SDIO_TEST_LPM_HOST_WAKER,
+	SDIO_TEST_LPM_CLIENT_WAKER,
+	SDIO_TEST_LPM_RANDOM,
+	SDIO_TEST_PERF, /* must be last since is not part of the 9k tests */
+};
+
 struct test_config_msg {
-  u32 signature;
-  u32 is_loopback_in_9k;
-  u32 is_lpm_test;
-  u32 packet_length;
-  u32 num_packets;
-  u32 sleep_interval;
-  u32 num_iterations;
+	u32 signature;
+	u32 test_case;
+	u32 packet_length;
+	u32 num_packets;
+	u32 num_iterations;
 };
 
 struct test_result_msg {
-  u32 signature;
-  u32 is_successful;
+	u32 signature;
+	u32 is_successful;
 };
 
 struct test_work {
@@ -78,13 +84,6 @@ enum sdio_channels_ids {
 	SDIO_SMEM,
 	SDIO_MAX_CHANNELS
 };
-
-enum sdio_test_types {
-	LOOPBACK_TEST,
-	SENDER_TEST,
-	A2_TEST
-};
-
 
 enum sdio_test_results {
 	TEST_NO_RESULT,
@@ -111,6 +110,7 @@ struct test_channel {
 	atomic_t rx_notify_count;
 	atomic_t tx_notify_count;
 	atomic_t any_notify_count;
+	atomic_t wakeup_client;
 
 	int wait_counter;
 
@@ -122,6 +122,13 @@ struct test_channel {
 
 	int test_completed;
 	int test_result;
+	struct timer_list timer;
+	int timer_interval_ms;
+
+	struct timer_list timeout_timer;
+	int timeout_ms;
+	void *sdio_al_device;
+	int is_ok_to_sleep;
 };
 
 struct sdio_al_test_debug {
@@ -161,6 +168,8 @@ struct test_context {
 	int test_completed;
 	int test_result;
 	struct sdio_al_test_debug debug;
+
+	struct wake_lock wake_lock;
 };
 
 static struct test_context *test_ctx;
@@ -284,6 +293,9 @@ static void send_config_msg(struct test_channel *test_ch)
 	if (ret)
 		pr_err(TEST_MODULE_NAME ":%s sdio_write err=%d.\n",
 			__func__, -ret);
+	else
+		pr_info(TEST_MODULE_NAME ":%s sent config_msg successfully.\n",
+		       __func__);
 }
 
 /**
@@ -370,6 +382,101 @@ static void check_test_completion(void)
 	pr_info(TEST_MODULE_NAME ":Test is completed");
 	test_ctx->test_completed = 1;
 	wake_up(&test_ctx->wait_q);
+}
+
+static void lpm_test(struct test_channel *test_ch)
+{
+	u32 read_avail = 0;
+	int ret = 0;
+
+	pr_info(TEST_MODULE_NAME ": %s - START\n", __func__);
+
+	while (1) {
+		read_avail = sdio_read_avail(test_ch->ch);
+
+		if (read_avail == 0) {
+			pr_info(TEST_MODULE_NAME
+				": read_avail is 0 for chan %s\n",
+				test_ch->name);
+			wait_event(test_ch->wait_q,
+				   atomic_read(&test_ch->rx_notify_count));
+			atomic_dec(&test_ch->rx_notify_count);
+			continue;
+		}
+
+		memset(test_ch->buf, 0x00, test_ch->buf_size);
+
+		ret = sdio_read(test_ch->ch, test_ch->buf, read_avail);
+		if (ret) {
+			pr_info(TEST_MODULE_NAME ":  sdio_read for chan"
+				"%s failed, err=%d.\n",
+				test_ch->name, -ret);
+			goto exit_err;
+		}
+
+		if (test_ch->buf[0] != TEST_CONFIG_SIGNATURE) {
+			pr_info(TEST_MODULE_NAME ": Not a test_result "
+				"signature. expected 0x%x. received 0x%x "
+				"for chan %s\n",
+				TEST_CONFIG_SIGNATURE,
+				test_ch->buf[0],
+				test_ch->name);
+			continue;
+		} else {
+			pr_info(TEST_MODULE_NAME ": Signature is "
+				"TEST_CONFIG_SIGNATURE as expected\n");
+			break;
+		}
+	}
+
+	pr_debug(TEST_MODULE_NAME ": %s - delete the timeout timer\n",
+	       __func__);
+	del_timer_sync(&test_ch->timeout_timer);
+
+	if (test_ch->buf[1] == 0) {
+		pr_err(TEST_MODULE_NAME ": LPM TEST - Client didn't sleep. "
+		       "Result Msg - is_successful=%d\n", test_ch->buf[1]);
+		goto exit_err;
+	} else {
+		pr_info(TEST_MODULE_NAME ": %s -"
+			"LPM 9K WAS SLEEPING - PASS\n", __func__);
+		if (test_ch->test_result == TEST_PASSED) {
+			pr_info(TEST_MODULE_NAME ": LPM TEST_PASSED\n");
+			test_ch->test_completed = 1;
+			check_test_completion();
+		} else {
+			pr_err(TEST_MODULE_NAME ": LPM TEST - Host didn't "
+			       "sleep. Client slept\n");
+			goto exit_err;
+		}
+	}
+
+	return;
+
+exit_err:
+	pr_info(TEST_MODULE_NAME ": TEST FAIL for chan %s.\n",
+		test_ch->name);
+	test_ch->test_completed = 1;
+	test_ch->test_result = TEST_FAILED;
+	check_test_completion();
+	return;
+}
+
+
+/**
+ * LPM Test while the host wakes up the modem
+ */
+static void lpm_test_host_waker(struct test_channel *test_ch)
+{
+	pr_info(TEST_MODULE_NAME ": %s - START\n", __func__);
+	wait_event(test_ch->wait_q, atomic_read(&test_ch->wakeup_client));
+	atomic_set(&test_ch->wakeup_client, 0);
+
+	pr_info(TEST_MODULE_NAME ": %s - Sending the config_msg to wakeup "
+		" the client\n", __func__);
+	send_config_msg(test_ch);
+
+	lpm_test(test_ch);
 }
 
 /**
@@ -683,14 +790,20 @@ static void worker(struct work_struct *work)
 	test_type = test_ch->test_type;
 
 	switch (test_type) {
-	case LOOPBACK_TEST:
+	case SDIO_TEST_LOOPBACK_HOST:
 		loopback_test(test_ch);
 		break;
-	case SENDER_TEST:
+	case SDIO_TEST_LOOPBACK_CLIENT:
 		sender_test(test_ch);
 		break;
-	case A2_TEST:
+	case SDIO_TEST_PERF:
 		a2_performance_test(test_ch);
+		break;
+	case SDIO_TEST_LPM_CLIENT_WAKER:
+		lpm_test(test_ch);
+		break;
+	case SDIO_TEST_LPM_HOST_WAKER:
+		lpm_test_host_waker(test_ch);
 		break;
 	default:
 		pr_err(TEST_MODULE_NAME ":Bad Test type = %d.\n",
@@ -715,7 +828,6 @@ static void notify(void *priv, unsigned channel_event)
 		pr_info(TEST_MODULE_NAME ":notify before ch ready.\n");
 		return;
 	}
-	BUG_ON(test_ctx->signature != TEST_SIGNATURE);
 
 	switch (channel_event) {
 	case SDIO_EVENT_DATA_READ_AVAIL:
@@ -810,6 +922,77 @@ static void default_sdio_al_test_release(struct device *dev)
 	pr_info(MODULE_NAME ":platform device released.\n");
 }
 
+static void sdio_test_lpm_timeout_handler(unsigned long data)
+{
+	struct test_channel *tch = (struct test_channel *)data;
+
+	pr_info(TEST_MODULE_NAME ": %s - LPM TEST TIMEOUT Expired after "
+			    "%d ms\n", __func__, tch->timeout_ms);
+	tch->test_completed = 1;
+	pr_info(TEST_MODULE_NAME ": %s - tch->test_result = TEST_FAILED\n",
+		__func__);
+	tch->test_completed = 1;
+	tch->test_result = TEST_FAILED;
+	check_test_completion();
+	return;
+}
+
+static void sdio_test_lpm_timer_handler(unsigned long data)
+{
+	struct test_channel *tch = (struct test_channel *)data;
+
+	pr_info(TEST_MODULE_NAME ": %s - LPM TEST Timer Expired after "
+			    "%d ms\n", __func__, tch->timer_interval_ms);
+
+	if (!tch) {
+		pr_err(TEST_MODULE_NAME ": %s - LPM TEST FAILED. "
+		       "tch is NULL\n", __func__);
+		return;
+	}
+
+	if (!tch->ch) {
+		pr_err(TEST_MODULE_NAME ": %s - LPM TEST FAILED. tch->ch "
+		       "is NULL\n", __func__);
+		tch->test_result = TEST_FAILED;
+		return;
+	}
+
+	atomic_set(&tch->wakeup_client, 1);
+	wake_up(&tch->wait_q);
+}
+
+int sdio_test_wakeup_callback(void *device_handle, int is_vote_for_wakeup)
+{
+	int i = 0;
+
+	pr_info(TEST_MODULE_NAME ": %s is_vote_for_wakeup=%d!!!",
+		__func__, is_vote_for_wakeup);
+
+	for (i = 0; i < SDIO_MAX_CHANNELS; i++) {
+		struct test_channel *tch = test_ctx->test_ch_arr[i];
+
+		if ((!tch) || (!tch->is_used) || (!tch->ch_ready))
+			continue;
+		if (tch->sdio_al_device == device_handle) {
+			tch->is_ok_to_sleep = !is_vote_for_wakeup;
+			if (!is_vote_for_wakeup) {
+				tch->test_result = TEST_PASSED;
+				pr_info(TEST_MODULE_NAME ": %s -"
+					"8K votes for sleep\n",
+					__func__);
+				sdio_al_unregister_lpm_cb(
+				    device_handle);
+			} else {
+				tch->test_result = TEST_FAILED;
+				pr_info(TEST_MODULE_NAME ": %s -"
+					"8K votes for wakeup\n",
+					__func__);
+			}
+		}
+	}
+	return 0;
+}
+
 /**
  * Test Main
  */
@@ -838,6 +1021,7 @@ static int test_start(void)
 		atomic_set(&tch->tx_notify_count, 0);
 		atomic_set(&tch->rx_notify_count, 0);
 		atomic_set(&tch->any_notify_count, 0);
+		atomic_set(&tch->wakeup_client, 0);
 
 		memset(tch->buf, 0x00, tch->buf_size);
 		tch->test_result = TEST_NO_RESULT;
@@ -862,11 +1046,30 @@ static int test_start(void)
 					tch->name);
 					tch->ch_ready = false;
 				}
+
+				tch->sdio_al_device = tch->ch->sdio_al_dev;
 			}
 		}
 
+		if ((tch->test_type == SDIO_TEST_LPM_HOST_WAKER) ||
+		    (tch->test_type == SDIO_TEST_LPM_CLIENT_WAKER))
+			sdio_al_register_lpm_cb(tch->sdio_al_device,
+					 sdio_test_wakeup_callback);
+
 		if ((tch->ch_ready) && (tch->ch_id != SDIO_SMEM))
 			send_config_msg(tch);
+
+		if ((tch->test_type == SDIO_TEST_LPM_HOST_WAKER) &&
+		    (tch->timer_interval_ms > 0)) {
+			pr_info(TEST_MODULE_NAME ": %s - init timer, ms=%d\n",
+				__func__, tch->timer_interval_ms);
+			init_timer(&tch->timer);
+			tch->timer.data = (unsigned long)tch;
+			tch->timer.function = sdio_test_lpm_timer_handler;
+			tch->timer.expires = jiffies +
+			    msecs_to_jiffies(tch->timer_interval_ms);
+			add_timer(&tch->timer);
+		}
 	}
 
 	pr_debug(TEST_MODULE_NAME ":queue_work..\n");
@@ -910,13 +1113,11 @@ static int set_params_loopback_9k(struct test_channel *tch)
 		return -EINVAL;
 	}
 	tch->is_used = 1;
-	tch->test_type = SENDER_TEST;
+	tch->test_type = SDIO_TEST_LOOPBACK_CLIENT;
 	tch->config_msg.signature = TEST_CONFIG_SIGNATURE;
-	tch->config_msg.is_loopback_in_9k = 1;
-	tch->config_msg.is_lpm_test = 0;
+	tch->config_msg.test_case = SDIO_TEST_LOOPBACK_CLIENT;
 	tch->config_msg.packet_length = 512;
 	tch->config_msg.num_packets = 10000;
-	tch->config_msg.sleep_interval = 0;
 	tch->config_msg.num_iterations = 1;
 
 	if (tch->ch_id == SDIO_RPC)
@@ -932,17 +1133,15 @@ static int set_params_a2_perf(struct test_channel *tch)
 		return -EINVAL;
 	}
 	tch->is_used = 1;
-	tch->test_type = A2_TEST;
+	tch->test_type = SDIO_TEST_PERF;
 	tch->config_msg.signature = TEST_CONFIG_SIGNATURE;
-	tch->config_msg.is_loopback_in_9k = 1;
-	tch->config_msg.is_lpm_test = 0;
+	tch->config_msg.test_case = SDIO_TEST_LOOPBACK_CLIENT;
 	if (tch->ch_id == SDIO_DIAG)
 		tch->config_msg.packet_length = 512;
 	else
 		tch->config_msg.packet_length = MAX_XFER_SIZE;
 
 	tch->config_msg.num_packets = 10000;
-	tch->config_msg.sleep_interval = 0;
 	tch->config_msg.num_iterations = 1;
 	return 0;
 }
@@ -954,6 +1153,50 @@ static int set_params_smem_test(struct test_channel *tch)
 		return -EINVAL;
 	}
 	tch->is_used = 1;
+	return 0;
+}
+
+static int set_params_lpm_test(struct test_channel *tch,
+				enum sdio_test_case_type test,
+				int timer_interval_ms)
+{
+	static int first_time = 1;
+	if (!tch) {
+		pr_err(TEST_MODULE_NAME ": %s - NULL channel\n", __func__);
+		return -EINVAL;
+	}
+	tch->is_used = 1;
+	tch->test_type = test;
+	tch->config_msg.signature = TEST_CONFIG_SIGNATURE;
+	tch->config_msg.test_case = test;
+	tch->config_msg.packet_length = 0;
+	tch->config_msg.num_packets = 0;
+	tch->config_msg.num_iterations = 0;
+	tch->timer_interval_ms = timer_interval_ms;
+	tch->timeout_ms = 10000;
+
+	init_timer(&tch->timeout_timer);
+	tch->timeout_timer.data = (unsigned long)tch;
+	tch->timeout_timer.function = sdio_test_lpm_timeout_handler;
+	tch->timeout_timer.expires = jiffies +
+		msecs_to_jiffies(tch->timeout_ms);
+	add_timer(&tch->timeout_timer);
+	pr_info(TEST_MODULE_NAME ": %s - Initiated LPM TIMEOUT TIMER."
+		"set to %d ms\n",
+		__func__, tch->timeout_ms);
+
+	if (first_time) {
+		pr_info(TEST_MODULE_NAME ": %s - wake_lock_init() called\n",
+		__func__);
+		wake_lock_init(&test_ctx->wake_lock,
+			       WAKE_LOCK_SUSPEND, TEST_MODULE_NAME);
+		first_time = 0;
+	}
+
+	pr_info(TEST_MODULE_NAME ": %s - wake_lock() for the TEST is "
+		"called. to prevent real sleeping\n", __func__);
+	wake_lock(&test_ctx->wake_lock);
+
 	return 0;
 }
 
@@ -1040,6 +1283,30 @@ ssize_t test_write(struct file *filp, const char __user *buf, size_t size,
 		    set_params_a2_perf(test_ctx->test_ch_arr[SDIO_DUN]) ||
 		    set_params_smem_test(test_ctx->test_ch_arr[SDIO_SMEM]))
 			return size;
+		break;
+	case 11:
+		pr_info(TEST_MODULE_NAME " --LPM Test For Device 0. Client "
+			"wakes the Host --.\n");
+		set_params_lpm_test(test_ctx->test_ch_arr[SDIO_RMNT],
+				    SDIO_TEST_LPM_CLIENT_WAKER, 0);
+		break;
+	case 12:
+		pr_info(TEST_MODULE_NAME " --LPM Test For Device 1. Client "
+			"wakes the Host --.\n");
+		set_params_lpm_test(test_ctx->test_ch_arr[SDIO_RPC],
+				    SDIO_TEST_LPM_CLIENT_WAKER, 0);
+		break;
+	case 13:
+		pr_info(TEST_MODULE_NAME " --LPM Test For Device 0. Host "
+			"wakes the Client --.\n");
+		set_params_lpm_test(test_ctx->test_ch_arr[SDIO_RMNT],
+				    SDIO_TEST_LPM_HOST_WAKER, 120);
+		break;
+	case 14:
+		pr_info(TEST_MODULE_NAME " --LPM Test For Device 1. Host "
+			"wakes the Client --.\n");
+		set_params_lpm_test(test_ctx->test_ch_arr[SDIO_RPC],
+				    SDIO_TEST_LPM_HOST_WAKER, 120);
 		break;
 	case 98:
 		pr_info(TEST_MODULE_NAME " set runtime debug on");

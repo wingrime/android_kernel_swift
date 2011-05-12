@@ -1784,6 +1784,7 @@ static int tavarua_fops_open(struct file *file)
 	}
 
 	radio->handle_irq = 0;
+	radio->marimba->mod_id = SLAVE_ID_BAHAMA;
 	marimba_set_fm_status(radio->marimba, true);
 	return 0;
 
@@ -1899,7 +1900,7 @@ static int tavarua_fops_release(struct file *file)
 			return retval;
 		}
 	}
-
+	radio->marimba->mod_id = SLAVE_ID_BAHAMA;
 	bt_status = marimba_get_bt_status(radio->marimba);
 	/* Set the index based on the bt status*/
 	index = bt_status ?  1 : 0;
@@ -1939,6 +1940,7 @@ static int tavarua_fops_release(struct file *file)
 	radio->pdata->fm_shutdown(radio->pdata);
 	radio->handle_irq = 1;
 	radio->users = 0;
+	radio->marimba->mod_id = SLAVE_ID_BAHAMA;
 	marimba_set_fm_status(radio->marimba, false);
 	return 0;
 }

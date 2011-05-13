@@ -319,16 +319,27 @@ static int audio_enable(struct audio *audio)
 /* must be called with audio->lock held */
 static int audio_disable(struct audio *audio)
 {
+	int rc = 0;
 	MM_DBG("\n"); /* Macro prints the file name and function */
 	if (audio->enabled) {
 		audio->enabled = 0;
+		audio->dec_state = MSM_AUD_DECODER_STATE_NONE;
 		auddec_dsp_config(audio, 0);
+		rc = wait_event_interruptible_timeout(audio->wait,
+				audio->dec_state != MSM_AUD_DECODER_STATE_NONE,
+				msecs_to_jiffies(MSM_AUD_DECODER_WAIT_MS));
+		if (rc == 0)
+			rc = -ETIMEDOUT;
+		else if (audio->dec_state != MSM_AUD_DECODER_STATE_CLOSE)
+			rc = -EFAULT;
+		else
+			rc = 0;
 		wake_up(&audio->write_wait);
 		msm_adsp_disable(audio->audplay);
 		audpp_disable(audio->dec_id, audio);
 		audio->out_needed = 0;
 	}
-	return 0;
+	return rc;
 }
 
 /* ------------------- dsp --------------------- */
@@ -372,6 +383,11 @@ static void audio_dsp_event(void *private, unsigned id, uint16_t *msg)
 					AUDPP_MSG_REASON_NODECODER)) {
 					audio->dec_state =
 						MSM_AUD_DECODER_STATE_FAILURE;
+					wake_up(&audio->wait);
+				} else if (reason == AUDPP_MSG_REASON_NONE) {
+					/* decoder is in disable state */
+					audio->dec_state =
+						MSM_AUD_DECODER_STATE_CLOSE;
 					wake_up(&audio->wait);
 				}
 				break;

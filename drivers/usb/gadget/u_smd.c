@@ -27,6 +27,7 @@
 #include <linux/termios.h>
 #include <mach/usb_gadget_fserial.h>
 #include <mach/msm_smd.h>
+#include <linux/debugfs.h>
 
 #include "u_serial.h"
 
@@ -87,6 +88,10 @@ struct gsmd_port {
 #define ACM_CTRL_BRK		0x04
 #define ACM_CTRL_RI		0x08
 	unsigned		cbits_to_laptop;
+
+	/* pkt counters */
+	unsigned long		nbytes_tomodem;
+	unsigned long		nbytes_tolaptop;
 };
 
 static struct portmaster {
@@ -252,6 +257,8 @@ static void gsmd_rx_push(struct work_struct *w)
 				port->n_read += count;
 				goto rx_push_end;
 			}
+
+			port->nbytes_tomodem += count;
 		}
 
 		list_move(&req->list, &port->read_pool);
@@ -323,6 +330,8 @@ static void gsmd_tx_pull(struct work_struct *w)
 				list_add(&req->list, pool);
 			goto tx_pull_end;
 		}
+
+		port->nbytes_tolaptop += req->length;
 	}
 
 tx_pull_end:
@@ -610,6 +619,8 @@ int gsmd_connect(struct gserial *gser, u8 portno)
 	spin_lock_irqsave(&port->port_lock, flags);
 	port->port_usb = gser;
 	gser->notify_modem = gsmd_notify_modem;
+	port->nbytes_tomodem = 0;
+	port->nbytes_tolaptop = 0;
 	spin_unlock_irqrestore(&port->port_lock, flags);
 
 	ret = usb_ep_enable(gser->in, gser->in_desc);
@@ -723,6 +734,87 @@ static int gsmd_port_alloc(int portno, struct usb_cdc_line_coding *coding)
 	return 0;
 }
 
+#if defined(CONFIG_DEBUG_FS)
+static ssize_t debug_read_stats(struct file *file, char __user *ubuf,
+		size_t count, loff_t *ppos)
+{
+	struct gsmd_port *port;
+	char *buf;
+	unsigned long flags;
+	int temp = 0;
+	int i;
+	int ret;
+
+	buf = kzalloc(sizeof(char) * 512, GFP_KERNEL);
+	if (!buf)
+		return -ENOMEM;
+
+	for (i = 0; i < n_ports; i++) {
+		port = ports[i].port;
+		spin_lock_irqsave(&port->port_lock, flags);
+		temp += scnprintf(buf + temp, 512 - temp,
+				"###PORT:%d###\n"
+				"nbytes_tolaptop: %lu\n"
+				"nbytes_tomodem:  %lu\n"
+				"cbits_to_modem:  %u\n"
+				"cbits_to_laptop: %u\n",
+				i, port->nbytes_tolaptop, port->nbytes_tomodem,
+				port->cbits_to_modem, port->cbits_to_laptop);
+		spin_unlock_irqrestore(&port->port_lock, flags);
+	}
+
+	ret = simple_read_from_buffer(ubuf, count, ppos, buf, temp);
+
+	kfree(buf);
+
+	return ret;
+
+}
+
+static ssize_t debug_reset_stats(struct file *file, const char __user *buf,
+				 size_t count, loff_t *ppos)
+{
+	struct gsmd_port *port;
+	unsigned long flags;
+	int i;
+
+	for (i = 0; i < n_ports; i++) {
+		port = ports[i].port;
+
+		spin_lock_irqsave(&port->port_lock, flags);
+		port->nbytes_tolaptop = 0;
+		port->nbytes_tomodem = 0;
+		spin_unlock_irqrestore(&port->port_lock, flags);
+	}
+
+	return count;
+}
+
+static int debug_open(struct inode *inode, struct file *file)
+{
+	return 0;
+}
+
+static const struct file_operations debug_gsmd_ops = {
+	.open = debug_open,
+	.read = debug_read_stats,
+	.write = debug_reset_stats,
+};
+
+static void gsmd_debugfs_init(void)
+{
+	struct dentry *dent;
+
+	dent = debugfs_create_dir("usb_gsmd", 0);
+	if (IS_ERR(dent))
+		return;
+
+	debugfs_create_file("status", 0444, dent, 0, &debug_gsmd_ops);
+}
+#else
+static void gsmd_debugfs_init(void) {}
+#endif
+
 int gsmd_setup(struct usb_gadget *g, unsigned count)
 {
 	struct usb_cdc_line_coding	coding;
@@ -758,6 +850,9 @@ int gsmd_setup(struct usb_gadget *g, unsigned count)
 		}
 		n_ports++;
 	}
+
+	gsmd_debugfs_init();
+
 	return 0;
 free_ports:
 	for (i = 0; i < n_ports; i++)

@@ -88,7 +88,7 @@ void aux_codec_adsp_codec_ctl_en(bool msm_adsp_en)
 			baddr + AUX_CODEC_CTL_OFFSET);
 		}
 	}
-
+	dsb();
 }
 
 /* Set who control aux pcm path: adsp or MSM */
@@ -111,7 +111,7 @@ void aux_codec_pcm_path_ctl_en(bool msm_adsp_en)
 			baddr + PCM_PATH_CTL_OFFSET);
 		}
 	}
-
+	dsb();
 	return;
 }
 EXPORT_SYMBOL(aux_codec_pcm_path_ctl_en);

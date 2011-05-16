@@ -206,7 +206,7 @@ struct smb137b_data {
 
 	bool charging;
 	int chgcurrent;
-	int term_current;
+	int cur_charging_mode;
 	int max_system_voltage;
 	int min_system_voltage;
 
@@ -340,11 +340,16 @@ static int smb137b_start_charging(struct msm_hardware_charger *hw_chg,
 		cmd_val |= USBIN_MODE_HCMODE_BIT;
 
 	smb137b_chg->chgcurrent = chg_current;
+	smb137b_chg->cur_charging_mode = cmd_val;
 
-	/*Due to non-volatile reload feature,always enable volatile
-	 mirror writes before modifying any 00h~09h control register*/
+	/* Due to non-volatile reload feature,always enable volatile
+	 * mirror writes before modifying any 00h~09h control register.
+	 * Current mode needs to be programmed according to what's detected
+	 * Otherwise default 100mA mode might cause VOUTL drop and fail
+	 * the system in case of dead battery.
+	 */
 	ret = smb137b_write_reg(smb137b_chg->client,
-					COMMAND_A_REG, COMMAND_A_REG_DEFAULT);
+					COMMAND_A_REG, cmd_val);
 	if (ret) {
 		dev_err(&smb137b_chg->client->dev,
 			"%s couldn't write to command_reg\n", __func__);
@@ -357,14 +362,6 @@ static int smb137b_start_charging(struct msm_hardware_charger *hw_chg,
 			"%s couldn't write to pin ctrl reg\n", __func__);
 		goto out;
 	}
-
-	ret = smb137b_write_reg(smb137b_chg->client, COMMAND_A_REG, cmd_val);
-	if (ret) {
-		dev_err(&smb137b_chg->client->dev,
-			"%s couldn't write to command_reg\n", __func__);
-		goto out;
-	}
-
 	smb137b_chg->charging = true;
 	smb137b_chg->batt_status = POWER_SUPPLY_STATUS_CHARGING;
 	smb137b_chg->batt_chg_type = POWER_SUPPLY_CHARGE_TYPE_TRICKLE;
@@ -405,8 +402,8 @@ static int smb137b_stop_charging(struct msm_hardware_charger *hw_chg)
 	smb137b_chg->batt_status = POWER_SUPPLY_STATUS_DISCHARGING;
 	smb137b_chg->batt_chg_type = POWER_SUPPLY_CHARGE_TYPE_NONE;
 
-	ret = smb137b_write_reg(smb137b_chg->client,
-					COMMAND_A_REG, COMMAND_A_REG_DEFAULT);
+	ret = smb137b_write_reg(smb137b_chg->client, COMMAND_A_REG,
+				smb137b_chg->cur_charging_mode);
 	if (ret) {
 		dev_err(&smb137b_chg->client->dev,
 			"%s couldn't write to command_reg\n", __func__);
@@ -692,19 +689,12 @@ static int __devinit smb137b_probe(struct i2c_client *client,
 		smb137b_chg->usb_status = SMB137B_PRESENT;
 	}
 
-	/* enable the writes to non-volatile mirrors */
-	ret = smb137b_write_reg(client, COMMAND_A_REG, COMMAND_A_REG_DEFAULT);
-
-	/* turn off charging */
-	ret = smb137b_write_reg(smb137b_chg->client,
-					PIN_CTRL_REG, PIN_CTRL_REG_CHG_OFF);
-
 	ret = smb137b_read_reg(smb137b_chg->client, DEV_ID_REG,
 			&smb137b_chg->dev_id_reg);
 
 	ret = device_create_file(&smb137b_chg->client->dev, &dev_attr_id_reg);
 
-	/*TODO read min_design and max_design from chip registers*/
+	/* TODO read min_design and max_design from chip registers */
 	smb137b_chg->min_design = 3200;
 	smb137b_chg->max_design = 4200;
 

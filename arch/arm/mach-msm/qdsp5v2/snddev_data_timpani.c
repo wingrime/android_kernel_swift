@@ -316,8 +316,8 @@ static struct snddev_icodec_data snddev_ihs_stereo_rx_data = {
 	.voltage_off = msm_snddev_hsed_voltage_off,
 	.max_voice_rx_vol[VOC_NB_INDEX] = -700,
 	.min_voice_rx_vol[VOC_NB_INDEX] = -2200,
-	.max_voice_rx_vol[VOC_WB_INDEX] = -300,
-	.min_voice_rx_vol[VOC_WB_INDEX] = -1800,
+	.max_voice_rx_vol[VOC_WB_INDEX] = -900,
+	.min_voice_rx_vol[VOC_WB_INDEX] = -2400,
 };
 
 static struct platform_device msm_headset_stereo_device = {
@@ -716,8 +716,8 @@ static struct snddev_icodec_data snddev_ihs_ffa_mono_rx_data = {
 	.pamp_off = msm_snddev_hsed_voltage_off,
 	.max_voice_rx_vol[VOC_NB_INDEX] = -700,
 	.min_voice_rx_vol[VOC_NB_INDEX] = -2200,
-	.max_voice_rx_vol[VOC_WB_INDEX] = -300,
-	.min_voice_rx_vol[VOC_WB_INDEX] = -1800,
+	.max_voice_rx_vol[VOC_WB_INDEX] = -900,
+	.min_voice_rx_vol[VOC_WB_INDEX] = -2400,
 	.property = SIDE_TONE_MASK,
 };
 
@@ -763,8 +763,8 @@ static struct snddev_icodec_data snddev_ihs_stereo_speaker_stereo_rx_data = {
 	.voltage_off = msm_snddev_hsed_voltage_off,
 	.max_voice_rx_vol[VOC_NB_INDEX] = -500,
 	.min_voice_rx_vol[VOC_NB_INDEX] = -2000,
-	.max_voice_rx_vol[VOC_WB_INDEX] = -300,
-	.min_voice_rx_vol[VOC_WB_INDEX] = -1800,
+	.max_voice_rx_vol[VOC_WB_INDEX] = -900,
+	.min_voice_rx_vol[VOC_WB_INDEX] = -2400,
 };
 
 static struct platform_device msm_ihs_stereo_speaker_stereo_rx_device = {

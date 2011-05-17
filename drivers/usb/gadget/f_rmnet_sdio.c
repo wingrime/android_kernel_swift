@@ -317,6 +317,7 @@ static void qmi_response_available(struct rmnet_dev *dev)
 	}
 }
 
+#define MAX_CTRL_PKT_SIZE	4096
 static void rmnet_ctl_receive_cb(void *data, int size, void *priv)
 {
 	struct rmnet_dev *dev = priv;
@@ -324,8 +325,14 @@ static void rmnet_ctl_receive_cb(void *data, int size, void *priv)
 	struct rmnet_sdio_qmi_buf *qmi_resp;
 	unsigned long flags;
 
-	if (!size)
+	if (!data || !size)
 		return;
+
+	if (size > MAX_CTRL_PKT_SIZE) {
+		ERROR(cdev, "ctrl pkt size:%d exceeds max pkt size:%d\n",
+				size, MAX_CTRL_PKT_SIZE);
+		return;
+	}
 
 	if (!atomic_read(&dev->online)) {
 		DBG(cdev, "USB disconnected\n");
@@ -399,6 +406,23 @@ unlock:
 	spin_unlock_irqrestore(&dev->lock, flags);
 }
 
+static void rmnet_response_complete(struct usb_ep *ep, struct usb_request *req)
+{
+	struct rmnet_dev *dev = req->context;
+	struct usb_composite_dev *cdev = dev->cdev;
+
+	switch (req->status) {
+	case -ECONNRESET:
+	case -ESHUTDOWN:
+	case 0:
+		return;
+	default:
+		INFO(cdev, "rmnet %s response error %d, %d/%d\n",
+			ep->name, req->status,
+			req->actual, req->length);
+	}
+}
+
 static void rmnet_command_complete(struct usb_ep *ep, struct usb_request *req)
 {
 	struct rmnet_dev *dev = req->context;
@@ -460,13 +484,29 @@ rmnet_setup(struct usb_function *f, const struct usb_ctrlrequest *ctrl)
 		if (w_value)
 			goto invalid;
 		else {
+			unsigned len;
+
 			spin_lock(&dev->lock);
+
+			if (list_empty(&dev->qmi_resp_q)) {
+				INFO(cdev, "qmi resp empty "
+					" req%02x.%02x v%04x i%04x l%d\n",
+					ctrl->bRequestType, ctrl->bRequest,
+					w_value, w_index, w_length);
+				spin_unlock(&dev->lock);
+				goto invalid;
+			}
+
 			resp = list_first_entry(&dev->qmi_resp_q,
 				struct rmnet_sdio_qmi_buf, list);
 			list_del(&resp->list);
 			spin_unlock(&dev->lock);
-			memcpy(req->buf, resp->buf, resp->len);
-			ret = resp->len;
+
+			len = min_t(unsigned, w_length, resp->len);
+			memcpy(req->buf, resp->buf, len);
+			ret = len;
+			req->context = dev;
+			req->complete = rmnet_response_complete;
 			rmnet_free_qmi(resp);
 
 			/* check if its the right place to add */
@@ -490,6 +530,8 @@ rmnet_setup(struct usb_function *f, const struct usb_ctrlrequest *ctrl)
 			dev->cbits_to_modem &= ~TIOCM_DTR;
 		queue_work(dev->wq, &dev->set_modem_ctl_bits_work);
 
+		ret = 0;
+
 		break;
 	default:
 
@@ -504,7 +546,7 @@ invalid:
 		VDBG(cdev, "rmnet req%02x.%02x v%04x i%04x l%d\n",
 			ctrl->bRequestType, ctrl->bRequest,
 			w_value, w_index, w_length);
-		req->zero = 0;
+		req->zero = (ret < w_length);
 		req->length = ret;
 		ret = usb_ep_queue(cdev->gadget->ep0, req, GFP_ATOMIC);
 		if (ret < 0)
@@ -550,7 +592,7 @@ static void rmnet_start_rx(struct rmnet_dev *dev)
 		list_del(&req->list);
 
 		spin_unlock_irqrestore(&dev->lock, flags);
-		status = rmnet_rx_submit(dev, req, GFP_KERNEL);
+		status = rmnet_rx_submit(dev, req, GFP_ATOMIC);
 		spin_lock_irqsave(&dev->lock, flags);
 
 		if (status) {

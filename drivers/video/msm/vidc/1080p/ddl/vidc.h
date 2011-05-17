@@ -508,8 +508,8 @@ void vidc_1080p_decode_frame_start_ch0(
 	struct vidc_1080p_dec_frame_start_param *param);
 void vidc_1080p_decode_frame_start_ch1(
 	struct vidc_1080p_dec_frame_start_param *param);
-void vidc_1080p_set_divx3_resolution_ch0(u32 width, u32 height);
-void vidc_1080p_set_divx3_resolution_ch1(u32 width, u32 height);
+void vidc_1080p_set_dec_resolution_ch0(u32 width, u32 height);
+void vidc_1080p_set_dec_resolution_ch1(u32 width, u32 height);
 void vidc_1080p_get_encode_frame_info(
 	struct vidc_1080p_enc_frame_info *frame_info);
 void vidc_1080p_encode_seq_start_ch0(

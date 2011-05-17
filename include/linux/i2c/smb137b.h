@@ -1,4 +1,4 @@
-/* Copyright (c) 2010, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2010-2011, Code Aurora Forum. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -43,10 +43,6 @@ struct smb137b_platform_data {
 	int (*chg_detection_config) (void);
 	int batt_mah_rating;
 };
-
-void smb137b_vbus_draw(unsigned int mA);
-int smb137b_register_vbus_sn(void (*callback)(int));
-void smb137b_unregister_vbus_sn(void (*callback)(int));
 
 void smb137b_otg_power(int on);
 

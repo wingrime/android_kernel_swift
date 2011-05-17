@@ -50,10 +50,10 @@ void ddl_vidc_core_init(struct ddl_context *ddl_context)
 		vidc_1080p_decode_frame_start_ch0;
 	ddl_context->vidc_decode_frame_start[1] =
 		vidc_1080p_decode_frame_start_ch1;
-	ddl_context->vidc_set_divx3_resolution[0] =
-		vidc_1080p_set_divx3_resolution_ch0;
-	ddl_context->vidc_set_divx3_resolution[1] =
-		vidc_1080p_set_divx3_resolution_ch1;
+	ddl_context->vidc_set_dec_resolution[0] =
+		vidc_1080p_set_dec_resolution_ch0;
+	ddl_context->vidc_set_dec_resolution[1] =
+		vidc_1080p_set_dec_resolution_ch1;
 	ddl_context->vidc_encode_seq_start[0] =
 		vidc_1080p_encode_seq_start_ch0;
 	ddl_context->vidc_encode_seq_start[1] =
@@ -207,12 +207,17 @@ void ddl_vidc_decode_init_codec(struct ddl_client_context *ddl)
 		DDL_ADDR_OFFSET(ddl_context->dram_base_a,
 		ddl->codec_data.decoder.meta_data_input));
 
-	if ((decoder->codec.codec == VCD_CODEC_DIVX_3))
-		ddl_context->vidc_set_divx3_resolution
+	vidc_sm_set_idr_decode_only(&ddl->shared_mem[ddl->command_channel],
+			decoder->idr_only_decoding);
+
+	if ((decoder->codec.codec == VCD_CODEC_DIVX_3) ||
+	   (decoder->codec.codec == VCD_CODEC_VC1_RCV ||
+		decoder->codec.codec == VCD_CODEC_VC1))
+		ddl_context->vidc_set_dec_resolution
 		[ddl->command_channel](decoder->client_frame_size.width,
 		decoder->client_frame_size.height);
 	else
-	ddl_context->vidc_set_divx3_resolution
+	ddl_context->vidc_set_dec_resolution
 	[ddl->command_channel](0x0, 0x0);
 	DDL_MSG_LOW("HEADER-PARSE-START");
 	DDL_MSG_LOW("ddl_state_transition: %s ~~>"

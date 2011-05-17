@@ -547,20 +547,20 @@ static void hci_cc_read_buffer_size(struct hci_dev *hdev, struct sk_buff *skb)
 	if (rp->status)
 		return;
 
-	hdev->acl_mtu  = __le16_to_cpu(rp->acl_mtu);
-	hdev->sco_mtu  = rp->sco_mtu;
-	hdev->acl_pkts = __le16_to_cpu(rp->acl_max_pkt);
-	hdev->sco_pkts = __le16_to_cpu(rp->sco_max_pkt);
+	if (hdev->flow_ctl_mode == HCI_PACKET_BASED_FLOW_CTL_MODE) {
+		hdev->acl_mtu  = __le16_to_cpu(rp->acl_mtu);
+		hdev->sco_mtu  = rp->sco_mtu;
+		hdev->acl_pkts = __le16_to_cpu(rp->acl_max_pkt);
+		hdev->sco_pkts = __le16_to_cpu(rp->sco_max_pkt);
+		hdev->acl_cnt = hdev->acl_pkts;
+		hdev->sco_cnt = hdev->sco_pkts;
+	}
 
 	if (test_bit(HCI_QUIRK_FIXUP_BUFFER_SIZE, &hdev->quirks)) {
 		hdev->sco_mtu  = 64;
 		hdev->sco_pkts = 8;
 	}
 
-	if (hdev->flow_ctl_mode == HCI_PACKET_BASED_FLOW_CTL_MODE) {
-		hdev->acl_cnt = hdev->acl_pkts;
-		hdev->sco_cnt = hdev->sco_pkts;
-	}
 
 	BT_DBG("%s acl mtu %d:%d sco mtu %d:%d", hdev->name,
 					hdev->acl_mtu, hdev->acl_pkts,
@@ -589,19 +589,19 @@ static void hci_cc_read_data_block_size(struct hci_dev *hdev,
 	if (rp->status)
 		return;
 
-	hdev->max_acl_len  = __le16_to_cpu(rp->max_acl_len);
-	hdev->data_block_len = __le16_to_cpu(rp->data_block_len);
-	hdev->num_blocks = __le16_to_cpu(rp->num_blocks);
-
 	if (hdev->flow_ctl_mode == HCI_BLOCK_BASED_FLOW_CTL_MODE) {
-		/* acl_cnt indicates the number of blocks */
-		hdev->acl_cnt = hdev->num_blocks;
+		hdev->acl_mtu  = __le16_to_cpu(rp->max_acl_len);
+		hdev->sco_mtu = 0;
+		hdev->data_block_len = __le16_to_cpu(rp->data_block_len);
+		/* acl_pkts indicates the number of blocks */
+		hdev->acl_pkts = __le16_to_cpu(rp->num_blocks);
+		hdev->sco_pkts = 0;
+		hdev->acl_cnt = hdev->acl_pkts;
 		hdev->sco_cnt = 0;
 	}
 
-	BT_DBG("%s max acl len %d, block len %d, num blocks %d", hdev->name,
-		hdev->max_acl_len, hdev->data_block_len, hdev->num_blocks);
-
+	BT_DBG("%s acl mtu %d:%d, data block len %d", hdev->name,
+			hdev->acl_mtu, hdev->acl_cnt, hdev->data_block_len);
 }
 
 static void hci_cc_read_local_amp_info(struct hci_dev *hdev,
@@ -1189,9 +1189,9 @@ static inline void hci_conn_request_evt(struct hci_dev *hdev, struct sk_buff *sk
 
 			cp.tx_bandwidth   = cpu_to_le32(0x00001f40);
 			cp.rx_bandwidth   = cpu_to_le32(0x00001f40);
-			cp.max_latency    = cpu_to_le16(0xffff);
+			cp.max_latency    = cpu_to_le16(0x000A);
 			cp.content_format = cpu_to_le16(hdev->voice_setting);
-			cp.retrans_effort = 0xff;
+			cp.retrans_effort = 0x01;
 
 			hci_send_cmd(hdev, HCI_OP_ACCEPT_SYNC_CONN_REQ,
 							sizeof(cp), &cp);
@@ -1762,8 +1762,8 @@ static inline void hci_num_comp_blocks_evt(struct hci_dev *hdev,
 
 			if (conn->type == ACL_LINK) {
 				hdev->acl_cnt += block_count;
-				if (hdev->acl_cnt > hdev->num_blocks)
-					hdev->acl_cnt = hdev->num_blocks;
+				if (hdev->acl_cnt > hdev->acl_pkts)
+					hdev->acl_cnt = hdev->acl_pkts;
 			} else {
 				/* We should not find ourselves here */
 				BT_DBG("Unexpected event for SCO connection");

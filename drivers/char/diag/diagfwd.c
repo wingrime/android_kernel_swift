@@ -77,6 +77,10 @@ do {									\
 
 int chk_config_get_id()
 {
+	/* For all Fusion targets, Modem will always be present */
+	if (machine_is_msm8x60_charm_surf() || machine_is_msm8x60_charm_ffa())
+		return 0;
+
 	switch (socinfo_get_id()) {
 	case APQ8060_MACHINE_ID:
 		return APQ8060_TOOLS_ID;

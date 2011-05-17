@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2010, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2009-2011, Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -47,6 +47,7 @@ static int rpc_clients_cb_thread(void *data)
 	struct msm_rpc_client_cb_item *cb_item;
 	struct msm_rpc_client *client;
 	struct rpc_request_hdr req;
+	int ret;
 
 	client = data;
 	for (;;) {
@@ -65,7 +66,9 @@ static int rpc_clients_cb_thread(void *data)
 			mutex_unlock(&client->cb_item_list_lock);
 			xdr_init_input(&client->cb_xdr, cb_item->buf,
 				       cb_item->size);
-			xdr_recv_req(&client->cb_xdr, &req);
+			ret = xdr_recv_req(&client->cb_xdr, &req);
+			if (ret)
+				goto bad_rpc;
 
 			if (req.type != 0)
 				goto bad_rpc;
@@ -107,6 +110,13 @@ static int rpc_clients_thread(void *data)
 		if (client->exit_flag) {
 			kfree(buffer);
 			break;
+		}
+
+		if (rc < 0) {
+			/* wakeup any pending requests */
+			wake_up(&client->reply_wait);
+			kfree(buffer);
+			continue;
 		}
 
 		if (rc < ((int)(sizeof(uint32_t) * 2))) {
@@ -189,6 +199,9 @@ static struct msm_rpc_client *msm_rpc_create_client(void)
 	client->cb_buf = NULL;
 	client->cb_size = 0;
 	client->exit_flag = 0;
+	client->cb_restart_teardown = NULL;
+	client->cb_restart_setup = NULL;
+	client->in_reset = 0;
 
 	init_completion(&client->complete);
 	init_completion(&client->cb_complete);
@@ -223,6 +236,50 @@ void msm_rpc_remove_all_cb_func(struct msm_rpc_client *client)
 	}
 	mutex_unlock(&client->cb_list_lock);
 }
+
+static void cb_restart_teardown(void *client_data)
+{
+	struct msm_rpc_client *client;
+
+	client = (struct msm_rpc_client *)client_data;
+	if (client) {
+		client->in_reset = 1;
+		msm_rpc_remove_all_cb_func(client);
+		client->xdr.out_index = 0;
+
+		if (client->cb_restart_teardown)
+			client->cb_restart_teardown(client);
+	}
+}
+
+static void cb_restart_setup(void *client_data)
+{
+	struct msm_rpc_client *client;
+
+	client = (struct msm_rpc_client *)client_data;
+
+	if (client) {
+		client->in_reset = 0;
+		if (client->cb_restart_setup)
+			client->cb_restart_setup(client);
+	}
+}
+
+/* Returns the reset state of the client.
+ *
+ * Return Value:
+ *	0 if client isn't in reset, >0 otherwise.
+ */
+int msm_rpc_client_in_reset(struct msm_rpc_client *client)
+{
+	int ret = 1;
+
+	if (client)
+		ret = client->in_reset;
+
+	return ret;
+}
+EXPORT_SYMBOL(msm_rpc_client_in_reset);
 
 /*
  * Interface to be used to register the client.
@@ -264,6 +321,10 @@ struct msm_rpc_client *msm_rpc_register_client(
 		msm_rpc_destroy_client(client);
 		return (struct msm_rpc_client *)ept;
 	}
+
+	ept->client_data = client;
+	ept->cb_restart_teardown = cb_restart_teardown;
+	ept->cb_restart_setup = cb_restart_setup;
 
 	client->prog = prog;
 	client->ver = ver;
@@ -351,6 +412,10 @@ struct msm_rpc_client *msm_rpc_register_client2(
 	client->cb_func2 = cb_func;
 	client->version = 2;
 
+	ept->client_data = client;
+	ept->cb_restart_teardown = cb_restart_teardown;
+	ept->cb_restart_setup = cb_restart_setup;
+
 	/* start the read thread */
 	client->read_thread = kthread_run(rpc_clients_thread, client,
 					  "k%sclntd", name);
@@ -382,6 +447,37 @@ struct msm_rpc_client *msm_rpc_register_client2(
 	return client;
 }
 EXPORT_SYMBOL(msm_rpc_register_client2);
+
+/*
+ * Register callbacks for modem state changes.
+ *
+ * Teardown is called when the modem is going into reset.
+ * Setup is called after the modem has come out of reset (but may not
+ * be available, yet).
+ *
+ * client: pointer to client data structure.
+ *
+ * Return Value:
+ *        0 (success)
+ *        1 (client pointer invalid)
+ */
+int msm_rpc_register_reset_callbacks(
+	struct msm_rpc_client *client,
+	void (*teardown)(struct msm_rpc_client *client),
+	void (*setup)(struct msm_rpc_client *client)
+	)
+{
+	int rc = 1;
+
+	if (client) {
+		client->cb_restart_teardown = teardown;
+		client->cb_restart_setup = setup;
+		rc = 0;
+	}
+
+	return rc;
+}
+EXPORT_SYMBOL(msm_rpc_register_reset_callbacks);
 
 /*
  * Interface to be used to unregister the client
@@ -484,7 +580,14 @@ int msm_rpc_client_req(struct msm_rpc_client *client, uint32_t proc,
 
 	do {
 		rc = wait_event_timeout(client->reply_wait,
-					xdr_read_avail(&client->xdr), timeout);
+			xdr_read_avail(&client->xdr) || client->in_reset,
+			timeout);
+
+		if (client->in_reset) {
+			rc = -ENETRESET;
+			goto release_locks;
+		}
+
 		if (rc == 0) {
 			pr_err("%s: request timeout\n", __func__);
 			rc = -ETIMEDOUT;
@@ -570,6 +673,11 @@ int msm_rpc_client_req2(struct msm_rpc_client *client, uint32_t proc,
 
 	mutex_lock(&client->req_lock);
 
+	if (client->in_reset) {
+		rc = -ENETRESET;
+		goto release_locks;
+	}
+
 	xdr_start_request(&client->xdr, client->prog, client->ver, proc);
 	req_xid = be32_to_cpu(*(uint32_t *)client->xdr.out_buf);
 	if (arg_func) {
@@ -592,7 +700,14 @@ int msm_rpc_client_req2(struct msm_rpc_client *client, uint32_t proc,
 
 	do {
 		rc = wait_event_timeout(client->reply_wait,
-					xdr_read_avail(&client->xdr), timeout);
+			xdr_read_avail(&client->xdr) || client->in_reset,
+			timeout);
+
+		if (client->in_reset) {
+			rc = -ENETRESET;
+			goto release_locks;
+		}
+
 		if (rc == 0) {
 			pr_err("%s: request timeout\n", __func__);
 			rc = -ETIMEDOUT;

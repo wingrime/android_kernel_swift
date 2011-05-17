@@ -1,7 +1,7 @@
 /** include/asm-arm/arch-msm/msm_rpcrouter.h
  *
  * Copyright (C) 2007 Google, Inc.
- * Copyright (c) 2007-2010, Code Aurora Forum. All rights reserved.
+ * Copyright (c) 2007-2011, Code Aurora Forum. All rights reserved.
  * Author: San Mehat <san@android.com>
  *
  * This software is licensed under the terms of the GNU General Public
@@ -261,6 +261,10 @@ struct msm_rpc_client {
 	struct completion cb_complete;
 
 	struct mutex req_lock;
+
+	void (*cb_restart_teardown)(struct msm_rpc_client *client);
+	void (*cb_restart_setup)(struct msm_rpc_client *client);
+	int in_reset;
 };
 
 struct msm_rpc_client_info {
@@ -269,6 +273,9 @@ struct msm_rpc_client_info {
 	uint32_t prog;
 	uint32_t vers;
 };
+
+
+int msm_rpc_client_in_reset(struct msm_rpc_client *client);
 
 struct msm_rpc_client *msm_rpc_register_client(
 	const char *name,
@@ -300,6 +307,12 @@ int msm_rpc_client_req2(struct msm_rpc_client *client, uint32_t proc,
 					   struct msm_rpc_xdr *, void *),
 			void *result_data,
 			long timeout);
+
+int msm_rpc_register_reset_callbacks(
+	struct msm_rpc_client *client,
+	void (*teardown)(struct msm_rpc_client *client),
+	void (*setup)(struct msm_rpc_client *client)
+	);
 
 void *msm_rpc_start_accepted_reply(struct msm_rpc_client *client,
 				   uint32_t xid, uint32_t accept_status);

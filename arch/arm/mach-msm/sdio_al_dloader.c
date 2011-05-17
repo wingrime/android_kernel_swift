@@ -37,7 +37,7 @@
 #include <linux/kthread.h>
 #include <linux/version.h>
 #include <linux/errno.h>
-#include <linux/syscalls.h>
+#include <linux/debugfs.h>
 
 /* DEFINES AND MACROS */
 #define MAX_NUM_DEVICES		1
@@ -66,6 +66,7 @@
 #define SLEEP_MS			10
 #define PRINTING_GAP			200
 #define TIMER_DURATION			10
+#define PUSH_TIMER_DURATION		5000
 #define MULTIPLE_RATIO			10
 #define MS_IN_SEC			1000
 #define BITS_IN_BYTE			8
@@ -75,10 +76,7 @@
 #define SDIO_DLD_BOOT_TEST_MODE_NAME	"SDIO DLD BOOT TEST MODE"
 #define SDIO_DLD_AMSS_TEST_MODE_NAME	"SDIO DLD AMSS TEST MODE"
 #define TEST_NAME_MAX_SIZE		30
-#define SDIO_DLD_OP_MODE_FILE_PATH	"/data/sdio_al_dbg/op_mode.txt"
-
 #define PUSH_STRING
-#define DLOADER_DBG
 
 /* FORWARD DECLARATIONS */
 static int sdio_dld_open(struct tty_struct *tty, struct file *file);
@@ -86,6 +84,13 @@ static void sdio_dld_close(struct tty_struct *tty, struct file *file);
 static int sdio_dld_write_callback(struct tty_struct *tty,
 				   const unsigned char *buf, int count);
 static int sdio_dld_main_task(void *card);
+static void sdio_dld_print_info(void);
+#ifdef CONFIG_DEBUG_FS
+static int sdio_dld_debug_info_open(struct inode *inode, struct file *file);
+static ssize_t sdio_dld_debug_info_write(struct file *file,
+		const char __user *buf, size_t count, loff_t *ppos);
+#endif
+
 
 /* STRUCTURES AND TYPES */
 enum sdio_dld_op_mode {
@@ -153,6 +158,18 @@ struct sdio_dld_task {
 	atomic_t please_close;
 };
 
+#ifdef CONFIG_DEBUG_FS
+struct sdio_dloader_debug {
+	struct dentry *sdio_dld_debug_root;
+	struct dentry *sdio_al_dloader;
+};
+
+const struct file_operations sdio_dld_debug_info_ops = {
+	.open = sdio_dld_debug_info_open,
+	.write = sdio_dld_debug_info_write,
+};
+#endif
+
 struct sdio_downloader {
 	int sdioc_boot_func;
 	struct sdio_dld_wait_event write_callback_event;
@@ -164,9 +181,10 @@ struct sdio_downloader {
 	int(*done_callback)(void);
 	struct sdio_dld_wait_event main_loop_event;
 	struct timer_list timer;
-	int poll_ms;
+	unsigned int poll_ms;
+	struct timer_list push_timer;
+	unsigned int push_timer_ms;
 	enum sdio_dld_op_mode op_mode;
-	atomic_t change_op_mode;
 	char op_mode_name[TEST_NAME_MAX_SIZE];
 };
 
@@ -180,6 +198,17 @@ struct sdio_dld_global_info {
 	u64 delta_jiffies;
 	unsigned int time_msec;
 	unsigned int throughput;
+	int cl_dl_wr_ptr;
+	int cl_dl_rd_ptr;
+	int cl_up_wr_ptr;
+	int cl_up_rd_ptr;
+	int host_read_ptr;
+	int host_write_ptr;
+	int cl_dl_buffer_size;
+	int cl_up_buffer_size;
+	int host_outgoing_buffer_size;
+	int cl_dl_buffer_address;
+	int cl_up_buffer_address;
 };
 
 static const struct tty_operations sdio_dloader_tty_ops = {
@@ -189,7 +218,7 @@ static const struct tty_operations sdio_dloader_tty_ops = {
 };
 
 /* GLOBAL VARIABLES */
-struct sdio_downloader sdio_dld;
+struct sdio_downloader *sdio_dld;
 struct sdio_dld_global_info sdio_dld_info;
 
 static DEFINE_SPINLOCK(lock1);
@@ -197,9 +226,16 @@ static unsigned long lock_flags1;
 static DEFINE_SPINLOCK(lock2);
 static unsigned long lock_flags2;
 
-#ifdef DLOADER_DBG
-#include <linux/debugfs.h>
-#include <linux/uaccess.h>
+/*
+ * sdio_op_mode sets the operation mode of the sdio_dloader -
+ * it may be in NORMAL_MODE, BOOT_TEST_MODE or AMSS_TEST_MODE
+ */
+static int sdio_op_mode = (int)SDIO_DLD_NORMAL_MODE;
+module_param(sdio_op_mode, int, 0);
+
+#ifdef CONFIG_DEBUG_FS
+
+struct sdio_dloader_debug sdio_dld_debug;
 
 #define ARR_SIZE 30000
 #define SDIO_DLD_DEBUGFS_INIT_VALUE	87654321
@@ -330,8 +366,9 @@ static void update_standard_fields(int index)
 
 static void update_gd(int code)
 {
-	struct sdioc_reg_chunk *reg_str = &sdio_dld.sdio_dloader_data.sdioc_reg;
-	struct sdio_data *outgoing = &sdio_dld.sdio_dloader_data.outgoing_data;
+	struct sdioc_reg_chunk *reg_str =
+					&sdio_dld->sdio_dloader_data.sdioc_reg;
+	struct sdio_data *outgoing = &sdio_dld->sdio_dloader_data.outgoing_data;
 	int index = curr_index%ARR_SIZE;
 
 	gd.curr_i = curr_index;
@@ -500,7 +537,7 @@ static int __init bootloader_debugfs_init(void)
 	/* /sys/kernel/debug/bootloader there will be dld_arr file */
 	root = debugfs_create_dir("bootloader", NULL);
 	if (!root) {
-		pr_info(MODULE_NAME ": %s - DLOADER_DBG - creating root dir "
+		pr_info(MODULE_NAME ": %s - creating root dir "
 			"failed\n", __func__);
 		return -ENODEV;
 	}
@@ -517,78 +554,175 @@ static int __init bootloader_debugfs_init(void)
 
 	return 0;
 }
-#endif /* DLOADER_DBG */
+
+/*
+* for triggering the sdio_dld info use:
+* echo 1 > /sys/kernel/debug/sdio_al_dld/sdio_al_dloader_info
+*/
+static int sdio_dld_debug_init(void)
+{
+	sdio_dld_debug.sdio_dld_debug_root =
+				debugfs_create_dir("sdio_al_dld", NULL);
+	if (!sdio_dld_debug.sdio_dld_debug_root) {
+		pr_err(MODULE_NAME ": %s - Failed to create folder. "
+		       "sdio_dld_debug_root is NULL",
+		       __func__);
+		return -ENOENT;
+	}
+
+	sdio_dld_debug.sdio_al_dloader = debugfs_create_file(
+					"sdio_al_dloader_info",
+					S_IRUGO | S_IWUGO,
+					sdio_dld_debug.sdio_dld_debug_root,
+					NULL,
+					&sdio_dld_debug_info_ops);
+
+	if (!sdio_dld_debug.sdio_al_dloader) {
+		pr_err(MODULE_NAME ": %s - Failed to create a file. "
+		       "sdio_al_dloader is NULL",
+		       __func__);
+		debugfs_remove(sdio_dld_debug.sdio_dld_debug_root);
+		sdio_dld_debug.sdio_dld_debug_root = NULL;
+		return -ENOENT;
+	}
+
+	return 0;
+}
+
+static int sdio_dld_debug_info_open(struct inode *inode, struct file *file)
+{
+	file->private_data = inode->i_private;
+	return 0;
+}
+
+static ssize_t sdio_dld_debug_info_write(struct file *file,
+		const char __user *buf, size_t count, loff_t *ppos)
+{
+	sdio_dld_print_info();
+	return count;
+}
+#endif /* CONFIG_DEBUG_FS */
+
+static void sdio_dld_print_info(void)
+{
+
+	sdio_dld_info.end_time = get_jiffies_64(); /* read the current time */
+	sdio_dld_info.delta_jiffies =
+		sdio_dld_info.end_time - sdio_dld_info.start_time;
+	sdio_dld_info.time_msec = jiffies_to_msecs(sdio_dld_info.delta_jiffies);
+
+	sdio_dld_info.throughput = sdio_dld_info.global_bytes_write_toio *
+		BITS_IN_BYTE / sdio_dld_info.time_msec;
+	sdio_dld_info.throughput /= MS_IN_SEC;
+
+	pr_info(MODULE_NAME ": %s, FLASHLESS BOOT - DURATION IN MSEC = %d\n",
+		__func__,
+		sdio_dld_info.time_msec);
+
+	pr_info(MODULE_NAME ": %s, FLASHLESS BOOT - BYTES WRITTEN ON SDIO BUS "
+			    "= %d...BYTES SENT BY TTY = %d",
+		__func__,
+	       sdio_dld_info.global_bytes_write_toio,
+	       sdio_dld_info.global_bytes_write_tty);
+
+	pr_info(MODULE_NAME ": %s, FLASHLESS BOOT - BYTES RECEIVED ON SDIO BUS "
+			    "= %d...BYTES SENT TO TTY = %d",
+		__func__,
+		sdio_dld_info.global_bytes_read_fromio,
+		sdio_dld_info.global_bytes_push_tty);
+
+	pr_info(MODULE_NAME ": %s, FLASHLESS BOOT - THROUGHPUT=%d Mbit/Sec",
+		__func__, sdio_dld_info.throughput);
+
+	pr_info(MODULE_NAME ": %s, FLASHLESS BOOT - CLIENT DL_BUFFER_SIZE=%d"
+		" KB..CLIENT UL_BUFFER=%d KB\n",
+		__func__,
+		sdio_dld_info.cl_dl_buffer_size/BYTES_IN_KB,
+		sdio_dld_info.cl_up_buffer_size/BYTES_IN_KB);
+
+	pr_info(MODULE_NAME ": %s, FLASHLESS BOOT - HOST OUTGOING BUFFER_SIZE"
+			    "=%d KB",
+		__func__,
+		sdio_dld_info.host_outgoing_buffer_size/BYTES_IN_KB);
+
+	pr_info(MODULE_NAME ": %s, FLASHLESS BOOT - CLIENT DL BUFFER "
+		 "ADDRESS = 0x%x", __func__,
+		sdio_dld_info.cl_dl_buffer_address);
+
+	pr_info(MODULE_NAME ": %s, FLASHLESS BOOT - CLIENT UP BUFFER "
+		"ADDRESS = 0x%x",
+		__func__,
+		sdio_dld_info.cl_up_buffer_address);
+
+	pr_info(MODULE_NAME ": %s, FLASHLESS BOOT - CLIENT - UPLINK BUFFER - "
+		"READ POINTER = %d", __func__,
+		sdio_dld_info.cl_up_rd_ptr);
+
+	pr_info(MODULE_NAME ": %s, FLASHLESS BOOT - CLIENT - UPLINK BUFFER - "
+		"WRITE POINTER = %d", __func__,
+		sdio_dld_info.cl_up_wr_ptr);
+
+	pr_info(MODULE_NAME ": %s, FLASHLESS BOOT - CLIENT - DOWNLINK BUFFER - "
+		"READ POINTER = %d", __func__,
+		sdio_dld_info.cl_dl_rd_ptr);
+
+	pr_info(MODULE_NAME ": %s, FLASHLESS BOOT - CLIENT - DOWNLINK BUFFER - "
+		"WRITE POINTER = %d", __func__,
+		sdio_dld_info.cl_dl_wr_ptr);
+
+	pr_info(MODULE_NAME ": %s, FLASHLESS BOOT - HOST - OUTGOING BUFFER - "
+		"READ POINTER = %d", __func__,
+		sdio_dld_info.host_read_ptr);
+
+	pr_info(MODULE_NAME ": %s, FLASHLESS BOOT - HOST - OUTGOING BUFFER - "
+		"WRITE POINTER = %d", __func__,
+		sdio_dld_info.host_write_ptr);
+
+	pr_info(MODULE_NAME ": %s, FLASHLESS BOOT - END DEBUG INFO", __func__);
+}
 
 /**
-  * sdio_dld_set_op_mode - sets the operation mode global
-  * variable
+  * sdio_dld_set_op_mode
+  * sets the op_mode and the name of the op_mode. Also, in case
+  * it's invalid mode sets op_mode to SDIO_DLD_NORMAL_MODE
   *
   * @op_mode: the operation mode to be set
-  * @return 0 on success or negative value on error.
+  * @return NONE
   */
-int sdio_dld_set_op_mode(enum sdio_dld_op_mode op_mode)
+static void sdio_dld_set_op_mode(enum sdio_dld_op_mode op_mode)
 {
-	int result = 0;
+	sdio_dld->op_mode = op_mode;
 
-	if (op_mode <= SDIO_DLD_NO_MODE ||
-	    op_mode > SDIO_DLD_NUM_OF_MODES) {
-		pr_err(MODULE_NAME ": %s - FLASHLESS BOOT - op_mode has "
-		       "invalid value = %d", __func__, op_mode);
-	    return -EINVAL;
-	}
-
-	if (atomic_read(&sdio_dld.change_op_mode) == 0) {
-		atomic_set(&sdio_dld.change_op_mode, 1);
-		sdio_dld.op_mode = op_mode;
-		atomic_set(&sdio_dld.change_op_mode, 0);
-	} else {
-		return -EAGAIN;
-	}
-
-	switch (sdio_dld.op_mode) {
+	switch (op_mode) {
 	case SDIO_DLD_NORMAL_MODE:
-		memcpy(sdio_dld.op_mode_name,
+		memcpy(sdio_dld->op_mode_name,
 		       SDIO_DLD_NORMAL_MODE_NAME, TEST_NAME_MAX_SIZE);
 		break;
 	case SDIO_DLD_BOOT_TEST_MODE:
-		memcpy(sdio_dld.op_mode_name,
+		memcpy(sdio_dld->op_mode_name,
 		       SDIO_DLD_BOOT_TEST_MODE_NAME, TEST_NAME_MAX_SIZE);
 		break;
 	case SDIO_DLD_AMSS_TEST_MODE:
-		memcpy(sdio_dld.op_mode_name,
+		memcpy(sdio_dld->op_mode_name,
 		       SDIO_DLD_AMSS_TEST_MODE_NAME, TEST_NAME_MAX_SIZE);
 		break;
 	default:
+		sdio_dld->op_mode = SDIO_DLD_NORMAL_MODE;
 		pr_err(MODULE_NAME ": %s - Invalid Op_Mode = %d. Settings "
 		       "Op_Mode to default - NORMAL_MODE\n",
-		       __func__, sdio_dld.op_mode);
-		memcpy(sdio_dld.op_mode_name,
+		       __func__, op_mode);
+		memcpy(sdio_dld->op_mode_name,
 		       SDIO_DLD_NORMAL_MODE_NAME, TEST_NAME_MAX_SIZE);
-		result = -EINVAL;
 		break;
 	}
 
-	if (sdio_dld.op_mode_name != NULL) {
+	if (sdio_dld->op_mode_name != NULL) {
 		pr_info(MODULE_NAME ": %s - FLASHLESS BOOT - Op_Mode is set to "
-			"%s\n", __func__, sdio_dld.op_mode_name);
+			"%s\n", __func__, sdio_dld->op_mode_name);
 	} else {
 		pr_info(MODULE_NAME ": %s - FLASHLESS BOOT - op_mode_name is "
 			"NULL\n", __func__);
 	}
-
-	return result;
-}
-
-/**
-  * sdio_dld_get_op_mode - gets the operation mode global
-  * variable
-  *
-  * @return the operation mode global variable.
-  *
-  */
-static enum sdio_dld_op_mode sdio_dld_get_op_mode(void)
-{
-	return sdio_dld.op_mode;
 }
 
 /**
@@ -600,10 +734,10 @@ static enum sdio_dld_op_mode sdio_dld_get_op_mode(void)
   */
 static int sdio_dld_allocate_local_buffers(void)
 {
-	struct sdioc_reg_chunk *reg_str = &sdio_dld.sdio_dloader_data.
+	struct sdioc_reg_chunk *reg_str = &sdio_dld->sdio_dloader_data.
 		sdioc_reg;
-	struct sdio_data *outgoing = &sdio_dld.sdio_dloader_data.outgoing_data;
-	struct sdio_data *incoming = &sdio_dld.sdio_dloader_data.incoming_data;
+	struct sdio_data *outgoing = &sdio_dld->sdio_dloader_data.outgoing_data;
+	struct sdio_data *incoming = &sdio_dld->sdio_dloader_data.incoming_data;
 
 	incoming->data =
 		kzalloc(reg_str->dl_buff_size.reg_val, GFP_KERNEL);
@@ -633,6 +767,9 @@ static int sdio_dld_allocate_local_buffers(void)
 	outgoing->buffer_size =
 		reg_str->ul_buff_size.reg_val*MULTIPLE_RATIO;
 
+	/* keep sdio_dld_info up to date */
+	sdio_dld_info.host_outgoing_buffer_size = outgoing->buffer_size;
+
 	return 0;
 }
 
@@ -644,8 +781,8 @@ static int sdio_dld_allocate_local_buffers(void)
   */
 static void sdio_dld_dealloc_local_buffers(void)
 {
-	kfree((void *)sdio_dld.sdio_dloader_data.incoming_data.data);
-	kfree((void *)sdio_dld.sdio_dloader_data.outgoing_data.data);
+	kfree((void *)sdio_dld->sdio_dloader_data.incoming_data.data);
+	kfree((void *)sdio_dld->sdio_dloader_data.outgoing_data.data);
 }
 
 /**
@@ -660,7 +797,7 @@ static void sdio_dld_dealloc_local_buffers(void)
 static int mailbox_to_seq_chunk_read_cfg(struct sdio_func *str_func)
 {
 	struct sdioc_reg_sequential_chunk_cfg seq_chunk;
-	struct sdioc_reg_chunk *reg = &sdio_dld.sdio_dloader_data.sdioc_reg;
+	struct sdioc_reg_chunk *reg = &sdio_dld->sdio_dloader_data.sdioc_reg;
 	int status = 0;
 
 	if (!str_func) {
@@ -689,6 +826,12 @@ static int mailbox_to_seq_chunk_read_cfg(struct sdio_func *str_func)
 	reg->dl_buff_size.reg_val = seq_chunk.dl_buff_size;
 	reg->ul_buff_size.reg_val = seq_chunk.ul_buff_size;
 
+	/* keep sdio_dld_info up to date */
+	sdio_dld_info.cl_dl_buffer_size = seq_chunk.dl_buff_size;
+	sdio_dld_info.cl_up_buffer_size = seq_chunk.ul_buff_size;
+	sdio_dld_info.cl_dl_buffer_address = seq_chunk.dl_buff_address;
+	sdio_dld_info.cl_up_buffer_address = seq_chunk.up_buff_address;
+
 	return status;
 }
 
@@ -704,10 +847,10 @@ static int mailbox_to_seq_chunk_read_cfg(struct sdio_func *str_func)
 static int mailbox_to_seq_chunk_read_ptrs(struct sdio_func *str_func)
 {
 	struct sdioc_reg_sequential_chunk_ptrs seq_chunk;
-	struct sdioc_reg_chunk *reg = &sdio_dld.sdio_dloader_data.sdioc_reg;
+	struct sdioc_reg_chunk *reg = &sdio_dld->sdio_dloader_data.sdioc_reg;
 	int status = 0;
 
-	struct sdio_data *outgoing = &sdio_dld.sdio_dloader_data.outgoing_data;
+	struct sdio_data *outgoing = &sdio_dld->sdio_dloader_data.outgoing_data;
 	static int counter = 1;
 	static int offset_write_p;
 	static int offset_read_p;
@@ -742,6 +885,13 @@ static int mailbox_to_seq_chunk_read_ptrs(struct sdio_func *str_func)
 	reg->up_rd_ptr.reg_val = seq_chunk.up_rd_ptr;
 	reg->up_wr_ptr.reg_val = seq_chunk.up_wr_ptr;
 
+	/* keeping sdio_dld_info up to date */
+	sdio_dld_info.cl_dl_rd_ptr = seq_chunk.dl_rd_ptr;
+	sdio_dld_info.cl_dl_wr_ptr = seq_chunk.dl_wr_ptr;
+	sdio_dld_info.cl_up_rd_ptr = seq_chunk.up_rd_ptr;
+	sdio_dld_info.cl_up_wr_ptr = seq_chunk.up_wr_ptr;
+
+
 	/* DEBUG - if there was a change in value */
 	if ((offset_write_p != outgoing->offset_write_p) ||
 	    (offset_read_p != outgoing->offset_read_p) ||
@@ -762,7 +912,7 @@ static int mailbox_to_seq_chunk_read_ptrs(struct sdio_func *str_func)
 			 reg->dl_wr_ptr.reg_val,
 			 reg->dl_rd_ptr.reg_val);
 
-#ifdef DLOADER_DBG
+#ifdef CONFIG_DEBUG_FS
 		update_gd(SDIO_DLD_DEBUGFS_CASE_1_CODE);
 #endif
 		/* update static variables */
@@ -869,34 +1019,38 @@ static int sdio_dld_allocate_buffers(struct sdio_func *str_func)
   */
 static int sdio_dld_create_thread(void)
 {
-	sdio_dld.dld_main_thread.task_name = SDIO_DL_MAIN_THREAD_NAME;
+	sdio_dld->dld_main_thread.task_name = SDIO_DL_MAIN_THREAD_NAME;
 
-	sdio_dld.dld_main_thread.dld_task =
+	sdio_dld->dld_main_thread.dld_task =
 		kthread_create(sdio_dld_main_task,
-			       (void *)(sdio_dld.card),
-			       sdio_dld.dld_main_thread.task_name);
+			       (void *)(sdio_dld->card),
+			       sdio_dld->dld_main_thread.task_name);
 
-	if (IS_ERR(sdio_dld.dld_main_thread.dld_task)) {
+	if (IS_ERR(sdio_dld->dld_main_thread.dld_task)) {
 		pr_err(MODULE_NAME ": %s - kthread_create() failed\n",
 			__func__);
 		return -ENOMEM;
 	}
-	wake_up_process(sdio_dld.dld_main_thread.dld_task);
+	wake_up_process(sdio_dld->dld_main_thread.dld_task);
 	return 0;
 }
 
-
 /**
-  * start_timer - sets the timer and starts.
+  * start_timer
+  * sets the timer and starts.
   *
+  * @timer: the timer to configure and add
+  * @ms: the ms until it expires
   * @return None.
   */
-static void start_timer(void)
+static void start_timer(struct timer_list *timer, unsigned int ms)
 {
-	if (sdio_dld.poll_ms) {
-		sdio_dld.timer.expires = jiffies +
-			msecs_to_jiffies(sdio_dld.poll_ms);
-		add_timer(&sdio_dld.timer);
+	if ((ms == 0) || (timer == NULL)) {
+		pr_err(MODULE_NAME ": %s - invalid parameter", __func__);
+	} else {
+		timer->expires = jiffies +
+			msecs_to_jiffies(ms);
+		add_timer(timer);
 	}
 }
 
@@ -914,18 +1068,31 @@ static void sdio_dld_timer_handler(unsigned long data)
 {
 	pr_debug(MODULE_NAME " Timer Expired\n");
 	spin_lock_irqsave(&lock2, lock_flags2);
-	if (sdio_dld.main_loop_event.wake_up_signal == 0) {
-		sdio_dld.main_loop_event.wake_up_signal = 1;
-		wake_up(&sdio_dld.main_loop_event.wait_event);
+	if (sdio_dld->main_loop_event.wake_up_signal == 0) {
+		sdio_dld->main_loop_event.wake_up_signal = 1;
+		wake_up(&sdio_dld->main_loop_event.wait_event);
 	}
 	spin_unlock_irqrestore(&lock2, lock_flags2);
 
-	sdio_dld.write_callback_event.wake_up_signal = 1;
-	wake_up(&sdio_dld.write_callback_event.wait_event);
+	sdio_dld->write_callback_event.wake_up_signal = 1;
+	wake_up(&sdio_dld->write_callback_event.wait_event);
 
-	start_timer();
+	start_timer(&sdio_dld->timer, sdio_dld->poll_ms);
 }
 
+/**
+  * sdio_dld_push_timer_handler
+  * this is a timer handler of the push_timer.
+  *
+  * @data: a pointer to the tty device driver structure.
+  * @return None.
+  */
+static void sdio_dld_push_timer_handler(unsigned long data)
+{
+	pr_err(MODULE_NAME " %s - Push Timer Expired... Trying to "
+		"push data to TTY Core for over then %d ms.\n",
+		__func__, sdio_dld->push_timer_ms);
+}
 
 /**
   * sdio_dld_open
@@ -941,8 +1108,8 @@ static int sdio_dld_open(struct tty_struct *tty, struct file *file)
 {
 	int status = 0;
 	int func_in_array =
-		REAL_FUNC_TO_FUNC_IN_ARRAY(sdio_dld.sdioc_boot_func);
-	struct sdio_func *str_func = sdio_dld.card->sdio_func[func_in_array];
+		REAL_FUNC_TO_FUNC_IN_ARRAY(sdio_dld->sdioc_boot_func);
+	struct sdio_func *str_func = sdio_dld->card->sdio_func[func_in_array];
 
 	pr_info(MODULE_NAME ": %s, TTY DEVICE FOR FLASHLESS BOOT OPENED\n",
 	       __func__);
@@ -960,8 +1127,8 @@ static int sdio_dld_open(struct tty_struct *tty, struct file *file)
 		return -EINVAL;
 	}
 
-	atomic_set(&sdio_dld.dld_main_thread.please_close, 0);
-	sdio_dld.dld_main_thread.exit_wait.wake_up_signal = 0;
+	atomic_set(&sdio_dld->dld_main_thread.please_close, 0);
+	sdio_dld->dld_main_thread.exit_wait.wake_up_signal = 0;
 
 	status = sdio_dld_allocate_buffers(str_func);
 	if (status) {
@@ -981,19 +1148,24 @@ static int sdio_dld_open(struct tty_struct *tty, struct file *file)
 	}
 
 	/* init waiting event of the write callback */
-	init_waitqueue_head(&sdio_dld.write_callback_event.wait_event);
+	init_waitqueue_head(&sdio_dld->write_callback_event.wait_event);
 
 	/* init waiting event of the main loop */
-	init_waitqueue_head(&sdio_dld.main_loop_event.wait_event);
+	init_waitqueue_head(&sdio_dld->main_loop_event.wait_event);
 
 	/* configure and init the timer */
-	sdio_dld.poll_ms = TIMER_DURATION;
-	init_timer(&sdio_dld.timer);
-	sdio_dld.timer.data = (unsigned long) &sdio_dld;
-	sdio_dld.timer.function = sdio_dld_timer_handler;
-	sdio_dld.timer.expires = jiffies +
-		msecs_to_jiffies(sdio_dld.poll_ms);
-	add_timer(&sdio_dld.timer);
+	sdio_dld->poll_ms = TIMER_DURATION;
+	init_timer(&sdio_dld->timer);
+	sdio_dld->timer.data = (unsigned long) sdio_dld;
+	sdio_dld->timer.function = sdio_dld_timer_handler;
+	sdio_dld->timer.expires = jiffies +
+		msecs_to_jiffies(sdio_dld->poll_ms);
+	add_timer(&sdio_dld->timer);
+
+	sdio_dld->push_timer_ms = PUSH_TIMER_DURATION;
+	init_timer(&sdio_dld->push_timer);
+	sdio_dld->push_timer.data = (unsigned long) sdio_dld;
+	sdio_dld->push_timer.function = sdio_dld_push_timer_handler;
 
 	return 0;
 }
@@ -1012,91 +1184,41 @@ static int sdio_dld_open(struct tty_struct *tty, struct file *file)
 static void sdio_dld_close(struct tty_struct *tty, struct file *file)
 {
 	int status = 0;
-	struct sdioc_reg_chunk *reg = &sdio_dld.sdio_dloader_data.sdioc_reg;
+	struct sdioc_reg_chunk *reg = &sdio_dld->sdio_dloader_data.sdioc_reg;
 
 	/* informing the SDIOC that it can exit boot phase */
-	sdio_dld.sdio_dloader_data.sdioc_reg.good_to_exit_ptr.reg_val =
+	sdio_dld->sdio_dloader_data.sdioc_reg.good_to_exit_ptr.reg_val =
 		SDIOC_EXIT_CODE;
 
-	atomic_set(&sdio_dld.dld_main_thread.please_close, 1);
+	atomic_set(&sdio_dld->dld_main_thread.please_close, 1);
 
 	pr_debug(MODULE_NAME ": %s - CLOSING - WAITING...", __func__);
 
-	wait_event(sdio_dld.dld_main_thread.exit_wait.wait_event,
-		   sdio_dld.dld_main_thread.exit_wait.wake_up_signal);
+	wait_event(sdio_dld->dld_main_thread.exit_wait.wait_event,
+		   sdio_dld->dld_main_thread.exit_wait.wake_up_signal);
 	pr_debug(MODULE_NAME ": %s - CLOSING - WOKE UP...", __func__);
 
-	del_timer_sync(&sdio_dld.timer);
+	del_timer_sync(&sdio_dld->timer);
+	del_timer_sync(&sdio_dld->push_timer);
 
 	sdio_dld_dealloc_local_buffers();
 
-	tty_unregister_device(sdio_dld.tty_drv, 0);
+	tty_unregister_device(sdio_dld->tty_drv, 0);
 
-	status = tty_unregister_driver(sdio_dld.tty_drv);
+	status = tty_unregister_driver(sdio_dld->tty_drv);
 
 	if (status) {
 		pr_err(MODULE_NAME ": %s - tty_unregister_driver() failed\n",
 		       __func__);
 	}
 
-	sdio_dld_info.end_time = get_jiffies_64(); /* read the current time */
-	sdio_dld_info.delta_jiffies =
-		sdio_dld_info.end_time - sdio_dld_info.start_time;
-	sdio_dld_info.time_msec = jiffies_to_msecs(sdio_dld_info.delta_jiffies);
-
-	sdio_dld_info.throughput = sdio_dld_info.global_bytes_write_toio *
-		BITS_IN_BYTE / sdio_dld_info.time_msec;
-	sdio_dld_info.throughput /= MS_IN_SEC;
-
-	pr_info(MODULE_NAME ": %s, FLASHLESS BOOT - DURATION IN MSEC = %d\n",
-		__func__,
-		sdio_dld_info.time_msec);
-
-	pr_info(MODULE_NAME ": %s, FLASHLESS BOOT - BYTES WRITTEN ON SDIO BUS "
-			    "= %d...BYTES SENT BY TTY = %d",
-		__func__,
-	       sdio_dld_info.global_bytes_write_toio,
-	       sdio_dld_info.global_bytes_write_tty);
-
-	pr_info(MODULE_NAME ": %s, FLASHLESS BOOT - BYTES RECEIVED ON SDIO BUS "
-			    "= %d...BYTES SENT TO TTY = %d",
-		__func__,
-		sdio_dld_info.global_bytes_read_fromio,
-		sdio_dld_info.global_bytes_push_tty);
-
-	pr_info(MODULE_NAME ": %s, FLASHLESS BOOT - THROUGHPUT=%d Mbit/Sec",
-		__func__,
-	       sdio_dld_info.throughput);
-
-	pr_debug(MODULE_NAME ": %s, FLASHLESS BOOT - CLIENT DL_BUFFER_SIZE=%d"
-		" KB..CLIENT UL_BUFFER=%d KB\n",
-		__func__,
-		reg->dl_buff_size.reg_val/BYTES_IN_KB,
-		reg->ul_buff_size.reg_val/BYTES_IN_KB);
-
-	pr_debug(MODULE_NAME ": %s, FLASHLESS BOOT - HOST OUTGOING BUFFER=%d "
-		 "KB",
-		 __func__,
-		 sdio_dld.sdio_dloader_data.
-		 outgoing_data.buffer_size/BYTES_IN_KB);
-
-	pr_debug(MODULE_NAME ": %s, FLASHLESS BOOT - CLIENT DL BUFFER "
-		 "ADDRESS = 0x%x",
-		 __func__,
-		 reg->dl_buff_address.reg_val);
-
-	pr_debug(MODULE_NAME ": %s, FLASHLESS BOOT - CLIENT UP BUFFER "
-		 "ADDRESS = 0x%x",
-		 __func__,
-		 reg->up_buff_address.reg_val);
-
-#ifdef DLOADER_DBG
+#ifdef CONFIG_DEBUG_FS
 	gd.curr_i = curr_index;
 	gd.duration_ms = sdio_dld_info.time_msec;
 	gd.global_bytes_sent = sdio_dld_info.global_bytes_write_toio;
 	gd.global_bytes_received = 0;
 	gd.throughput_Mbs = sdio_dld_info.throughput;
-	gd.host_outgoing_buffer_size_KB = sdio_dld.sdio_dloader_data.
+	gd.host_outgoing_buffer_size_KB = sdio_dld->sdio_dloader_data.
 		outgoing_data.buffer_size/BYTES_IN_KB;
 	gd.client_up_buffer_size_KB = reg->ul_buff_size.reg_val/BYTES_IN_KB;
 	gd.client_dl_buffer_size_KB = reg->dl_buff_size.reg_val/BYTES_IN_KB;
@@ -1106,8 +1228,42 @@ static void sdio_dld_close(struct tty_struct *tty, struct file *file)
 	gd.global_bytes_pushed = sdio_dld_info.global_bytes_push_tty;
 #endif
 
-	if (sdio_dld.done_callback)
-		sdio_dld.done_callback();
+	/* saving register values before deallocating sdio_dld
+	   in order to use it in sdio_dld_print_info() through shell command */
+	sdio_dld_info.cl_dl_rd_ptr = reg->dl_rd_ptr.reg_val;
+	sdio_dld_info.cl_dl_wr_ptr = reg->dl_wr_ptr.reg_val;
+	sdio_dld_info.cl_up_rd_ptr = reg->up_rd_ptr.reg_val;
+	sdio_dld_info.cl_up_wr_ptr = reg->up_wr_ptr.reg_val;
+
+	sdio_dld_info.host_read_ptr =
+		sdio_dld->sdio_dloader_data.outgoing_data.offset_read_p;
+
+	sdio_dld_info.host_write_ptr =
+		sdio_dld->sdio_dloader_data.outgoing_data.offset_write_p;
+
+	sdio_dld_info.cl_dl_buffer_size =
+		sdio_dld->sdio_dloader_data.sdioc_reg.dl_buff_size.reg_val;
+
+	sdio_dld_info.cl_up_buffer_size =
+		sdio_dld->sdio_dloader_data.sdioc_reg.ul_buff_size.reg_val;
+
+	sdio_dld_info.host_outgoing_buffer_size =
+		sdio_dld->sdio_dloader_data.outgoing_data.buffer_size;
+
+	sdio_dld_info.cl_dl_buffer_address =
+		sdio_dld->sdio_dloader_data.sdioc_reg.dl_buff_address.reg_val;
+
+	sdio_dld_info.cl_up_buffer_address =
+		sdio_dld->sdio_dloader_data.sdioc_reg.up_buff_address.reg_val;
+
+	sdio_dld_print_info();
+
+	if (sdio_dld->done_callback)
+		sdio_dld->done_callback();
+
+	pr_info(MODULE_NAME ": %s - Freeing sdio_dld data structure, and "
+		" returning...", __func__);
+	kfree(sdio_dld);
 }
 
 /**
@@ -1277,7 +1433,7 @@ static int sdioc_bytes_free_in_buffer(int write_ptr,
 static int sdio_dld_write_callback(struct tty_struct *tty,
 				   const unsigned char *buf, int count)
 {
-	struct sdio_data *outgoing = &sdio_dld.sdio_dloader_data.outgoing_data;
+	struct sdio_data *outgoing = &sdio_dld->sdio_dloader_data.outgoing_data;
 	int dst_free_bytes = 0;
 	int dummy = 0;
 	int status = 0;
@@ -1286,7 +1442,7 @@ static int sdio_dld_write_callback(struct tty_struct *tty,
 	static int write_retry;
 	int pending_to_write = count;
 
-#ifdef DLOADER_DBG
+#ifdef CONFIG_DEBUG_FS
 	debugfs_glob.global_count = count;
 	update_gd(SDIO_DLD_DEBUGFS_CASE_5_CODE);
 #endif
@@ -1358,16 +1514,22 @@ static int sdio_dld_write_callback(struct tty_struct *tty,
 						    outgoing->buffer_size,
 						    outgoing->offset_read_p,
 						    bytes_to_write);
-#ifdef DLOADER_DBG
+
+			/* keeping sdio_dld_info up to date */
+			sdio_dld_info.host_write_ptr =
+				sdio_dld->sdio_dloader_data.
+					    outgoing_data.offset_write_p;
+
+#ifdef CONFIG_DEBUG_FS
 			debugfs_glob.global_write_tty = bytes_written;
 			update_gd(SDIO_DLD_DEBUGFS_CASE_3_CODE);
 #endif
 			sdio_dld_info.global_bytes_write_tty += bytes_written;
 
 			spin_lock_irqsave(&lock2, lock_flags2);
-			if (sdio_dld.main_loop_event.wake_up_signal == 0) {
-				sdio_dld.main_loop_event.wake_up_signal = 1;
-				wake_up(&sdio_dld.main_loop_event.wait_event);
+			if (sdio_dld->main_loop_event.wake_up_signal == 0) {
+				sdio_dld->main_loop_event.wake_up_signal = 1;
+				wake_up(&sdio_dld->main_loop_event.wait_event);
 			}
 			spin_unlock_irqrestore(&lock2, lock_flags2);
 
@@ -1407,18 +1569,18 @@ static int sdio_dld_write_callback(struct tty_struct *tty,
 				 write_retry);
 
 			spin_lock_irqsave(&lock1, lock_flags1);
-			sdio_dld.write_callback_event.wake_up_signal = 0;
+			sdio_dld->write_callback_event.wake_up_signal = 0;
 			spin_unlock_irqrestore(&lock1, lock_flags1);
 
 			pr_debug(MODULE_NAME ": %s - WRITE CALLBACK - "
 					     "WAITING...", __func__);
-#ifdef DLOADER_DBG
+#ifdef CONFIG_DEBUG_FS
 			update_gd(SDIO_DLD_DEBUGFS_CASE_8_CODE);
 #endif
-			wait_event(sdio_dld.write_callback_event.wait_event,
-				   sdio_dld.write_callback_event.
+			wait_event(sdio_dld->write_callback_event.wait_event,
+				   sdio_dld->write_callback_event.
 				   wake_up_signal);
-#ifdef DLOADER_DBG
+#ifdef CONFIG_DEBUG_FS
 			update_gd(SDIO_DLD_DEBUGFS_CASE_9_CODE);
 #endif
 			pr_debug(MODULE_NAME ": %s - WRITE CALLBACK - "
@@ -1439,7 +1601,7 @@ static int sdio_dld_write_callback(struct tty_struct *tty,
 		       __func__, write_retry);
 	}
 
-#ifdef DLOADER_DBG
+#ifdef CONFIG_DEBUG_FS
 	debugfs_glob.global_bytes_cb_tty = total_written;
 	update_gd(SDIO_DLD_DEBUGFS_CASE_10_CODE);
 #endif
@@ -1471,7 +1633,7 @@ static int sdio_memcpy_fromio_wrapper(struct sdio_func *str_func,
 {
 	int status = 0;
 	struct sdioc_reg_chunk *reg_str =
-		&sdio_dld.sdio_dloader_data.sdioc_reg;
+		&sdio_dld->sdio_dloader_data.sdioc_reg;
 
 	if (!str_func) {
 		pr_err(MODULE_NAME ": %s - param ""str_func"" is NULL.\n",
@@ -1514,6 +1676,8 @@ static int sdio_memcpy_fromio_wrapper(struct sdio_func *str_func,
 	reg_str->dl_rd_ptr.reg_val =
 		(reg_str->dl_rd_ptr.reg_val + size_to_read) %
 		client_buffer_size;
+	/* keeping sdio_dld_info up to date */
+	sdio_dld_info.cl_dl_rd_ptr = reg_str->dl_rd_ptr.reg_val;
 
 	status = sdio_memcpy_toio(str_func,
 				  reg_str->dl_rd_ptr.reg_offset,
@@ -1550,8 +1714,8 @@ static int sdio_memcpy_toio_wrapper(struct sdio_func *str_func,
 {
 	int status = 0;
 	struct sdioc_reg_chunk *reg_str =
-		&sdio_dld.sdio_dloader_data.sdioc_reg;
-	struct sdio_data *outgoing = &sdio_dld.sdio_dloader_data.outgoing_data;
+		&sdio_dld->sdio_dloader_data.sdioc_reg;
+	struct sdio_data *outgoing = &sdio_dld->sdio_dloader_data.outgoing_data;
 
 	if (!str_func) {
 		pr_err(MODULE_NAME ": %s - param ""str_func"" is NULL.\n",
@@ -1598,11 +1762,17 @@ static int sdio_memcpy_toio_wrapper(struct sdio_func *str_func,
 		((reg_str->up_wr_ptr.reg_val + bytes_to_write) %
 		 reg_str->ul_buff_size.reg_val);
 
+	/* keeping sdio_dld_info up to date */
+	sdio_dld_info.cl_up_wr_ptr = reg_str->up_wr_ptr.reg_val;
+
 	outgoing->offset_read_p =
 		((outgoing->offset_read_p + bytes_to_write) %
 		  outgoing->buffer_size);
 
-#ifdef DLOADER_DBG
+	/* keeping sdio_dld_info up to date*/
+	sdio_dld_info.host_read_ptr = outgoing->offset_read_p;
+
+#ifdef CONFIG_DEBUG_FS
 	debugfs_glob.global_write_toio = bytes_to_write;
 	update_gd(SDIO_DLD_DEBUGFS_CASE_4_CODE);
 #endif
@@ -1640,7 +1810,7 @@ static int sdio_dld_read(unsigned int client_rd_ptr,
 			 int *bytes_read)
 {
 	int status = 0;
-	struct sdio_data *incoming = &sdio_dld.sdio_dloader_data.incoming_data;
+	struct sdio_data *incoming = &sdio_dld->sdio_dloader_data.incoming_data;
 
 	if (!reg_str) {
 		pr_err(MODULE_NAME ": %s - param ""reg_str"" is NULL.\n",
@@ -1682,7 +1852,7 @@ static int sdio_dld_read(unsigned int client_rd_ptr,
 		incoming->num_of_bytes_in_use += client_wr_ptr - client_rd_ptr;
 		*bytes_read = client_wr_ptr - client_rd_ptr;
 
-#ifdef DLOADER_DBG
+#ifdef CONFIG_DEBUG_FS
 			debugfs_glob.global_to_read =
 				client_wr_ptr - client_rd_ptr;
 			update_gd(SDIO_DLD_DEBUGFS_CASE_11_CODE);
@@ -1715,7 +1885,7 @@ static int sdio_dld_read(unsigned int client_rd_ptr,
 		incoming->num_of_bytes_in_use += tail_size;
 		*bytes_read = tail_size;
 
-#ifdef DLOADER_DBG
+#ifdef CONFIG_DEBUG_FS
 			debugfs_glob.global_to_read = tail_size;
 			update_gd(SDIO_DLD_DEBUGFS_CASE_11_CODE);
 #endif
@@ -1741,7 +1911,7 @@ static int sdio_dld_read(unsigned int client_rd_ptr,
 		incoming->num_of_bytes_in_use += client_wr_ptr;
 		*bytes_read += client_wr_ptr;
 
-#ifdef DLOADER_DBG
+#ifdef CONFIG_DEBUG_FS
 			debugfs_glob.global_to_read = client_wr_ptr;
 			update_gd(SDIO_DLD_DEBUGFS_CASE_11_CODE);
 #endif
@@ -1761,15 +1931,18 @@ static int sdio_dld_read(unsigned int client_rd_ptr,
 static int sdio_dld_main_task(void *card)
 {
 	int status = 0;
-	struct tty_struct *tty = sdio_dld.tty_str;
+	struct tty_struct *tty = sdio_dld->tty_str;
 	struct sdioc_reg_chunk *reg_str =
-		&sdio_dld.sdio_dloader_data.sdioc_reg;
-	int func = sdio_dld.sdioc_boot_func;
+		&sdio_dld->sdio_dloader_data.sdioc_reg;
+	int func = sdio_dld->sdioc_boot_func;
 	struct sdio_func *str_func = NULL;
-	struct sdio_data *outgoing = &sdio_dld.sdio_dloader_data.outgoing_data;
-	struct sdio_data *incoming = &sdio_dld.sdio_dloader_data.incoming_data;
-	struct sdio_dld_task *task = &sdio_dld.dld_main_thread;
+	struct sdio_data *outgoing = &sdio_dld->sdio_dloader_data.outgoing_data;
+	struct sdio_data *incoming = &sdio_dld->sdio_dloader_data.incoming_data;
+	struct sdio_dld_task *task = &sdio_dld->dld_main_thread;
 	int retries = 0;
+#ifdef PUSH_STRING
+	int bytes_pushed = 0;
+#endif
 
 	msleep(SLEEP_MS);
 
@@ -1905,17 +2078,17 @@ static int sdio_dld_main_task(void *card)
 				break;
 
 			spin_lock_irqsave(&lock2, lock_flags2);
-			sdio_dld.main_loop_event.wake_up_signal = 0;
+			sdio_dld->main_loop_event.wake_up_signal = 0;
 			spin_unlock_irqrestore(&lock2, lock_flags2);
 
 			pr_debug(MODULE_NAME ": %s - MAIN LOOP - WAITING...\n",
 				 __func__);
-#ifdef DLOADER_DBG
+#ifdef CONFIG_DEBUG_FS
 			update_gd(SDIO_DLD_DEBUGFS_CASE_6_CODE);
 #endif
-			wait_event(sdio_dld.main_loop_event.wait_event,
-				   sdio_dld.main_loop_event.wake_up_signal);
-#ifdef DLOADER_DBG
+			wait_event(sdio_dld->main_loop_event.wait_event,
+				   sdio_dld->main_loop_event.wake_up_signal);
+#ifdef CONFIG_DEBUG_FS
 			update_gd(SDIO_DLD_DEBUGFS_CASE_7_CODE);
 #endif
 
@@ -1928,7 +2101,6 @@ static int sdio_dld_main_task(void *card)
 		if (need_to_read) {
 #ifdef PUSH_STRING
 			int num_push = 0;
-			int total_push = 0;
 			int left = 0;
 			int bytes_read;
 #else
@@ -1951,19 +2123,26 @@ static int sdio_dld_main_task(void *card)
 
 			sdio_dld_info.global_bytes_read_fromio +=
 				bytes_read;
+
+			bytes_pushed = 0;
 #ifdef PUSH_STRING
 			left = incoming->num_of_bytes_in_use;
+			start_timer(&sdio_dld->push_timer,
+				    sdio_dld->push_timer_ms);
 			do {
 				num_push = tty_insert_flip_string(
 					tty,
-					incoming->data+total_push,
+					incoming->data+bytes_pushed,
 					left);
-				total_push += num_push;
+
+				bytes_pushed += num_push;
 				left -= num_push;
 				tty_flip_buffer_push(tty);
 			} while (left != 0);
 
-			if (total_push != incoming->num_of_bytes_in_use) {
+			del_timer(&sdio_dld->push_timer);
+
+			if (bytes_pushed != incoming->num_of_bytes_in_use) {
 				pr_err(MODULE_NAME ": %s - failed\n",
 				       __func__);
 			}
@@ -1983,7 +2162,7 @@ static int sdio_dld_main_task(void *card)
 #endif /*PUSH_STRING*/
 			sdio_dld_info.global_bytes_push_tty +=
 				incoming->num_of_bytes_in_use;
-#ifdef DLOADER_DBG
+#ifdef CONFIG_DEBUG_FS
 			debugfs_glob.global_push_to_tty = bytes_read;
 			update_gd(SDIO_DLD_DEBUGFS_CASE_12_CODE);
 #endif
@@ -2025,7 +2204,7 @@ static int sdio_dld_main_task(void *card)
 				}
 				retries = 0;
 
-#ifdef DLOADER_DBG
+#ifdef CONFIG_DEBUG_FS
 				debugfs_glob.global_8k_has = h_bytes_rdy_wr;
 				debugfs_glob.global_9k_has = c_bytes_rdy_rcve;
 				debugfs_glob.global_min = bytes_to_write;
@@ -2076,11 +2255,11 @@ static int sdio_dld_main_task(void *card)
 				sdio_release_host(str_func);
 
 				spin_lock_irqsave(&lock1, lock_flags1);
-				if (sdio_dld.write_callback_event.
+				if (sdio_dld->write_callback_event.
 				    wake_up_signal == 0) {
-					sdio_dld.write_callback_event.
+					sdio_dld->write_callback_event.
 						wake_up_signal = 1;
-					wake_up(&sdio_dld.
+					wake_up(&sdio_dld->
 						write_callback_event.
 						wait_event);
 				}
@@ -2135,33 +2314,40 @@ static int sdio_dld_init_global(struct mmc_card *card,
 		return -EINVAL;
 	}
 
-	sdio_dld.done_callback = done;
-	sdio_dld.card = card;
-	init_waitqueue_head(&sdio_dld.dld_main_thread.exit_wait.wait_event);
-	sdio_dld.write_callback_event.wake_up_signal = 1;
-	sdio_dld.main_loop_event.wake_up_signal = 1;
+	sdio_dld->done_callback = done;
+	sdio_dld->card = card;
+	init_waitqueue_head(&sdio_dld->dld_main_thread.exit_wait.wait_event);
+	sdio_dld->write_callback_event.wake_up_signal = 1;
+	sdio_dld->main_loop_event.wake_up_signal = 1;
 
-	sdio_dld.sdio_dloader_data.sdioc_reg.dl_buff_size.reg_offset =
+	sdio_dld->sdio_dloader_data.sdioc_reg.dl_buff_size.reg_offset =
 		SDIOC_DL_BUFF_SIZE_OFFSET;
-	sdio_dld.sdio_dloader_data.sdioc_reg.dl_rd_ptr.reg_offset =
+
+	sdio_dld->sdio_dloader_data.sdioc_reg.dl_rd_ptr.reg_offset =
 		SDIOC_DL_RD_PTR;
-	sdio_dld.sdio_dloader_data.sdioc_reg.dl_wr_ptr.reg_offset =
+
+	sdio_dld->sdio_dloader_data.sdioc_reg.dl_wr_ptr.reg_offset =
 		SDIOC_DL_WR_PTR;
-	sdio_dld.sdio_dloader_data.sdioc_reg.ul_buff_size.reg_offset =
+
+	sdio_dld->sdio_dloader_data.sdioc_reg.ul_buff_size.reg_offset =
 		SDIOC_UP_BUFF_SIZE_OFFSET;
-	sdio_dld.sdio_dloader_data.sdioc_reg.up_rd_ptr.reg_offset =
+
+	sdio_dld->sdio_dloader_data.sdioc_reg.up_rd_ptr.reg_offset =
 		SDIOC_UL_RD_PTR;
-	sdio_dld.sdio_dloader_data.sdioc_reg.up_wr_ptr.reg_offset =
+
+	sdio_dld->sdio_dloader_data.sdioc_reg.up_wr_ptr.reg_offset =
 		SDIOC_UL_WR_PTR;
-	sdio_dld.sdio_dloader_data.sdioc_reg.good_to_exit_ptr.reg_offset =
+
+	sdio_dld->sdio_dloader_data.sdioc_reg.good_to_exit_ptr.reg_offset =
 		SDIOC_EXIT_PTR;
-	sdio_dld.sdio_dloader_data.sdioc_reg.dl_buff_address.reg_offset =
+
+	sdio_dld->sdio_dloader_data.sdioc_reg.dl_buff_address.reg_offset =
 		SDIOC_DL_BUFF_ADDRESS;
-	sdio_dld.sdio_dloader_data.sdioc_reg.up_buff_address.reg_offset =
+
+	sdio_dld->sdio_dloader_data.sdioc_reg.up_buff_address.reg_offset =
 		SDIOC_UP_BUFF_ADDRESS;
 
-	if (sdio_dld_get_op_mode() == SDIO_DLD_NO_MODE)
-		sdio_dld_set_op_mode(SDIO_DLD_NORMAL_MODE);
+	sdio_dld_set_op_mode(SDIO_DLD_NORMAL_MODE);
 
 	return 0;
 }
@@ -2184,15 +2370,11 @@ int sdio_downloader_setup(struct mmc_card *card,
 			  int channel_number,
 			  int(*done)(void))
 {
-	unsigned i;
 	int status = 0;
+	int result = 0;
 	int func_in_array = 0;
 	struct sdio_func *str_func = NULL;
-	int fd;
-	char ch[2] = {0, '\0'};
-	int result = 0;
-	unsigned int base = 10;
-	long res = 0;
+	struct device *tty_dev;
 
 	if (num_of_devices == 0 || num_of_devices > MAX_NUM_DEVICES) {
 		pr_err(MODULE_NAME ": %s - invalid number of devices\n",
@@ -2212,9 +2394,16 @@ int sdio_downloader_setup(struct mmc_card *card,
 		return -EINVAL;
 	}
 
-#ifdef DLOADER_DBG
+	sdio_dld = kzalloc(sizeof(struct sdio_downloader), GFP_KERNEL);
+	if (!sdio_dld) {
+		pr_err(MODULE_NAME ": %s - couldn't allocate sdio_dld data "
+		       "structure.", __func__);
+		return -ENOMEM;
+	}
+
+#ifdef CONFIG_DEBUG_FS
 	bootloader_debugfs_init();
-#endif /* DLOADER_DBG */
+#endif /* CONFIG_DEBUG_FS */
 
 	status = sdio_dld_init_global(card, done);
 
@@ -2222,153 +2411,91 @@ int sdio_downloader_setup(struct mmc_card *card,
 		pr_err(MODULE_NAME ": %s - Failure in Function "
 		       "sdio_dld_init_global(). status=%d\n",
 		       __func__, status);
+		kfree(sdio_dld);
 		return status;
 	}
 
-	sdio_dld.tty_drv = alloc_tty_driver(num_of_devices);
+	sdio_dld->tty_drv = alloc_tty_driver(num_of_devices);
 
-	if (!sdio_dld.tty_drv) {
-		pr_err(MODULE_NAME ": %s - param ""sdio_dld.tty_drv"" is "
+	if (!sdio_dld->tty_drv) {
+		pr_err(MODULE_NAME ": %s - param ""sdio_dld->tty_drv"" is "
 				   "NULL.\n", __func__);
+		kfree(sdio_dld);
 		return -EINVAL;
 	}
 
-	fd = sys_open(SDIO_DLD_OP_MODE_FILE_PATH, O_RDWR, 0644);
-	if (fd < 0) {
-		pr_err(MODULE_NAME ": %s - FLASHLESS BOOT - Fail to Open or "
-		       "locate the file %s\n",
-			__func__, SDIO_DLD_OP_MODE_FILE_PATH);
-		sdio_dld_set_op_mode(SDIO_DLD_NORMAL_MODE);
-	} else {
-		result = sys_read(fd, ch, 1);
-
-		if (result < 1) {
-			pr_info(MODULE_NAME ": %s - FLASHLESS BOOT - "
-				"sys_read() failed. Returned with %d",
-				__func__, result);
-			sdio_dld_set_op_mode(SDIO_DLD_NORMAL_MODE);
-		} else {
-			result = strict_strtol(ch, base, &res);
-			if (result) {
-				pr_info(MODULE_NAME ": %s - FLASHLESS BOOT - "
-					"strict_strtol() failed. Returned "
-					"with %d", __func__, result);
-				sdio_dld_set_op_mode(SDIO_DLD_NORMAL_MODE);
-			} else {
-				switch (res) {
-				case SDIO_DLD_NO_MODE:
-					pr_info(MODULE_NAME ": %s - "
-						"FLASHLESSBOOT '0'\n",
-						__func__);
-					sdio_dld_set_op_mode(
-					    SDIO_DLD_NORMAL_MODE);
-					break;
-				case SDIO_DLD_NORMAL_MODE:
-					pr_info(MODULE_NAME ": %s - "
-						"FLASHLESSBOOT '1'\n",
-						__func__);
-					sdio_dld_set_op_mode(
-					    SDIO_DLD_NORMAL_MODE);
-					break;
-				case SDIO_DLD_BOOT_TEST_MODE:
-					pr_info(MODULE_NAME ": %s - "
-						"FLASHLESSBOOT '2'\n",
-						__func__);
-					sdio_dld_set_op_mode(
-					    SDIO_DLD_BOOT_TEST_MODE);
-					break;
-				case SDIO_DLD_AMSS_TEST_MODE:
-					pr_info(MODULE_NAME ": %s - "
-						"FLASHLESSBOOT '3'\n",
-						__func__);
-					sdio_dld_set_op_mode(
-					    SDIO_DLD_AMSS_TEST_MODE);
-					break;
-				default:
-					pr_info(MODULE_NAME ": %s - "
-						"FLASHLESSBOOT 'default'\n",
-						__func__);
-					sdio_dld_set_op_mode(
-					    SDIO_DLD_NORMAL_MODE);
-					break;
-				}
-			}
-		}
-	}
+	sdio_dld_set_op_mode((enum sdio_dld_op_mode)sdio_op_mode);
 
 	/* according to op_mode, a different tty device is created */
-	if (sdio_dld_get_op_mode() == SDIO_DLD_BOOT_TEST_MODE)
-		sdio_dld.tty_drv->name = TTY_SDIO_DEV_TEST;
+	if (sdio_dld->op_mode == SDIO_DLD_BOOT_TEST_MODE)
+		sdio_dld->tty_drv->name = TTY_SDIO_DEV_TEST;
 	else
-	    sdio_dld.tty_drv->name = TTY_SDIO_DEV;
+	    sdio_dld->tty_drv->name = TTY_SDIO_DEV;
 
-	sdio_dld.tty_drv->owner = THIS_MODULE;
-	sdio_dld.tty_drv->driver_name = "SDIO_Dloader";
+	sdio_dld->tty_drv->owner = THIS_MODULE;
+	sdio_dld->tty_drv->driver_name = "SDIO_Dloader";
 
 	/* uses dynamically assigned dev_t values */
-	sdio_dld.tty_drv->type = TTY_DRIVER_TYPE_SERIAL;
-	sdio_dld.tty_drv->subtype = SERIAL_TYPE_NORMAL;
-	sdio_dld.tty_drv->flags = TTY_DRIVER_REAL_RAW | TTY_DRIVER_DYNAMIC_DEV
+	sdio_dld->tty_drv->type = TTY_DRIVER_TYPE_SERIAL;
+	sdio_dld->tty_drv->subtype = SERIAL_TYPE_NORMAL;
+	sdio_dld->tty_drv->flags = TTY_DRIVER_REAL_RAW | TTY_DRIVER_DYNAMIC_DEV
 				| TTY_DRIVER_RESET_TERMIOS;
 
 	/* initializing the tty driver */
-	sdio_dld.tty_drv->init_termios = tty_std_termios;
-	sdio_dld.tty_drv->init_termios.c_cflag =
+	sdio_dld->tty_drv->init_termios = tty_std_termios;
+	sdio_dld->tty_drv->init_termios.c_cflag =
 		B4800 | CS8 | CREAD | HUPCL | CLOCAL;
-	sdio_dld.tty_drv->init_termios.c_ispeed = INPUT_SPEED;
-	sdio_dld.tty_drv->init_termios.c_ospeed = OUTPUT_SPEED;
+	sdio_dld->tty_drv->init_termios.c_ispeed = INPUT_SPEED;
+	sdio_dld->tty_drv->init_termios.c_ospeed = OUTPUT_SPEED;
 
-	tty_set_operations(sdio_dld.tty_drv, &sdio_dloader_tty_ops);
+	tty_set_operations(sdio_dld->tty_drv, &sdio_dloader_tty_ops);
 
-	status = tty_register_driver(sdio_dld.tty_drv);
+	status = tty_register_driver(sdio_dld->tty_drv);
 	if (status) {
-		put_tty_driver(sdio_dld.tty_drv);
+		put_tty_driver(sdio_dld->tty_drv);
 		pr_err(MODULE_NAME ": %s - tty_register_driver() failed\n",
 			__func__);
 
-		sdio_dld.tty_drv = NULL;
+		sdio_dld->tty_drv = NULL;
+		kfree(sdio_dld);
 		return status;
 	}
 
-	for (i = 0; i < num_of_devices ; i++) {
-		struct device *tty_dev;
-
-		tty_dev = tty_register_device(sdio_dld.tty_drv, i, NULL);
-		if (IS_ERR(tty_dev)) {
-			pr_err(MODULE_NAME ": %s - tty_register_device() "
-				"failed\n", __func__);
-			tty_unregister_driver(sdio_dld.tty_drv);
-			return PTR_ERR(tty_dev);
-		}
+	tty_dev = tty_register_device(sdio_dld->tty_drv, 0, NULL);
+	if (IS_ERR(tty_dev)) {
+		pr_err(MODULE_NAME ": %s - tty_register_device() "
+			"failed\n", __func__);
+		tty_unregister_driver(sdio_dld->tty_drv);
+		kfree(sdio_dld);
+		return PTR_ERR(tty_dev);
 	}
 
-	sdio_dld.tty_str = tty_init_dev(sdio_dld.tty_drv, 0, 1);
-	if (!sdio_dld.tty_str) {
-		pr_err(MODULE_NAME ": %s - param ""sdio_dld.tty_str"" is "
+	sdio_dld->tty_str = tty_init_dev(sdio_dld->tty_drv, 0, 1);
+	if (!sdio_dld->tty_str) {
+		pr_err(MODULE_NAME ": %s - param ""sdio_dld->tty_str"" is "
 				   "NULL.\n", __func__);
-
-		tty_unregister_device(sdio_dld.tty_drv, 0);
-		status = tty_unregister_driver(sdio_dld.tty_drv);
-		if (status)
-			pr_err(MODULE_NAME ": %s - tty_unregister_driver() "
-					   "failed\n", __func__);
-		return -EINVAL;
+		status = -EINVAL;
+		goto exit_err;
 	}
 
-	sdio_dld.tty_str->low_latency = 1;
-	sdio_dld.tty_str->icanon = 0;
-	set_bit(TTY_NO_WRITE_SPLIT, &sdio_dld.tty_str->flags);
+	sdio_dld->tty_str->low_latency = 1;
+	sdio_dld->tty_str->icanon = 0;
+	set_bit(TTY_NO_WRITE_SPLIT, &sdio_dld->tty_str->flags);
 
-	sdio_dld.sdioc_boot_func = SDIOC_CHAN_TO_FUNC_NUM(channel_number);
-	func_in_array = REAL_FUNC_TO_FUNC_IN_ARRAY(sdio_dld.sdioc_boot_func);
-	str_func = sdio_dld.card->sdio_func[func_in_array];
+	sdio_dld->sdioc_boot_func = SDIOC_CHAN_TO_FUNC_NUM(channel_number);
+	func_in_array = REAL_FUNC_TO_FUNC_IN_ARRAY(sdio_dld->sdioc_boot_func);
+	str_func = sdio_dld->card->sdio_func[func_in_array];
 	status = sdio_dld_init_func(str_func);
 	if (status) {
 		pr_err(MODULE_NAME ": %s - Failure in Function "
 		       "sdio_dld_init_func(). status=%d\n",
 		       __func__, status);
-		return status;
+		goto exit_err;
 	}
+
+#ifdef CONFIG_DEBUG_FS
+	sdio_dld_debug_init();
+#endif
 
 	sdio_claim_host(str_func);
 
@@ -2378,8 +2505,8 @@ int sdio_downloader_setup(struct mmc_card *card,
 	 */
 	status = sdio_memcpy_toio(str_func,
 				  SDIOC_OP_MODE_PTR,
-				  (void *)&sdio_dld.op_mode,
-				  sizeof(sdio_dld.op_mode));
+				  (void *)&sdio_dld->op_mode,
+				  sizeof(sdio_dld->op_mode));
 
 	sdio_release_host(str_func);
 
@@ -2388,10 +2515,19 @@ int sdio_downloader_setup(struct mmc_card *card,
 		       "writing to OP_MODE_REGISTER failed. "
 		       "status=%d.\n",
 		       __func__, status);
-		return status;
+		goto exit_err;
 	}
 
 	return 0;
+
+exit_err:
+	tty_unregister_device(sdio_dld->tty_drv, 0);
+	result = tty_unregister_driver(sdio_dld->tty_drv);
+	if (result)
+		pr_err(MODULE_NAME ": %s - tty_unregister_driver() "
+		       "failed. result=%d\n", __func__, -result);
+	kfree(sdio_dld);
+	return status;
 }
 
 MODULE_LICENSE("GPL v2");

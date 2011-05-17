@@ -26,7 +26,7 @@ config ARCH_MSM7X27
 	select CPU_V6 if MSM_SOC_REV_NONE
 	select CPU_V7 if MSM_SOC_REV_A
 	select MSM_REMOTE_SPINLOCK_SWP if MSM_SOC_REV_NONE
-	select MSM_GPIOMUX if !MSM_SOC_REV_A
+	select MSM_GPIOMUX
 
 config ARCH_MSM7X30
 	bool "MSM7x30"
@@ -76,6 +76,7 @@ config ARCH_MSM8X60
 	select MSM_BUS_SCALING
 	select MSM_SECURE_IO
 	select MSM_DALRPC
+	select MSM_QDSP6_APR
 
 config ARCH_MSM8960
 	bool "MSM8960"
@@ -87,6 +88,7 @@ config ARCH_MSM8960
 	select MSM_GPIOMUX
 	select MSM_SCM if SMP
 	select MSM_DIRECT_SCLK_ACCESS
+	select REGULATOR
 
 endchoice
 
@@ -122,6 +124,10 @@ config  MSM_VIC
 
 config MSM_RPM
 	bool "Resource Power Manager"
+	select MSM_MPM
+
+config MSM_MPM
+	bool "Modem Power Manager"
 
 config MSM_XO
 	bool
@@ -197,6 +203,22 @@ config MACH_MSM7X27A_RUMI3
         bool "MSM7x27A RUMI3"
         help
           Support for the Qualcomm MSM7x27A RUMI3 Emulation Platform.
+
+config MACH_MSM7X27A_SURF
+        depends on ARCH_MSM7X27A
+        depends on !MSM_STACKED_MEMORY
+        default y
+        bool "MSM7x27A SURF"
+        help
+          Support for the Qualcomm MSM7x27A SURF.
+
+config MACH_MSM7X27A_FFA
+        depends on ARCH_MSM7X27A
+        depends on !MSM_STACKED_MEMORY
+        default y
+        bool "MSM7x27A FFA"
+        help
+          Support for the Qualcomm MSM7x27A FFA.
 
 config MACH_MSM7X30_SURF
        depends on ARCH_MSM7X30
@@ -714,6 +736,13 @@ choice
 	    prompt "Package 4"
 endchoice
 
+config MSM_IPC_ROUTER_SMD_XPRT
+	depends on MSM_SMD
+	default n
+	bool "MSM SMD XPRT Layer"
+	help
+	  SMD Transport Layer for IPC Router
+
 config MSM_RPC_SDIO_XPRT
 	depends on MSM_SDIO_AL
 	default y
@@ -793,6 +822,16 @@ config MSM_SMD_NMEA
 
 	  If in doubt, say yes.
 
+config MSM_SDIO_TTY
+	bool "SDIO TTY Driver"
+	depends on MSM_SDIO_AL
+	default n
+	help
+	  Provides a TTY driver SDIO TTY
+	  This driver can be used by user space
+	  applications for passing data through the
+	  SDIO interface.
+
 config MSM_SMD_TTY
 	bool "SMD TTY Driver"
 	depends on MSM_SMD
@@ -853,6 +892,14 @@ config MSM_ONCRPCROUTER
 	help
 	  Support for the MSM ONCRPC router for communication between
 	  the ARM9 and ARM11
+
+config MSM_IPC_ROUTER
+	depends on MSM_IPC_ROUTER_SMD_XPRT
+	default n
+	bool "MSM IPC Router support"
+	help
+	  Support for the MSM IPC Router for communication between
+	  the APPs and the MODEM
 
 config MSM_ONCRPCROUTER_DEBUG
 	depends on MSM_ONCRPCROUTER
@@ -1066,6 +1113,15 @@ config MSM8X60_AUDIO
 	help
 	  Enable support for qdsp6v2. This provides audio functionality.
 
+config MSM8X60_RTAC
+	tristate "MSM8X60 real-time audio calibration support"
+	depends on MSM8X60_AUDIO
+	default n
+	help
+	  Enable support for rtac in qdsp6v2. This enables calibration during
+	  audio operation
+
+
 config MSM_VREG_SWITCH_INVERTED
 	bool "Reverse vreg switch polarity"
 	default n
@@ -1215,6 +1271,14 @@ config MSM_SCM
 	bool "Secure Channel Manager (SCM) support"
 	default n
 
+config MSM_SUBSYSTEM_RESTART
+	bool "MSM Subsystem Restart Driver"
+	depends on ARCH_MSM8X60
+	default n
+	help
+	  This option enables the MSM subsystem restart driver, which provides
+	  a framework to handle subsystem crashes.
+
 config SCORPION_Uni_45nm_BUG
 	bool "Scorpion Uni 45nm(SC45U): Workaround for ICIMVAU and BPIMVA"
 	depends on ARCH_MSM7X30 || (ARCH_QSD8X50 && MSM_SOC_REV_A)
@@ -1237,6 +1301,17 @@ config MSM_RPM_LOG
 	  This option enables a driver which can read from a circular buffer
 	  of messages produced by the RPM. These messages provide diagnostic
 	  information about RPM operation. The driver outputs the messages
+	  via a debugfs node.
+
+config MSM_RPM_STATS_LOG
+	tristate "MSM Resource Power Manager Stat Driver
+	depends on DEBUG_FS
+	depends on ARCH_MSM8X60
+	default n
+	  help
+	  This option enables a driver which reads RPM messages from a shared
+	  memory location. These messages provide statistical information about
+	  the low power modes that RPM enters. The drivers outputs the message
 	  via a debugfs node.
 
 config MSM_IOMMU
@@ -1303,6 +1378,13 @@ config MSM_DLOAD_MODE
 		make the kernel reboot on a kernel panic - that must be
 		enabled via another mechanism.
 
+config MSM_ETM
+	tristate "Enable MSM ETM and ETB"
+	depends on ARCH_MSM8X60
+	select MSM_JTAG_V7
+	help
+		This enables embedded trace collection on Qualcomm v7 CPUs.
+
 config MSM_SLEEP_STATS
 	bool "Enable exporting of MSM sleep stats to userspace"
 	depends on CPU_IDLE
@@ -1335,4 +1417,31 @@ config BT_MSM_PINTEST
 	  Bluetooth MSM Pin Connectivity test module.
 	  This driver provides support for verifying the MSM to BT pin
 	  connectivity.
+
+config MSM_FAKE_BATTERY
+		depends on POWER_SUPPLY
+		default n
+		bool "MSM Fake Battery"
+		help
+		 Enables MSM fake battery driver.
+
+config MSM_QDSP6_APR
+	bool "Audio QDSP6 APR support"
+	depends on MSM_SMD
+	default n
+	help
+	  Enable APR IPC protocol support between
+	  application processor and QDSP6. APR is
+	  used by audio driver to configure QDSP6's
+	  ASM, ADM and AFE.
+
+
+config MSM_AUDIO_QDSP6
+        bool "QDSP6 HW Audio support"
+        select SND_SOC_MSM_QDSP6_INTF
+        default n
+        help
+          Enable HW audio support in QDSP6.
+          QDSP6 can support HW encoder & decoder and audio processing
+
 endif

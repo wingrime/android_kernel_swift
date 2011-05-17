@@ -855,9 +855,32 @@ config USB_ANDROID
 config USB_ANDROID_ACM
 	boolean "Android gadget ACM serial function"
 	depends on USB_ANDROID
+	depends on !(USB_F_SERIAL || USB_F_SERIAL_SDIO || USB_F_SERIAL_SMD)
 	default n
 	help
 	  Provides ACM serial function for android gadget driver.
+
+config USB_ANDROID_ACM_SDIO
+	boolean "generic serial function driver over SDIO"
+	depends on USB_ANDROID && MSM_SDIO_CMUX && MSM_SDIO_AL
+	depends on !(USB_F_SERIAL || USB_F_SERIAL_SDIO || USB_F_SERIAL_SMD)
+	default n
+	help
+	  Gadget ACM serial driver is one way to communicate with
+	  modem device. This option enables ACM driver to communicate
+	  with modem over SDIO.
+          Say "y" to link the driver staticall
+
+config USB_ANDROID_ACM_SMD
+	boolean "generic serial function driver over SMD"
+	depends on USB_ANDROID && MSM_SMD
+	depends on !(USB_F_SERIAL || USB_F_SERIAL_SDIO || USB_F_SERIAL_SMD)
+	default n
+	help
+	  Gadget ACM serial driver is one way to communicate with
+	  modem device. This option enables ACM driver to communicate
+	  with modem over SMD.
+          Say "y" to link the driver statically
 
 config USB_ANDROID_ADB
 	boolean "Android gadget adb function"
@@ -960,6 +983,38 @@ config RMNET_SDIO_DATA_CHANNEL
        help
          Data SDIO channel for transferring network data
 
+config USB_ANDROID_RMNET_SMD_SDIO
+       boolean "RmNet over SMD/SDIO function driver"
+       depends on USB_ANDROID && MSM_SDIO_CMUX && MSM_SDIO_DMUX
+       default n
+       help
+         Enabling this option adds rmnet over sdio support to the
+         android gadget. Rmnet is an alternative to CDC-ECM
+         and Windows RNDIS. It uses QUALCOMM MSM Interface
+         for control transfers. It acts like a bridge between
+         Host and modem found in MSM chipsets.
+
+config RMNET_SMD_SDIO_CTL_CHANNEL
+       int "control SDIO channel id"
+       depends on USB_ANDROID_RMNET_SMD_SDIO
+       default 8
+       help
+         Control SDIO channel for transferring QMI messages
+
+config RMNET_SMD_SDIO_DATA_CHANNEL
+       int "Data SDIO channel id"
+       default 8
+       depends on USB_ANDROID_RMNET_SMD_SDIO
+       help
+         Data SDIO channel for transferring network data
+
+config RMNET_SDIO_SMD_DATA_CHANNEL
+	string "Data SMD channel name"
+	depends on USB_ANDROID_RMNET_SMD_SDIO
+	default "DATA40"
+	help
+	  Data SMD channel for transferring network data
+
 config USB_F_SERIAL
 	boolean "generic serial function driver"
 	depends on USB_ANDROID
@@ -992,6 +1047,18 @@ config USB_F_SERIAL_SDIO
           to Gadget usb serial interface(f_serial.c) and adds
           separate transport layer u_sdio(very similar to u_serial.c)
           Say "y" to link the driver staticall
+
+config USB_F_SERIAL_SMD
+	boolean "generic serial function driver over SMD"
+	depends on USB_ANDROID && MSM_SMD
+	default n
+	help
+          Gadget serial driver is one way to communicate with modem
+          device. This option enables serial driver to communicate
+          to modem device using smd. It makes very minimal changes
+          to Gadget usb serial interface(f_serial.c) and adds
+          separate transport layer u_smd(very similar to u_serial.c)
+          Say "y" to link the driver statically
 
 config USB_CDC_COMPOSITE
 	tristate "CDC Composite Device (Ethernet and ACM)"

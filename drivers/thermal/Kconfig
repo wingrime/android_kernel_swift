@@ -39,7 +39,7 @@ config THERMAL_PM8058
 	tristate "Qualcomm PM8058 Temperature Alarm"
 	depends on PMIC8058
 	depends on THERMAL
-	depends on SENSORS_M_ADC
+	depends on SENSORS_MSM_ADC
 	default n
 	help
 	  This enables a thermal Sysfs driver for the PMIC 8058 device. It

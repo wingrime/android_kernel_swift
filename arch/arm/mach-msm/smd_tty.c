@@ -1,7 +1,7 @@
 /* arch/arm/mach-msm/smd_tty.c
  *
  * Copyright (C) 2007 Google, Inc.
- * Copyright (c) 2009-2010, Code Aurora Forum. All rights reserved.
+ * Copyright (c) 2009-2011, Code Aurora Forum. All rights reserved.
  * Author: Brian Swetland <swetland@google.com>
  *
  * This software is licensed under the terms of the GNU General Public
@@ -52,6 +52,9 @@ struct smd_tty_info {
 	struct completion ch_allocated;
 	struct platform_driver driver;
 	void *pil;
+	int in_reset;
+	int in_reset_updated;
+	spinlock_t reset_lock;
 };
 
 static char *smd_ch_name[] = {
@@ -64,6 +67,11 @@ static char *smd_ch_name[] = {
 
 
 static struct smd_tty_info smd_tty[MAX_SMD_TTYS];
+
+static int is_in_reset(struct smd_tty_info *info)
+{
+	return info->in_reset;
+}
 
 static void buf_req_retry(unsigned long param)
 {
@@ -82,6 +90,13 @@ static void smd_tty_read(unsigned long param)
 		return;
 
 	for (;;) {
+		if (is_in_reset(info)) {
+			/* signal TTY clients using TTY_BREAK */
+			tty_insert_flip_char(tty, 0x00, TTY_BREAK);
+			tty_flip_buffer_push(tty);
+			break;
+		}
+
 		if (test_bit(TTY_THROTTLED, &tty->flags)) break;
 		avail = smd_read_avail(info->ch);
 		if (avail == 0)
@@ -122,11 +137,29 @@ static void smd_tty_read(unsigned long param)
 static void smd_tty_notify(void *priv, unsigned event)
 {
 	struct smd_tty_info *info = priv;
+	unsigned long flags;
 
-	if (event != SMD_EVENT_DATA)
-		return;
+	switch (event) {
+	case SMD_EVENT_DATA:
+		tasklet_hi_schedule(&info->tty_tsklt);
+		break;
 
-	tasklet_hi_schedule(&info->tty_tsklt);
+	case SMD_EVENT_OPEN:
+		spin_lock_irqsave(&info->reset_lock, flags);
+		info->in_reset = 0;
+		info->in_reset_updated = 1;
+		spin_unlock_irqrestore(&info->reset_lock, flags);
+		break;
+
+	case SMD_EVENT_CLOSE:
+		spin_lock_irqsave(&info->reset_lock, flags);
+		info->in_reset = 1;
+		info->in_reset_updated = 1;
+		spin_unlock_irqrestore(&info->reset_lock, flags);
+		/* schedule task to send TTY_BREAK */
+		tasklet_hi_schedule(&info->tty_tsklt);
+		break;
+	}
 }
 
 static uint32_t is_modem_smsm_inited(void)
@@ -251,6 +284,9 @@ static int smd_tty_write(struct tty_struct *tty, const unsigned char *buf, int l
 	** never be able to write more data than there
 	** is currently space for
 	*/
+	if (is_in_reset(info))
+		return -ENETRESET;
+
 	avail = smd_write_avail(info->ch);
 	if (len > avail)
 		len = avail;
@@ -277,16 +313,39 @@ static void smd_tty_unthrottle(struct tty_struct *tty)
 	return;
 }
 
+/*
+ * Returns the current TIOCM status bits including:
+ *      SMD Signals (DTR/DSR, CTS/RTS, CD, RI)
+ *      TIOCM_OUT1 - reset state (1=in reset)
+ *      TIOCM_OUT2 - reset state updated (1=updated)
+ */
 static int smd_tty_tiocmget(struct tty_struct *tty, struct file *file)
 {
 	struct smd_tty_info *info = tty->driver_data;
-	return smd_tiocmget(info->ch);
+	unsigned long flags;
+	int tiocm;
+
+	tiocm = smd_tiocmget(info->ch);
+
+	spin_lock_irqsave(&info->reset_lock, flags);
+	tiocm |= (info->in_reset ? TIOCM_OUT1 : 0);
+	if (info->in_reset_updated) {
+		tiocm |= TIOCM_OUT2;
+		info->in_reset_updated = 0;
+	}
+	spin_unlock_irqrestore(&info->reset_lock, flags);
+
+	return tiocm;
 }
 
 static int smd_tty_tiocmset(struct tty_struct *tty, struct file *file,
 				unsigned int set, unsigned int clear)
 {
 	struct smd_tty_info *info = tty->driver_data;
+
+	if (info->in_reset)
+		return -ENETRESET;
+
 	return smd_tiocmset(info->ch, set, clear);
 }
 
@@ -362,30 +421,35 @@ static int __init smd_tty_init(void)
 	smd_tty[0].driver.probe = smd_tty_dummy_probe;
 	smd_tty[0].driver.driver.name = smd_ch_name[0];
 	smd_tty[0].driver.driver.owner = THIS_MODULE;
+	spin_lock_init(&smd_tty[0].reset_lock);
 	ret = platform_driver_register(&smd_tty[0].driver);
 	if (ret)
 		goto out;
 	smd_tty[7].driver.probe = smd_tty_dummy_probe;
 	smd_tty[7].driver.driver.name = smd_ch_name[7];
 	smd_tty[7].driver.driver.owner = THIS_MODULE;
+	spin_lock_init(&smd_tty[7].reset_lock);
 	ret = platform_driver_register(&smd_tty[7].driver);
 	if (ret)
 		goto unreg0;
 	smd_tty[21].driver.probe = smd_tty_dummy_probe;
 	smd_tty[21].driver.driver.name = smd_ch_name[21];
 	smd_tty[21].driver.driver.owner = THIS_MODULE;
+	spin_lock_init(&smd_tty[21].reset_lock);
 	ret = platform_driver_register(&smd_tty[21].driver);
 	if (ret)
 		goto unreg7;
 	smd_tty[27].driver.probe = smd_tty_dummy_probe;
 	smd_tty[27].driver.driver.name = smd_ch_name[27];
 	smd_tty[27].driver.driver.owner = THIS_MODULE;
+	spin_lock_init(&smd_tty[27].reset_lock);
 	ret = platform_driver_register(&smd_tty[27].driver);
 	if (ret)
 		goto unreg21;
 	smd_tty[36].driver.probe = smd_tty_dummy_probe;
 	smd_tty[36].driver.driver.name = "LOOPBACK_TTY";
 	smd_tty[36].driver.driver.owner = THIS_MODULE;
+	spin_lock_init(&smd_tty[36].reset_lock);
 	ret = platform_driver_register(&smd_tty[36].driver);
 	if (ret)
 		goto unreg27;

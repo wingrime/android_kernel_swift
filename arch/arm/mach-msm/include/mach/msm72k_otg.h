@@ -183,7 +183,10 @@ static inline int pclk_requires_voting(struct otg_transceiver *xceiv)
 
 	dev = container_of(xceiv, struct msm_otg, otg);
 
-	return !dev->pdata->core_clk;
+	if (dev->pdata->pclk_src_name)
+		return 1;
+	else
+		return 0;
 }
 
 static inline int can_phy_power_collapse(struct msm_otg *dev)

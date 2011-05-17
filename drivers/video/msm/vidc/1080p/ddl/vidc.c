@@ -685,13 +685,13 @@ void vidc_1080p_decode_init_buffers_ch1(
 		param->inst_id);
 }
 
-void vidc_1080p_set_divx3_resolution_ch0(u32 width, u32 height)
+void vidc_1080p_set_dec_resolution_ch0(u32 width, u32 height)
 {
 	VIDC_HWIO_OUT(REG_612810, height);
 	VIDC_HWIO_OUT(REG_175608, width);
 }
 
-void vidc_1080p_set_divx3_resolution_ch1(u32 width, u32 height)
+void vidc_1080p_set_dec_resolution_ch1(u32 width, u32 height)
 {
 	VIDC_HWIO_OUT(REG_655721, height);
 	VIDC_HWIO_OUT(REG_548308, width);

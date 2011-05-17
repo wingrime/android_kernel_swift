@@ -293,6 +293,10 @@ static u32 ddl_decoder_seq_done_callback(struct ddl_context *ddl_context,
 		}
 		ddl_calculate_stride(&decoder->frame_size,
 			!decoder->progressive_only);
+		decoder->frame_size.scan_lines =
+		DDL_ALIGN(decoder->frame_size.height, DDL_TILE_ALIGN_HEIGHT);
+		decoder->frame_size.stride =
+		DDL_ALIGN(decoder->frame_size.width, DDL_TILE_ALIGN_WIDTH);
 		parse_hdr_crop_data(ddl, &seq_hdr_info);
 		if (decoder->codec.codec == VCD_CODEC_H264 &&
 			seq_hdr_info.level > VIDC_1080P_H264_LEVEL4) {
@@ -981,10 +985,10 @@ static void ddl_decoder_input_done_callback(
 	is_interlaced = (dec_disp_info->decode_coding ==
 		VIDC_1080P_DISPLAY_CODING_INTERLACED);
 	if (decoder->output_order == VCD_DEC_ORDER_DECODE) {
-		dec_disp_info->tag_top = input_vcd_frm->ip_frm_tag;
 		dec_disp_info->tag_bottom = is_interlaced ?
-			input_vcd_frm->intrlcd_ip_frm_tag :
+			dec_disp_info->tag_top :
 			VCD_FRAMETAG_INVALID;
+		dec_disp_info->tag_top = input_vcd_frm->ip_frm_tag;
 	}
 	input_vcd_frm->interlaced = is_interlaced;
 	input_vcd_frm->offset += dec_disp_info->input_bytes_consumed;

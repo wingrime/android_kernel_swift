@@ -159,7 +159,9 @@ struct mxt_data {
 	char                 nontouch_msg_only; 
 	struct mutex         msg_mutex;
 };
-
+/*default value, enough to read versioning*/
+#define CONFIG_DATA_SIZE	6
+static u16 t38_size = CONFIG_DATA_SIZE;
 static int mxt_read_block(struct i2c_client *client, u16 addr, u16 length,
 			  u8 *value);
 static int mxt_write_byte(struct i2c_client *client, u16 addr, u8 value);
@@ -1590,6 +1592,8 @@ static int __devinit mxt_read_object_table(struct i2c_client *client,
 			  object_report_ids
 		);
 
+		if (object_type == 38)
+			t38_size = object_size;
 		/* TODO: check whether object is known and supported? */
 		
 		/* Save frequently needed info. */
@@ -1735,6 +1739,8 @@ static int __devinit mxt_probe(struct i2c_client *client,
 	struct mxt_platform_data *pdata;
 	struct input_dev         *input;
 	u8 *id_data;
+	u8 *t38_data;
+	u16 t38_addr;
 	int error;
 
 	mxt_debug(DEBUG_INFO, "mXT224: mxt_probe\n");
@@ -1986,16 +1992,31 @@ static int __devinit mxt_probe(struct i2c_client *client,
         if (debug > DEBUG_INFO)
 		dev_info(&client->dev, "touchscreen, irq %d\n", mxt->irq);
 		
+	t38_data = kmalloc(t38_size*sizeof(u8), GFP_KERNEL);
+
+	if (t38_data == NULL) {
+		dev_err(&client->dev, "insufficient memory\n");
+		error = -ENOMEM;
+		goto err_t38;
+	}
+
+	t38_addr = MXT_BASE_ADDR(MXT_USER_INFO_T38, mxt);
+	mxt_read_block(client, t38_addr, t38_size, t38_data);
+	dev_info(&client->dev, "VERSION:%02x.%02x.%02x, DATE: %d/%d/%d\n",
+		t38_data[0], t38_data[1], t38_data[2],
+		t38_data[3], t38_data[4], t38_data[5]);
 
 	/* Schedule a worker routine to read any messages that might have
 	 * been sent before interrupts were enabled. */
 	cancel_delayed_work(&mxt->dwork);
 	schedule_delayed_work(&mxt->dwork, 0);
+	kfree(t38_data);
 	kfree(id_data);
 
 	return 0;
 
-
+err_t38:
+	free_irq(mxt->irq, mxt);
 err_irq:
 	kfree(mxt->rid_map);
 	kfree(mxt->object_table);

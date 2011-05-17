@@ -10,8 +10,8 @@
  *       disclaimer in the documentation and/or other materials provided
  *       with the distribution.
  *     * Neither the name of Code Aurora Forum, Inc. nor the names of its
- *		 contributors may be used to endorse or promote products derived
- *		 from this software without specific prior written permission.
+ *       contributors may be used to endorse or promote products derived
+ *       from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED "AS IS" AND ANY EXPRESS OR IMPLIED
  * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
@@ -138,7 +138,9 @@ struct vpe_isr_queue_cmd_type {
 };
 
 enum VPE_MESSAGE_ID {
-    MSG_ID_VPE_OUTPUT_V = 7, /* To match with that of VFE */
+	MSG_ID_VPE_OUTPUT_V = 7, /* To match with that of VFE */
+	MSG_ID_VPE_OUTPUT_ST_L,
+	MSG_ID_VPE_OUTPUT_ST_R,
 };
 
 struct vpe_device_type {
@@ -151,9 +153,9 @@ struct vpe_device_type {
 };
 
 struct dis_offset_type {
-    int32_t  dis_offset_x;
-	int32_t  dis_offset_y;
-    uint32_t  frame_id;
+	int32_t dis_offset_x;
+	int32_t dis_offset_y;
+	uint32_t frame_id;
 };
 
 struct vpe_ctrl_type {
@@ -166,7 +168,7 @@ struct vpe_ctrl_type {
 	void              *extdata;
 	uint32_t          extlen;
 	struct msm_vpe_callback *resp;
-	uint32_t           in_h_w;
+	uint32_t          in_h_w;
 	uint32_t          out_h;  /* this is BEFORE rotation. */
 	uint32_t          out_w;  /* this is BEFORE rotation. */
 	uint32_t          dis_en;
@@ -175,6 +177,9 @@ struct vpe_ctrl_type {
 	struct dis_offset_type   dis_offset;
 	uint32_t          pcbcr_before_dis;
 	uint32_t          pcbcr_dis_offset;
+	int               output_type;
+	int               frame_pack;
+	uint8_t           pad_2k_bool;
 };
 
 /*
@@ -234,15 +239,17 @@ struct phase_val_t {
 	int32_t phase_step_y;
 };
 
-extern struct vpe_ctrl_type    *vpe_ctrl;
+extern struct vpe_ctrl_type *vpe_ctrl;
 
 int msm_vpe_open(void);
 int msm_vpe_release(void);
 int msm_vpe_reg(struct msm_vpe_callback *presp);
 void msm_send_frame_to_vpe(uint32_t pyaddr, uint32_t pcbcraddr,
-				struct timespec *ts);
+	struct timespec *ts, int output_id);
 int msm_vpe_config(struct msm_vpe_cfg_cmd *cmd, void *data);
 int msm_vpe_cfg_update(void *pinfo);
-
+void msm_vpe_offset_update(int frame_pack, uint32_t pyaddr, uint32_t pcbcraddr,
+	struct timespec *ts, int output_id, int32_t x, int32_t y,
+	int32_t frameid, struct msm_st_crop stCropInfo);
 #endif /*_msm_vpe1_h_*/
 

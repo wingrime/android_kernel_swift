@@ -40,13 +40,18 @@
 
 #define PSHOLD_CTL_SU (MSM_TLMM_BASE + 0x820)
 
-#define RESTART_REASON_ADDR 0x2A05F65C
+#define IMEM_BASE           0x2A05F000
+
+#define RESTART_REASON_ADDR 0x65C
+#define DLOAD_MODE_ADDR     0x0
 
 static int restart_mode;
+void *restart_reason;
 
 #ifdef CONFIG_MSM_DLOAD_MODE
 static int in_panic;
 static int reset_detection;
+static void *dload_mode_addr;
 
 static int panic_prep_restart(struct notifier_block *this,
 			      unsigned long event, void *ptr)
@@ -61,14 +66,11 @@ static struct notifier_block panic_blk = {
 
 static void set_dload_mode(int on)
 {
-	void *dload_mode_addr;
-	dload_mode_addr = ioremap_nocache(0x2A05F000, SZ_4K);
 	if (dload_mode_addr) {
 		writel(on ? 0xE47B337D : 0, dload_mode_addr);
 		writel(on ? 0xCE14091A : 0,
 		       dload_mode_addr + sizeof(unsigned int));
 		dmb();
-		iounmap(dload_mode_addr);
 	}
 }
 
@@ -133,7 +135,6 @@ static void msm_power_off(void)
 
 void arch_reset(char mode, const char *cmd)
 {
-	void *restart_reason;
 
 #ifdef CONFIG_MSM_DLOAD_MODE
 	if (in_panic || restart_mode == RESTART_DLOAD)
@@ -153,7 +154,6 @@ void arch_reset(char mode, const char *cmd)
 	pm8058_reset_pwr_off(1);
 
 	if (cmd != NULL) {
-		restart_reason = ioremap_nocache(RESTART_REASON_ADDR, SZ_4K);
 		if (!strncmp(cmd, "bootloader", 10)) {
 			writel(0x77665500, restart_reason);
 		} else if (!strncmp(cmd, "recovery", 8)) {
@@ -166,26 +166,37 @@ void arch_reset(char mode, const char *cmd)
 		} else {
 			writel(0x77665501, restart_reason);
 		}
-		iounmap(restart_reason);
 	}
 
-	writel(1, WDT0_RST);
 	writel(0, WDT0_EN);
-	writel(0x31F3, WDT0_BARK_TIME);
+	writel(0, PSHOLD_CTL_SU); /* Actually reset the chip */
+	mdelay(5000);
+
+	printk(KERN_NOTICE "PS_HOLD didn't work, falling back to watchdog\n");
+
+	writel(5*0x31F3, WDT0_BARK_TIME);
 	writel(0x31F3, WDT0_BITE_TIME);
 	writel(3, WDT0_EN);
 	dmb();
 	secure_writel(3, MSM_TCSR_BASE + TCSR_WDT_CFG);
 
 	mdelay(10000);
+	printk(KERN_ERR "Restarting has failed\n");
 }
 
 static int __init msm_restart_init(void)
 {
+	void *imem = ioremap_nocache(IMEM_BASE, SZ_4K);
+
 #ifdef CONFIG_MSM_DLOAD_MODE
 	atomic_notifier_chain_register(&panic_notifier_list, &panic_blk);
-#endif
+	dload_mode_addr = imem + DLOAD_MODE_ADDR;
 
+	/* Reset detection is switched on below.*/
+	set_dload_mode(1);
+	reset_detection = 1;
+#endif
+	restart_reason = imem + RESTART_REASON_ADDR;
 	pm_power_off = msm_power_off;
 
 	return 0;

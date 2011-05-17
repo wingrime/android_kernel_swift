@@ -748,6 +748,8 @@ static int ov9726_sensor_probe(const struct msm_camera_sensor_info *info,
 	s->s_init = ov9726_sensor_open_init;
 	s->s_release = ov9726_sensor_release;
 	s->s_config  = ov9726_sensor_config;
+	s->s_camera_type = FRONT_CAMERA_2D;
+	s->s_mount_angle = info->sensor_platform_info->mount_angle;
 	ov9726_probe_init_done(info);
 
 	return rc;

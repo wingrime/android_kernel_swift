@@ -1,4 +1,4 @@
-/* Copyright (c) 2010, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2010-2011, Code Aurora Forum. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -26,17 +26,17 @@
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  */
+
 #ifndef __LINUX_BQ27520_H
 #define __LINUX_BQ27520_H
-
 struct bq27520_platform_data {
 	const char *name;
 	unsigned int soc_int;
 	unsigned int bi_tout;
-	unsigned int chip_en;/*CE */
-
-	const char *vreg_name;/*regulater used by bq27520*/
-	int vreg_value;/*its value*/
+	unsigned int chip_en; /* CE */
+	const char *vreg_name; /* regulater used by bq27520 */
+	int vreg_value; /* its value */
+	int enable_dlog; /* if enable on-chip coulomb counter data logger */
 };
 
 #endif /* __LINUX_BQ27520_H */

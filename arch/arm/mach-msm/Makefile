@@ -1,5 +1,5 @@
 obj-y += io.o dma.o memory.o
-obj-y += clock.o clock-voter.o
+obj-y += clock.o clock-voter.o clock-dummy.o
 obj-y += modem_notifier.o
 obj-$(CONFIG_CPU_FREQ_MSM) += cpufreq.o
 obj-$(CONFIG_DEBUG_FS) += nohlt.o clock-debug.o
@@ -40,6 +40,8 @@ obj-$(CONFIG_CPU_V6) += idle-v6.o
 obj-$(CONFIG_CPU_V7) += idle-v7.o
 obj-$(CONFIG_MSM_JTAG_V7) += jtag-v7.o
 
+msm-etm-objs := cp14.o etm.o
+obj-$(CONFIG_MSM_ETM) += msm-etm.o
 
 quiet_cmd_mkrpcsym = MKCAP   $@
       cmd_mkrpcsym = $(PERL) $(srctree)/$(src)/mkrpcsym.pl $< $@
@@ -61,18 +63,15 @@ obj-$(CONFIG_MSM_SDIO_AL) += sdio_al_dloader.o
 obj-$(CONFIG_MSM_SDIO_DMUX) += sdio_dmux.o
 obj-$(CONFIG_MSM_SMD_LOGGING) += smem_log.o
 obj-$(CONFIG_MSM_SMD) += smd.o smd_debug.o remote_spinlock.o
-ifndef CONFIG_ARCH_MSM7X27A
         obj-y += socinfo.o
-endif
 ifndef CONFIG_ARCH_MSM8960
 ifndef CONFIG_ARCH_MSM8X60
-ifndef CONFIG_ARCH_MSM7X27A
 	obj-$(CONFIG_MSM_SMD) += pmic.o
-endif
 	obj-$(CONFIG_MSM_SMD) += nand_partitions.o
 	obj-$(CONFIG_MSM_ONCRPCROUTER) += rpc_hsusb.o rpc_pmapp.o rpc_fsusb.o
 endif
 endif
+obj-$(CONFIG_MSM_SDIO_TTY) += sdio_tty.o sdio_tty_ciq.o
 obj-$(CONFIG_MSM_SMD_TTY) += smd_tty.o
 obj-$(CONFIG_MSM_SMD_QMI) += smd_qmi.o
 obj-$(CONFIG_MSM_SMD_PKT) += smd_pkt.o
@@ -81,8 +80,11 @@ obj-$(CONFIG_MSM_DSPS) += msm_dsps.o
 obj-$(CONFIG_MSM_SDIO_CTL) += sdio_ctl.o
 obj-$(CONFIG_MSM_SMD_NMEA) += smd_nmea.o
 obj-$(CONFIG_MSM_RESET_MODEM) += reset_modem.o
+obj-$(CONFIG_MSM_IPC_ROUTER_SMD_XPRT) += ipc_router_smd_xprt.o
 obj-$(CONFIG_MSM_ONCRPCROUTER) += smd_rpcrouter.o
 obj-$(CONFIG_MSM_ONCRPCROUTER) += smd_rpcrouter_device.o
+obj-$(CONFIG_MSM_IPC_ROUTER) += ipc_router.o
+obj-$(CONFIG_MSM_IPC_ROUTER)+= ipc_socket.o
 obj-$(CONFIG_DEBUG_FS) += smd_rpc_sym.o
 obj-$(CONFIG_MSM_ONCRPCROUTER) += smd_rpcrouter_servers.o
 obj-$(CONFIG_MSM_ONCRPCROUTER) += smd_rpcrouter_clients.o
@@ -132,10 +134,16 @@ obj-$(CONFIG_MACH_QSD8X50A_FFA) += board-qsd8x50.o
 obj-$(CONFIG_MACH_QSD8X50A_ST1_5) += board-qsd8x50a-st1x.o
 obj-$(CONFIG_ARCH_MSM8X60) += devices-msm8x60.o clock-local.o clock-8x60.o acpuclock-8x60.o
 obj-$(CONFIG_ARCH_MSM8X60) += clock-rpm.o spm.o restart.o
-obj-$(CONFIG_ARCH_MSM8X60) += subsystem-fatal-8x60.o
 obj-$(CONFIG_ARCH_MSM8X60) += saw-regulator.o
 obj-$(CONFIG_ARCH_MSM8X60) += rpm-regulator.o
 obj-$(CONFIG_ARCH_MSM8X60) += footswitch-8x60.o
+
+ifdef CONFIG_MSM_SUBSYSTEM_RESTART
+	obj-y += subsystem_notif.o
+	obj-y += subsystem_restart.o
+	obj-y += ramdump.o
+	obj-$(CONFIG_ARCH_MSM8X60) += subsystem-fatal-8x60.o
+endif
 
 ifdef CONFIG_ARCH_MSM8X60
 	obj-$(CONFIG_CPU_IDLE) += cpuidle.o
@@ -156,12 +164,15 @@ obj-$(CONFIG_TROUT_BATTCHG) += htc_battery.o
 obj-$(CONFIG_TROUT_PWRSINK) += htc_pwrsink.o
 obj-$(CONFIG_MACH_MSM7X27_SURF) += board-msm7x27.o devices-msm7x27.o
 obj-$(CONFIG_MACH_MSM7X27_FFA) += board-msm7x27.o devices-msm7x27.o
-obj-$(CONFIG_MACH_MSM7X27A_RUMI3) += board-msm7x27a.o devices-msm7x27a.o clock-dummy.o
+obj-$(CONFIG_MACH_MSM7X27A_RUMI3) += board-msm7x27a.o devices-msm7x27a.o
+obj-$(CONFIG_MACH_MSM7X27A_SURF) += board-msm7x27a.o devices-msm7x27a.o
+obj-$(CONFIG_MACH_MSM7X27A_FFA) += board-msm7x27a.o devices-msm7x27a.o
 obj-$(CONFIG_ARCH_MSM7X30) += board-msm7x30.o devices-msm7x30.o memory_topology.o
 obj-$(CONFIG_ARCH_MSM7X30) += clock-local.o clock-7x30.o acpuclock-7x30.o
 obj-$(CONFIG_MACH_MSM7X25_SURF) += board-msm7x27.o devices-msm7x25.o
 obj-$(CONFIG_MACH_MSM7X25_FFA) += board-msm7x27.o devices-msm7x25.o
-obj-$(CONFIG_ARCH_MSM8960) += board-msm8960.o devices-8960.o clock-dummy.o
+obj-$(CONFIG_ARCH_MSM8960) += board-msm8960.o devices-8960.o footswitch-8x60.o
+obj-$(CONFIG_ARCH_MSM8960) += board-msm8960-regulator.o
 
 obj-$(CONFIG_MACH_SAPPHIRE) += board-sapphire.o board-sapphire-gpio.o
 obj-$(CONFIG_MACH_SAPPHIRE) += board-sapphire-keypad.o board-sapphire-panel.o
@@ -181,7 +192,9 @@ obj-$(CONFIG_MSM_RMT_STORAGE_CLIENT) += rmt_storage_client.o
 obj-$(CONFIG_MSM_SDIO_SMEM) += sdio_smem.o
 obj-$(CONFIG_PMIC8058) += pmic8058-gpio.o pmic8058-mpp.o
 obj-$(CONFIG_ARCH_MSM7X30) += spm.o
-obj-$(CONFIG_MSM_RPM) += rpm.o rpm_resources.o mpm.o
+obj-$(CONFIG_MSM_RPM) += rpm.o rpm_resources.o
+obj-$(CONFIG_MSM_MPM) += mpm.o
+obj-$(CONFIG_MSM_RPM_STATS_LOG) += rpm_stats.o
 obj-$(CONFIG_MSM_RPM_LOG) += rpm_log.o
 obj-$(CONFIG_MSM_XO) += msm_xo.o
 obj-$(CONFIG_MSM_BUS_SCALING) += msm_bus/
@@ -192,16 +205,13 @@ ifdef CONFIG_VCM
 obj-$(CONFIG_ARCH_MSM8X60) += board-msm8x60-vcm.o
 endif
 
-ifndef CONFIG_MSM_SOC_REV_A
 obj-$(CONFIG_ARCH_MSM7X27) += gpiomux-7x27.o gpiomux-v1.o gpiomux.o
-endif
 obj-$(CONFIG_ARCH_MSM7X30) += gpiomux-7x30.o gpiomux-v1.o gpiomux.o
 obj-$(CONFIG_ARCH_QSD8X50) += gpiomux-8x50.o gpiomux-v1.o gpiomux.o
 obj-$(CONFIG_ARCH_MSM8X60) += gpiomux-8x60.o gpiomux-v2.o gpiomux.o
+obj-$(CONFIG_ARCH_MSM8960) += gpiomux-v2.o gpiomux.o
 ifdef CONFIG_MSM_V2_TLMM
-ifndef CONFIG_ARCH_MSM8960
 obj-y	+= gpio-v2.o
-endif
 else
 obj-y	+= gpio.o
 endif
@@ -210,4 +220,3 @@ obj-$(CONFIG_MSM_SHOW_RESUME_IRQ) += msm_show_resume_irq.o
 obj-$(CONFIG_BT_MSM_PINTEST)  += btpintest.o
 obj-$(CONFIG_ENABLE_ROMLITE)  += romlite_sec.o
 romlite_sec-objs := msm_romlite_sec.o msm_romlite_pa.o
-

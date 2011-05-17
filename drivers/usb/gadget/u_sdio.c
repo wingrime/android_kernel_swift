@@ -46,6 +46,26 @@ static struct portmaster {
 } ports[N_PORTS];
 static unsigned n_ports;
 
+struct sdio_port_info {
+	/* data channel info */
+	char *data_ch_name;
+	struct sdio_channel *ch;
+
+	/* control channel info */
+	int ctrl_ch_id;
+};
+
+struct sdio_port_info sport_info[N_PORTS] = {
+	{
+		.data_ch_name = "SDIO_DUN",
+		.ctrl_ch_id = 9,
+	},
+	{
+		.data_ch_name = "SDIO_NMEA",
+		.ctrl_ch_id = 10,
+	},
+};
+
 static struct workqueue_struct *gsdio_wq;
 
 struct gsdio_port {
@@ -945,15 +965,14 @@ static void gsdio_debugfs_init(void)
 #endif
 
 /* connect, disconnect, alloc_requests, free_requests */
-int gsdio_setup(struct usb_gadget *g, unsigned count, struct sdio_port_info *pi)
+int gsdio_setup(struct usb_gadget *g, unsigned count)
 {
 	struct usb_cdc_line_coding	coding;
 	int i;
 	int ret = 0;
-	struct sdio_port_info *port_info = pi;
+	struct sdio_port_info *port_info;
 
-	pr_debug("%s: gadget:(%p) count:%d port_info:%p\n", __func__,
-			g, count, pi);
+	pr_debug("%s: gadget:(%p) count:%d\n", __func__, g, count);
 
 	if (count == 0 || count > N_PORTS) {
 		pr_err("%s: invalid number of ports count:%d max_ports:%d\n",
@@ -975,7 +994,7 @@ int gsdio_setup(struct usb_gadget *g, unsigned count, struct sdio_port_info *pi)
 
 	for (i = 0; i < count; i++) {
 		mutex_init(&ports[i].lock);
-		ret = gsdio_port_alloc(i, &coding, port_info);
+		ret = gsdio_port_alloc(i, &coding, sport_info + i);
 		if (ret) {
 			pr_err("%s: sdio logical port allocation failed\n",
 					__func__);

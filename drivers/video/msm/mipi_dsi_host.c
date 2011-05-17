@@ -46,11 +46,62 @@
 
 static struct completion dsi_dma_comp;
 static struct dsi_buf dsi_tx_buf;
+static int dsi_irq_enabled;
+static spinlock_t dsi_lock;
 
 void mipi_dsi_init(void)
 {
 	init_completion(&dsi_dma_comp);
 	mipi_dsi_buf_alloc(&dsi_tx_buf, DSI_BUF_SIZE);
+	spin_lock_init(&dsi_lock);
+}
+
+void mipi_dsi_enable_irq(void)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(&dsi_lock, flags);
+	if (dsi_irq_enabled) {
+		printk(KERN_ERR "%s: IRQ aleady enabled\n", __func__);
+		spin_unlock_irqrestore(&dsi_lock, flags);
+		return;
+	}
+	dsi_irq_enabled = 1;
+	enable_irq(DSI_IRQ);
+	spin_unlock_irqrestore(&dsi_lock, flags);
+}
+
+void mipi_dsi_disable_irq(void)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(&dsi_lock, flags);
+	if (dsi_irq_enabled == 0) {
+		printk(KERN_ERR "%s: IRQ already disabled\n", __func__);
+		spin_unlock_irqrestore(&dsi_lock, flags);
+		return;
+	}
+
+	dsi_irq_enabled = 0;
+	disable_irq(DSI_IRQ);
+	spin_unlock_irqrestore(&dsi_lock, flags);
+}
+
+/*
+ * mipi_dsi_disale_irq_nosync() should be called
+ * from interrupt context
+ */
+ void mipi_dsi_disable_irq_nosync(void)
+{
+	spin_lock(&dsi_lock);
+	if (dsi_irq_enabled == 0) {
+		printk(KERN_ERR "%s: IRQ cannot be disabled\n", __func__);
+		return;
+	}
+
+	dsi_irq_enabled = 0;
+	disable_irq_nosync(DSI_IRQ);
+	spin_unlock(&dsi_lock);
 }
 
 /*
@@ -818,10 +869,16 @@ int mipi_dsi_cmds_tx(struct msm_fb_data_type *mfd,
 		ctrl = dsi_ctrl | 0x04; /* CMD_MODE_EN */
 		MIPI_OUTP(MIPI_DSI_BASE + 0x0000, ctrl);
 	} else { /* cmd mode */
+		/*
+		 * during boot up, cmd mode is configured
+		 * even it is video mode panel.
+		 */
 		/* make sure mdp dma is not txing pixel data */
-		mdp4_dsi_cmd_dma_busy_wait(mfd);
+		if (mfd->panel_info.type == MIPI_CMD_PANEL)
+			mdp4_dsi_cmd_dma_busy_wait(mfd);
 	}
 
+	mipi_dsi_enable_irq();
 	cm = cmds;
 	mipi_dsi_buf_init(tp);
 	for (i = 0; i < cnt; i++) {
@@ -832,6 +889,7 @@ int mipi_dsi_cmds_tx(struct msm_fb_data_type *mfd,
 			msleep(cm->wait);
 		cm++;
 	}
+	mipi_dsi_disable_irq();
 
 	if (video_mode)
 		MIPI_OUTP(MIPI_DSI_BASE + 0x0000, dsi_ctrl); /* restore */
@@ -839,12 +897,23 @@ int mipi_dsi_cmds_tx(struct msm_fb_data_type *mfd,
 	return cnt;
 }
 
+/* MIPI_DSI_MRPS, Maximum Return Packet Size */
+static char max_pktsize[2] = {0x00, 0x00}; /* LSB tx first, 10 bytes */
+
+static struct dsi_cmd_desc pkt_size_cmd[] = {
+	{DTYPE_MAX_PKTSIZE, 1, 0, 0, 0,
+		sizeof(max_pktsize), max_pktsize}
+};
+
 /*
- * Novatek panel will reply with  MAX_RETURN_PACKET_SIZE bytes of data
+ * DSI panel reply with  MAX_RETURN_PACKET_SIZE bytes of data
  * plus DCS header, ECC and CRC for DCS long read response
- * currently, we set MAX_RETURN_PAKET_SIZE to 4 to align with 32 bits
- * register
- * currently, only MAX_RETURN_PACKET_SIZE (4) bytes per read
+ * mipi_dsi_controller only have 4x32 bits register ( 16 bytes) to
+ * hold data per transaction.
+ * MIPI_DSI_LEN equal to 8
+ * len should be either 4 or 8
+ * any return data more than MIPI_DSI_LEN need to be break down
+ * to multiple transactions.
  *
  * ov_mutex need to be acquired before call this function.
  */
@@ -853,26 +922,45 @@ int mipi_dsi_cmds_rx(struct msm_fb_data_type *mfd,
 			struct dsi_cmd_desc *cmds, int len)
 {
 	int cnt, res;
+	static int pkt_size;
 
 	if (len <= 2)
 		cnt = 4;	/* short read */
-	else
-		cnt = MIPI_DSI_MRPS + 6; /* 4 bytes header + 2 bytes crc */
+	else {
+		if (len > MIPI_DSI_LEN)
+			len = MIPI_DSI_LEN;	/* 8 bytes at most */
 
-	if (cnt > MIPI_DSI_REG_LEN) {
-		pr_debug("%s: len=%d too long\n", __func__, len);
-		return -ERANGE;
+		res = len & 0x03;
+		len += (4 - res); /* 4 bytes align */
+		/*
+		 * add extra 2 bytes to len to have overall
+		 * packet size is multipe by 4. This also make
+		 * sure 4 bytes dcs headerlocates within a
+		 * 32 bits register after shift in.
+		 * after all, len should be either 6 or 10.
+		 */
+		len += 2;
+		cnt = len + 6; /* 4 bytes header + 2 bytes crc */
 	}
 
-	res = cnt & 0x03;
 
-	cnt += res;	/* 4 byte align */
+	if (mfd->panel_info.type == MIPI_CMD_PANEL) {
+		/* make sure mdp dma is not txing pixel data */
+		mdp4_dsi_cmd_dma_busy_wait(mfd);
+	}
+
+	mipi_dsi_enable_irq();
+	if (pkt_size != len) {
+		/* set new max pkt size */
+		pkt_size = len;
+		max_pktsize[0] = pkt_size;
+		mipi_dsi_buf_init(tp);
+		mipi_dsi_cmd_dma_add(tp, pkt_size_cmd);
+		mipi_dsi_cmd_dma_tx(tp);
+	}
 
 	mipi_dsi_buf_init(tp);
 	mipi_dsi_cmd_dma_add(tp, cmds);
-
-	/* make sure mdp dma is not txing pixel data */
-	mdp4_dsi_cmd_dma_busy_wait(mfd);
 
 	/* transmit read comamnd to client */
 	mipi_dsi_cmd_dma_tx(tp);
@@ -881,14 +969,21 @@ int mipi_dsi_cmds_rx(struct msm_fb_data_type *mfd,
 	 * return data from client is ready and stored
 	 * at RDBK_DATA register already
 	 */
-	mipi_dsi_buf_reserve(rp, res);
 	mipi_dsi_cmd_dma_rx(rp, cnt);
 
-	/* strip off dcs read header & crc */
-	rp->data += (4 + res);
-	rp->len -= (6 + res);
+	mipi_dsi_disable_irq();
 
-	return len;
+	/* strip off dcs header & crc */
+	if (cnt > 4) { /* long response */
+		rp->data += 4; /* skip dcs header */
+		rp->len -= 6; /* deduct 4 bytes header + 2 bytes crc */
+		rp->len -= 2; /* extra 2 bytes added */
+	} else {
+		rp->data += 1; /* skip dcs short header */
+		rp->len -= 2; /* deduct 1 byte header + 1 byte ecc */
+	}
+
+	return rp->len;
 }
 
 int mipi_dsi_cmd_dma_tx(struct dsi_buf *tp)
@@ -931,14 +1026,6 @@ int mipi_dsi_cmd_dma_tx(struct dsi_buf *tp)
 	return tp->len;
 }
 
-/*
- * mipi_dsi_cmd_dma_rx: can receive at most 16 bytes
- * per transaction since it only have 4 32bits reigsters
- * to hold data.
- * therefore Maximum Return Packet Size need to be set to 16.
- * any return data more than MRPS need to be break down
- * to multiple transactions.
- */
 int mipi_dsi_cmd_dma_rx(struct dsi_buf *rp, int rlen)
 {
 	uint32 *lp, data;
@@ -954,6 +1041,7 @@ int mipi_dsi_cmd_dma_rx(struct dsi_buf *rp, int rlen)
 
 	off = 0x068;	/* DSI_RDBK_DATA0 */
 	off += ((cnt - 1) * 4);
+
 
 	for (i = 0; i < cnt; i++) {
 		data = (uint32)MIPI_INP(MIPI_DSI_BASE + off);

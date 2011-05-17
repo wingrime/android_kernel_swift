@@ -266,6 +266,7 @@ static void msm_gpio_update_dual_edge_pos(unsigned gpio)
 		intstat = readl(GPIO_INTR_STATUS(gpio)) & BIT(INTR_STATUS_BIT);
 		if (intstat || val == val2) {
 			/* switch the configuration in the mpm as well*/
+#ifdef CONFIG_MSM_RPM
 			if (val)
 				msm_mpm_set_irq_type(msm_gpio_to_irq(
 						&msm_gpio.gpio_chip, gpio),
@@ -274,6 +275,7 @@ static void msm_gpio_update_dual_edge_pos(unsigned gpio)
 				msm_mpm_set_irq_type(msm_gpio_to_irq(
 						&msm_gpio.gpio_chip, gpio),
 						IRQF_TRIGGER_RISING);
+#endif
 			return;
 		}
 	} while (loop_limit-- > 0);
@@ -302,7 +304,9 @@ static void msm_gpio_irq_mask(unsigned int irq)
 	__clear_bit(gpio, msm_gpio.enabled_irqs);
 	spin_unlock_irqrestore(&tlmm_lock, irq_flags);
 
+#ifdef CONFIG_MSM_RPM
 	msm_mpm_enable_irq(irq, 0);
+#endif
 }
 
 static void msm_gpio_irq_unmask(unsigned int irq)
@@ -316,12 +320,16 @@ static void msm_gpio_irq_unmask(unsigned int irq)
 	writel(TARGET_PROC_SCORPION, GPIO_INTR_CFG_SU(gpio));
 	spin_unlock_irqrestore(&tlmm_lock, irq_flags);
 
+#ifdef CONFIG_MSM_RPM
 	msm_mpm_enable_irq(irq, 1);
+#endif
 }
 
 static void msm_gpio_irq_disable(unsigned int irq)
 {
+#ifdef CONFIG_MSM_RPM
 	msm_mpm_enable_irq(irq, 0);
+#endif
 }
 
 static int msm_gpio_irq_set_type(unsigned int irq, unsigned int flow_type)
@@ -358,7 +366,9 @@ static int msm_gpio_irq_set_type(unsigned int irq, unsigned int flow_type)
 		msm_gpio_update_dual_edge_pos(gpio);
 
 	spin_unlock_irqrestore(&tlmm_lock, irq_flags);
+#ifdef CONFIG_MSM_RPM
 	msm_mpm_set_irq_type(irq, flow_type);
+#endif
 
 	return 0;
 }
@@ -389,15 +399,17 @@ static int msm_gpio_irq_set_wake(unsigned int irq, unsigned int on)
 
 	if (on) {
 		if (bitmap_empty(msm_gpio.wake_irqs, NR_MSM_GPIOS))
-			set_irq_wake(TLMM_SCSS_SUMMARY_IRQ, 1);
+			set_irq_wake(TLMM_MSM_SUMMARY_IRQ, 1);
 		set_bit(gpio, msm_gpio.wake_irqs);
 	} else {
 		clear_bit(gpio, msm_gpio.wake_irqs);
 		if (bitmap_empty(msm_gpio.wake_irqs, NR_MSM_GPIOS))
-			set_irq_wake(TLMM_SCSS_SUMMARY_IRQ, 0);
+			set_irq_wake(TLMM_MSM_SUMMARY_IRQ, 0);
 	}
 
+#ifdef CONFIG_MSM_RPM
 	msm_mpm_set_irq_wake(irq, on);
+#endif
 	return 0;
 }
 
@@ -431,7 +443,7 @@ static int __devinit msm_gpio_probe(struct platform_device *dev)
 		set_irq_flags(irq, IRQF_VALID);
 	}
 
-	set_irq_chained_handler(TLMM_SCSS_SUMMARY_IRQ,
+	set_irq_chained_handler(TLMM_MSM_SUMMARY_IRQ,
 				msm_summary_irq_handler);
 	return 0;
 }
@@ -443,7 +455,7 @@ static int __devexit msm_gpio_remove(struct platform_device *dev)
 	if (ret < 0)
 		return ret;
 
-	set_irq_handler(TLMM_SCSS_SUMMARY_IRQ, NULL);
+	set_irq_handler(TLMM_MSM_SUMMARY_IRQ, NULL);
 
 	return 0;
 }
@@ -592,7 +604,7 @@ int msm_gpio_install_direct_irq(unsigned gpio, unsigned irq,
 	unsigned long irq_flags;
 	uint32_t bits;
 
-	if (gpio >= NR_MSM_GPIOS || irq >= NR_TLMM_SCSS_DIR_CONN_IRQ)
+	if (gpio >= NR_MSM_GPIOS || irq >= NR_TLMM_MSM_DIR_CONN_IRQ)
 		return -EINVAL;
 
 	spin_lock_irqsave(&tlmm_lock, irq_flags);

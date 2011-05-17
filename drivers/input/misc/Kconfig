@@ -355,6 +355,28 @@ config INPUT_PCF8574
 	  To compile this driver as a module, choose M here: the
 	  module will be called pcf8574_keypad.
 
+config INPUT_PWM_BEEPER
+	tristate "PWM beeper support"
+	depends on HAVE_PWM
+	help
+	  Say Y here to get support for PWM based beeper devices.
+
+	  If unsure, say N.
+
+	  To compile this driver as a module, choose M here: the module will be
+	  called pwm-beeper.
+
+config INPUT_PMIC8XXX_PWRKEY
+	tristate "PMIC8XXX power key support"
+	depends on MFD_PM8XXX
+	help
+	  Say Y here if you want support for the PMIC8XXX power key.
+
+	  If unsure, say N.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called pmic8xxx-pwrkey.
+
 config INPUT_GPIO_ROTARY_ENCODER
 	tristate "Rotary encoders connected to GPIO pins"
 	depends on GPIOLIB && GENERIC_GPIO
@@ -449,5 +471,12 @@ config INPUT_PMIC8058_VIBRA_MEMLESS
 
 	  To compile this driver as module, choose M here: the
 	  module will be called pmic8058-vib-memless.
+
+config BOSCH_BMA150
+        tristate "SMB380/BMA150 acceleration sensor support"
+        depends on I2C=y
+        help
+          If you say yes here you get support for Bosch Sensortec's
+          acceleration sensors SMB380/BMA150.
 
 endif

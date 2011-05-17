@@ -375,6 +375,34 @@ config EZX_PCAP
 	  This enables the PCAP ASIC present on EZX Phones. This is
 	  needed for MMC, TouchScreen, Sound, USB, etc..
 
+config MFD_PM8XXX
+	tristate
+
+config MFD_PM8921_CORE
+	tristate "Qualcomm PM8921 PMIC chip"
+	depends on MSM_SSBI
+	select MFD_CORE
+	select MFD_PM8XXX
+	help
+	  If you say yes to this option, support will be included for the
+	  built-in PM8921 PMIC chip.
+
+	  This is required if your board has a PM8921 and uses its features,
+	  such as: MPPs, GPIOs, regulators, interrupts, and PWM.
+
+	  Say M here if you want to include support for PM8921 chip as a module.
+	  This will build a module called "pm8921-core".
+
+config MFD_PM8XXX_IRQ
+	bool "Support for Qualcomm PM8xxx IRQ features"
+	depends on MFD_PM8XXX
+	default y if MFD_PM8XXX
+	help
+	  This is the IRQ driver for Qualcomm PM 8xxx PMIC chips.
+
+	  This is required to use certain other PM 8xxx features, such as GPIO
+	  and MPP.
+
 endmenu
 
 menu "Multimedia Capabilities Port drivers"

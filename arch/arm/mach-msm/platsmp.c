@@ -16,6 +16,7 @@
 
 #include <asm/hardware/gic.h>
 #include <asm/cacheflush.h>
+#include <asm/cputype.h>
 #include <asm/mach-types.h>
 
 #include <mach/smp.h>
@@ -29,13 +30,10 @@
 
 int pen_release = -1;
 
-int get_core_count(void)
+static inline int get_core_count(void)
 {
-#ifdef CONFIG_NR_CPUS
-	return CONFIG_NR_CPUS;
-#else
-	return 1;
-#endif
+	/* 1 + the PART[1:0] field of MIDR */
+	return ((read_cpuid_id() >> 4) & 3) + 1;
 }
 
 /* Initialize the present map (cpu_set(i, cpu_present_map)). */

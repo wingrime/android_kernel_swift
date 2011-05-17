@@ -30,6 +30,7 @@
 #include <mach/msm_iomap.h>
 #include <mach/scm-io.h>
 #include <mach/scm.h>
+#include "msm_watchdog.h"
 
 #define TCSR_WDT_CFG 0x30
 
@@ -66,6 +67,13 @@ module_param_call(runtime_disable, wdog_enable_set, param_get_int,
 			&runtime_disable, 0644);
 
 /*
+ * On the kernel command line specify msm_watchdog.appsbark=1 to handle
+ * watchdog barks in Linux. By default barks are processed by the secure side.
+ */
+static int appsbark;
+module_param(appsbark, int, 0);
+
+/*
  * Use /sys/module/msm_watchdog/parameters/print_all_stacks
  * to control whether stacks of all running
  * processes are printed when a wdog bark is received.
@@ -73,19 +81,20 @@ module_param_call(runtime_disable, wdog_enable_set, param_get_int,
 static int print_all_stacks = 1;
 module_param(print_all_stacks, int,  S_IRUGO | S_IWUSR);
 
-static void pet_watchdog(struct work_struct *work);
-static DECLARE_DELAYED_WORK(dogwork_struct, pet_watchdog);
+static void pet_watchdog_work(struct work_struct *work);
+static DECLARE_DELAYED_WORK(dogwork_struct, pet_watchdog_work);
 
 static int msm_watchdog_suspend(void)
 {
-	writel(1, WDT0_RST);
-	writel(0, WDT0_EN);
+	__raw_writel(1, WDT0_RST);
+	__raw_writel(0, WDT0_EN);
+	dsb();
 	return NOTIFY_DONE;
 }
 static int msm_watchdog_resume(void)
 {
-	writel(1, WDT0_EN);
-	writel(1, WDT0_RST);
+	__raw_writel(1, WDT0_EN);
+	__raw_writel(1, WDT0_RST);
 	return NOTIFY_DONE;
 }
 
@@ -108,12 +117,13 @@ static int panic_wdog_handler(struct notifier_block *this,
 			      unsigned long event, void *ptr)
 {
 	if (panic_timeout == 0) {
-		writel(0, WDT0_EN);
+		__raw_writel(0, WDT0_EN);
+		dsb();
 		secure_writel(0, MSM_TCSR_BASE + TCSR_WDT_CFG);
 	} else {
-		writel(32768 * (panic_timeout + 4), WDT0_BARK_TIME);
-		writel(32768 * (panic_timeout + 4), WDT0_BITE_TIME);
-		writel(1, WDT0_RST);
+		__raw_writel(32768 * (panic_timeout + 4), WDT0_BARK_TIME);
+		__raw_writel(32768 * (panic_timeout + 4), WDT0_BITE_TIME);
+		__raw_writel(1, WDT0_RST);
 	}
 	return NOTIFY_DONE;
 }
@@ -148,11 +158,12 @@ static int wdog_enable_set(const char *val, struct kernel_param *kp)
 
 	case 1:
 		if (!old_val) {
-			writel(0, WDT0_EN);
+			__raw_writel(0, WDT0_EN);
 			unregister_pm_notifier(&msm_watchdog_power_notifier);
 
 			/* may be suspended after the first write above */
-			writel(0, WDT0_EN);
+			__raw_writel(0, WDT0_EN);
+			dsb();
 			secure_writel(0, MSM_TCSR_BASE + TCSR_WDT_CFG);
 			free_irq(WDT0_ACCSCSSNBARK_INT, 0);
 			enable = 0;
@@ -175,10 +186,15 @@ done:
 	return ret;
 }
 
-static void pet_watchdog(struct work_struct *work)
+void pet_watchdog(void)
 {
-	writel(1, WDT0_RST);
+	__raw_writel(1, WDT0_RST);
 	last_pet = sched_clock();
+}
+
+static void pet_watchdog_work(struct work_struct *work)
+{
+	pet_watchdog();
 
 	if (enable)
 		schedule_delayed_work(&dogwork_struct, delay_time);
@@ -187,9 +203,11 @@ static void pet_watchdog(struct work_struct *work)
 static void __exit exit_watchdog(void)
 {
 	if (enable) {
-		writel(0, WDT0_EN);
+		__raw_writel(0, WDT0_EN);
 		unregister_pm_notifier(&msm_watchdog_power_notifier);
-		writel(0, WDT0_EN); /* In case we got suspended mid-exit */
+		__raw_writel(0, WDT0_EN); /* In case we got suspended
+					   * mid-exit */
+		dsb();
 		secure_writel(0, MSM_TCSR_BASE + TCSR_WDT_CFG);
 		free_irq(WDT0_ACCSCSSNBARK_INT, 0);
 		enable = 0;
@@ -246,51 +264,57 @@ static int __init init_watchdog(void)
 		printk(KERN_INFO "MSM Watchdog Not Initialized\n");
 		return 0;
 	}
-#ifdef CONFIG_MSM_SCM
-	regsave = (void *)__get_free_page(GFP_KERNEL);
 
-	if (regsave) {
-		cmd_buf.addr = __pa(regsave);
-		cmd_buf.len  = PAGE_SIZE;
-
-		ret = scm_call(SCM_SVC_UTIL, SCM_SET_REGSAVE_CMD, &cmd_buf,
-			 sizeof(cmd_buf), NULL, 0);
-		if (ret)
-			pr_err("Setting register save address failed.\n"
-			       "Registers won't be dumped on a dog bite\n");
-	} else
-		pr_err("Allocating register save space failed\n"
-		       "Registers won't be dumped on a dog bite\n");
-		/*
-		 * No need to bail if allocation fails. Simply don't send the
-		 * command, and the secure side will reset without saving
-		 * registers.
-		 */
-#endif
-	secure_writel(1, MSM_TCSR_BASE + TCSR_WDT_CFG);
-	delay_time = msecs_to_jiffies(PET_DELAY);
-
-	/* 32768 ticks = 1 second */
-	writel(32768*4, WDT0_BARK_TIME);
-	writel(32768*5, WDT0_BITE_TIME);
-
-	ret = register_pm_notifier(&msm_watchdog_power_notifier);
-	if (ret)
-		return ret;
-
+	/* Must request irq before sending scm command */
 	ret = request_irq(WDT0_ACCSCSSNBARK_INT, wdog_bark_handler, 0,
 			  "apps_wdog_bark", NULL);
 	if (ret)
 		return ret;
 
-	INIT_DELAYED_WORK(&dogwork_struct, pet_watchdog);
+#ifdef CONFIG_MSM_SCM
+	if (!appsbark) {
+		regsave = (void *)__get_free_page(GFP_KERNEL);
+
+		if (regsave) {
+			cmd_buf.addr = __pa(regsave);
+			cmd_buf.len  = PAGE_SIZE;
+
+			ret = scm_call(SCM_SVC_UTIL, SCM_SET_REGSAVE_CMD,
+				       &cmd_buf, sizeof(cmd_buf), NULL, 0);
+			if (ret)
+				pr_err("Setting register save address failed.\n"
+				       "Registers won't be dumped on a dog "
+				       "bite\n");
+		} else
+			pr_err("Allocating register save space failed\n"
+			       "Registers won't be dumped on a dog bite\n");
+			/*
+			 * No need to bail if allocation fails. Simply don't
+			 * send the command, and the secure side will reset
+			 * without saving registers.
+			 */
+	}
+#endif
+	secure_writel(1, MSM_TCSR_BASE + TCSR_WDT_CFG);
+	delay_time = msecs_to_jiffies(PET_DELAY);
+
+	/* 32768 ticks = 1 second */
+	__raw_writel(32768*4, WDT0_BARK_TIME);
+	__raw_writel(32768*5, WDT0_BITE_TIME);
+
+	ret = register_pm_notifier(&msm_watchdog_power_notifier);
+	if (ret) {
+		free_irq(WDT0_ACCSCSSNBARK_INT, NULL);
+		return ret;
+	}
+
 	schedule_delayed_work(&dogwork_struct, delay_time);
 
 	atomic_notifier_chain_register(&panic_notifier_list,
 				       &panic_blk);
 
-	writel(1, WDT0_EN);
-	writel(1, WDT0_RST);
+	__raw_writel(1, WDT0_EN);
+	__raw_writel(1, WDT0_RST);
 	last_pet = sched_clock();
 
 	printk(KERN_INFO "MSM Watchdog Initialized\n");

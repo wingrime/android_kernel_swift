@@ -2462,7 +2462,10 @@ static int cyttsp_initialize(struct i2c_client *client, struct cyttsp *ts)
 		cyttsp_alert("sysfs entry for force firmware update failed\n");
 		goto error_rm_dev_file_update_fw;
 	}
-
+	if (ts->platform_data->correct_fw_ver) {
+		if (g_bl_data.appid_lo != ts->platform_data->correct_fw_ver)
+			printk(KERN_INFO "Please update touchscreen firmware\n");
+	}
 	cyttsp_info("%s: Successful registration\n", CY_I2C_NAME);
 	goto success;
 

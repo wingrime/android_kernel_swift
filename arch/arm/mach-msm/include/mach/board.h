@@ -22,6 +22,7 @@
 #include <linux/input.h>
 #include <linux/usb.h>
 #include <linux/leds-pmic8058.h>
+#include <linux/msm_ssbi.h>
 #ifdef CONFIG_MSM_BUS_SCALING
 #include <mach/msm_bus.h>
 #endif
@@ -83,6 +84,7 @@ struct msm_ce_hw_support {
 	uint32_t ce_shared;
 	uint32_t shared_ce_resource;
 	uint32_t hw_key_support;
+	uint32_t sha_hmac;
 };
 #endif
 
@@ -154,6 +156,10 @@ struct msm_camera_sensor_strobe_flash_data {
 	int state;
 };
 
+struct msm_camera_sensor_platform_info {
+	int mount_angle;
+};
+
 struct msm_camera_sensor_info {
 	const char *sensor_name;
 	int sensor_reset;
@@ -162,6 +168,7 @@ struct msm_camera_sensor_info {
 	int vcm_enable;
 	int mclk;
 	int flash_type;
+	struct msm_camera_sensor_platform_info *sensor_platform_info;
 	struct msm_camera_device_platform_data *pdata;
 	struct resource *resource;
 	uint8_t num_resources;
@@ -169,6 +176,7 @@ struct msm_camera_sensor_info {
 	int csi_if;
 	struct msm_camera_csi_params csi_params;
 	struct msm_camera_sensor_strobe_flash_data *strobe_flash_data;
+	char *eeprom_data;
 };
 
 struct clk;
@@ -293,6 +301,7 @@ struct msm_hdmi_platform_data {
 	int (*core_power)(int on, int show);
 	int (*cec_power)(int on);
 	int (*init_irq)(void);
+	bool (*check_hdcp_hw_support)(void);
 };
 
 struct msm_i2c_platform_data {
@@ -311,13 +320,7 @@ struct msm_i2c_platform_data {
 	void (*msm_i2c_config_gpio)(int iface, int config_type);
 };
 
-enum msm_ssbi_controller_type {
-	MSM_SBI_CTRL_SSBI = 0,
-	MSM_SBI_CTRL_SSBI2,
-	MSM_SBI_CTRL_PMIC_ARBITER,
-};
-
-struct msm_ssbi_platform_data {
+struct msm_i2c_ssbi_platform_data {
 	const char *rsl_id;
 	enum msm_ssbi_controller_type controller_type;
 };

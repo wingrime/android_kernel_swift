@@ -90,15 +90,16 @@ static inline void clock_debug_print_enabled(void) { return; }
 
 extern struct clk_ops clk_ops_remote;
 
-static inline int msm_clock_require_tcxo(unsigned long *reason, int nbits)
-{
-	return 0;
-}
+extern struct clk_ops clk_ops_dummy;
 
-static inline int msm_clock_get_name(uint32_t id, char *name, uint32_t size)
-{
-	return 0;
-}
+#define CLK_DUMMY(clk_name, clk_id, clk_dev, flags) { \
+	.con_id = clk_name, \
+	.dev_id = clk_dev, \
+	.clk = &(struct clk) { \
+		.dbg_name = #clk_id, \
+		.ops = &clk_ops_dummy, \
+	} \
+	}
 
 #endif
 

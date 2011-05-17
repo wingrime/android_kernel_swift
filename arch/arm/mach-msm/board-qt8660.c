@@ -350,7 +350,7 @@ static struct msm_cpuidle_state msm_cstates[] __initdata = {
 		MSM_PM_SLEEP_MODE_POWER_COLLAPSE_STANDALONE},
 };
 
-#if defined(CONFIG_USB_GADGET_MSM_72K) || defined(CONFIG_USB_EHCI_MSM)
+#if defined(CONFIG_USB_GADGET_MSM_72K) || defined(CONFIG_USB_EHCI_MSM_72K)
 static struct regulator *ldo6_3p3;
 static struct regulator *ldo7_1p8;
 static struct regulator *vdd_cx;
@@ -532,7 +532,7 @@ static int msm_hsusb_ldo_enable(int on)
 	return ret < 0 ? ret : 0;
  }
 #endif
-#ifdef CONFIG_USB_EHCI_MSM
+#ifdef CONFIG_USB_EHCI_MSM_72K
 static void msm_hsusb_vbus_power(unsigned phy_info, int on)
 {
 	static struct regulator *votg_5v_switch;
@@ -586,7 +586,7 @@ static struct msm_usb_host_platform_data msm_usb_host_pdata = {
 };
 #endif
 
-#if defined(CONFIG_USB_GADGET_MSM_72K) || defined(CONFIG_USB_EHCI_MSM)
+#if defined(CONFIG_USB_GADGET_MSM_72K) || defined(CONFIG_USB_EHCI_MSM_72K)
 
 #define USB_SWITCH_EN_GPIO	132		/* !CS of analog switch */
 #define USB_SWITCH_CNTL_GPIO	131		/* 0: Host, 1: Peripheral */
@@ -688,7 +688,7 @@ static struct msm_otg_platform_data msm_otg_pdata = {
 	.pemp_level		 = PRE_EMPHASIS_WITH_20_PERCENT,
 	.cdr_autoreset		 = CDR_AUTO_RESET_DISABLE,
 	.se1_gating		 = SE1_GATING_DISABLE,
-#ifdef CONFIG_USB_EHCI_MSM
+#ifdef CONFIG_USB_EHCI_MSM_72K
 	.vbus_power = msm_hsusb_vbus_power,
 #endif
 	.ldo_init		 = msm_hsusb_ldo_init,
@@ -1160,24 +1160,22 @@ static struct msm_i2c_platform_data msm_gsbi12_qup_i2c_pdata = {
 #if defined(CONFIG_SPI_QUP) || defined(CONFIG_SPI_QUP_MODULE)
 static struct msm_spi_platform_data msm_gsbi1_qup_spi_pdata = {
 	.max_clock_speed = 24000000,
-	.clk_name = "gsbi_qup_clk",
-	.pclk_name = "gsbi_pclk",
 };
 #endif
 
 #ifdef CONFIG_I2C_SSBI
 /* PMIC SSBI */
-static struct msm_ssbi_platform_data msm_ssbi1_pdata = {
+static struct msm_i2c_ssbi_platform_data msm_ssbi1_pdata = {
 	.controller_type = MSM_SBI_CTRL_PMIC_ARBITER,
 };
 
 /* PMIC SSBI */
-static struct msm_ssbi_platform_data msm_ssbi2_pdata = {
+static struct msm_i2c_ssbi_platform_data msm_ssbi2_pdata = {
 	.controller_type = MSM_SBI_CTRL_PMIC_ARBITER,
 };
 
 /* CODEC/TSSC SSBI */
-static struct msm_ssbi_platform_data msm_ssbi3_pdata = {
+static struct msm_i2c_ssbi_platform_data msm_ssbi3_pdata = {
 	.controller_type = MSM_SBI_CTRL_SSBI,
 };
 #endif
@@ -2027,6 +2025,7 @@ static struct xoadc_platform_data xoadc_pdata = {
 #endif
 
 #define QT_ATMEL_TS_GPIO_IRQ	61
+#define QT_ATMEL_LDO_ENABLE_GPIO 69
 #define ATMEL_I2C_NAME "maXTouch"
 
 static struct regulator *pm8901_l2;
@@ -2072,8 +2071,23 @@ static int atmel_qt_platform_init(struct i2c_client *client)
 		goto free_gpio;
 	}
 
+	rc = gpio_request(QT_ATMEL_LDO_ENABLE_GPIO, "atmel_ldo_gpio");
+	if (rc) {
+		pr_err("%s: unable to request gpio %d\n",
+			__func__, QT_ATMEL_LDO_ENABLE_GPIO);
+		goto free_gpio;
+	}
+	rc = gpio_direction_output(QT_ATMEL_LDO_ENABLE_GPIO, 1);
+	if (rc < 0) {
+		pr_err("%s: unable to set the direction of gpio %d\n",
+			__func__, QT_ATMEL_LDO_ENABLE_GPIO);
+		goto free_ldo_gpio;
+	}
+
 	return 0;
 
+free_ldo_gpio:
+	gpio_free(QT_ATMEL_LDO_ENABLE_GPIO);
 free_gpio:
 	gpio_free(QT_ATMEL_TS_GPIO_IRQ);
 reg_disable:
@@ -2237,7 +2251,11 @@ static struct platform_device *qt_devices[] __initdata = {
 	&msm_rotator_device,
 #endif
 	&msm_fb_device,
-	&msm_device_kgsl,
+	&msm_kgsl_3d0,
+#ifdef CONFIG_MSM_KGSL_2D
+	&msm_kgsl_2d0,
+	&msm_kgsl_2d1,
+#endif
 	&lcdc_chimei_panel_device,
 #ifdef CONFIG_FB_MSM_HDMI_MSM_PANEL
 	&hdmi_msm_device,
@@ -5191,6 +5209,8 @@ static struct msm_rpm_platform_data msm_rpm_data = {
 	.irq_ack = RPM_SCSS_CPU0_GP_HIGH_IRQ,
 	.irq_err = RPM_SCSS_CPU0_GP_LOW_IRQ,
 	.irq_vmpm = RPM_SCSS_CPU0_GP_MEDIUM_IRQ,
+	.msm_apps_ipc_rpm_reg = MSM_GCC_BASE + 0x008,
+	.msm_apps_ipc_rpm_val = 4,
 };
 #endif
 
@@ -5220,7 +5240,9 @@ static void __init msm8x60_init(struct msm_board_data *board_data)
 	if (socinfo_init() < 0)
 		printk(KERN_ERR "%s: socinfo_init() failed!\n",
 		       __func__);
+#ifdef CONFIG_MSM_KGSL_2D
 	msm8x60_check_2d_hardware();
+#endif
 
 	/* Change SPM handling of core 1 if PMM 8160 is present. */
 	soc_platform_version = socinfo_get_platform_version();
@@ -5281,7 +5303,7 @@ static void __init msm8x60_init(struct msm_board_data *board_data)
 				     msm_num_footswitch_devices);
 	platform_add_devices(qt_devices,
 			     ARRAY_SIZE(qt_devices));
-#ifdef CONFIG_USB_EHCI_MSM
+#ifdef CONFIG_USB_EHCI_MSM_72K
 		msm_add_host(0, &msm_usb_host_pdata);
 #endif
 

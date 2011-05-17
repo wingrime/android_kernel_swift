@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2010, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2009-2011, Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -26,8 +26,8 @@ static struct mipi_dsi_phy_ctrl dsi_video_mode_phy_db = {
 	/* 480*854, RGB888, 2 Lane 60 fps video mode */
 		{0x03, 0x01, 0x01, 0x00},	/* regulator */
 		/* timing   */
-		{0x64, 0x1e, 0x14, 0x00, 0x2d, 0x23, 0x1e, 0x1c,
-		0x0b, 0x13, 0x04},
+		{0x6a, 0x22, 0x0f, 0x00, 0x30, 0x38, 0x13, 0x26,
+		0x1b, 0x03, 0x04},
 		{0x7f, 0x00, 0x00, 0x00},	/* phy ctrl */
 		{0xee, 0x03, 0x86, 0x03},	/* strength */
 		/* pll control */
@@ -80,13 +80,12 @@ static int __init mipi_video_toshiba_wvga_pt_init(void)
 	pinfo.bl_max = 15;
 	pinfo.bl_min = 1;
 	pinfo.fb_num = 2;
-	pinfo.clk_rate = 380000000;
 
 	pinfo.mipi.mode = DSI_VIDEO_MODE;
 	pinfo.mipi.pulse_mode_hsa_he = TRUE;
-	pinfo.mipi.hfp_power_stop = TRUE;
-	pinfo.mipi.hbp_power_stop = TRUE;
-	pinfo.mipi.hsa_power_stop = TRUE;
+	pinfo.mipi.hfp_power_stop = FALSE;
+	pinfo.mipi.hbp_power_stop = FALSE;
+	pinfo.mipi.hsa_power_stop = FALSE;
 	pinfo.mipi.eof_bllp_power_stop = TRUE;
 	pinfo.mipi.bllp_power_stop = TRUE;
 	pinfo.mipi.traffic_mode = DSI_NON_BURST_SYNCH_PULSE;
@@ -95,11 +94,12 @@ static int __init mipi_video_toshiba_wvga_pt_init(void)
 	pinfo.mipi.rgb_swap = DSI_RGB_SWAP_BGR;
 	pinfo.mipi.data_lane0 = TRUE;
 	pinfo.mipi.data_lane1 = TRUE;
-	pinfo.mipi.t_clk_post = 0x0e;
-	pinfo.mipi.t_clk_pre = 0x0f;
+	pinfo.mipi.t_clk_post = 0x04;
+	pinfo.mipi.t_clk_pre = 0x17;
 	pinfo.mipi.stream = 0; /* dma_p */
 	pinfo.mipi.mdp_trigger = DSI_CMD_TRIGGER_SW;
 	pinfo.mipi.dma_trigger = DSI_CMD_TRIGGER_SW;
+	pinfo.mipi.frame_rate = 60;
 	pinfo.mipi.dsi_phy_db = &dsi_video_mode_phy_db;
 
 	ret = mipi_toshiba_device_register(&pinfo, MIPI_DSI_PRIM,

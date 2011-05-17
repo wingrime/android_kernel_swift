@@ -36,6 +36,7 @@
 
 #include "clock-pcom.h"
 #include "clock-voter.h"
+#include "clock.h"
 
 static struct resource resources_uart1[] = {
 	{
@@ -882,6 +883,7 @@ struct clk_lookup msm_clocks_8x50[] = {
 	CLK_PCOM("sdc_clk",	SDC4_CLK,	"msm_sdcc.4", OFF),
 	CLK_PCOM("sdc_pclk",	SDC4_P_CLK,	"msm_sdcc.4", OFF),
 	CLK_PCOM("spi_clk",	SPI_CLK,	NULL, 0),
+	CLK_DUMMY("spi_pclk",	SPI_P_CLK,	"spi_qsd.0", 0),
 	CLK_PCOM("tsif_clk",	TSIF_CLK,	NULL, 0),
 	CLK_PCOM("tsif_ref_clk",	TSIF_REF_CLK,	NULL, 0),
 	CLK_PCOM("tv_dac_clk",	TV_DAC_CLK,	NULL, 0),

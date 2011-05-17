@@ -67,9 +67,19 @@
 /* PON CNTL 1 register */
 #define SSBI_REG_ADDR_PON_CNTL_1	0x01C
 
+#define PM8058_PON_PUP_MASK		0xF0
+
 #define PM8058_PON_WD_EN_MASK		0x08
 #define PM8058_PON_WD_EN_RESET		0x08
 #define PM8058_PON_WD_EN_PWR_OFF	0x00
+
+/* PON CNTL 4 register */
+#define SSBI_REG_ADDR_PON_CNTL_4 0x98
+#define PM8058_PON_RESET_EN_MASK 0x01
+
+/* PON CNTL 5 register */
+#define SSBI_REG_ADDR_PON_CNTL_5 0x7B
+#define PM8058_HARD_RESET_EN_MASK 0x08
 
 /* Regulator L22 control register */
 #define SSBI_REG_ADDR_L22_CTRL		0x121
@@ -322,6 +332,9 @@ get_out2:
 	pon &= ~PM8058_PON_WD_EN_MASK;
 	pon |= reset ? PM8058_PON_WD_EN_RESET : PM8058_PON_WD_EN_PWR_OFF;
 
+	/* Enable all pullups */
+	pon |= PM8058_PON_PUP_MASK;
+
 	rc = ssbi_write(pmic_chip->dev, SSBI_REG_ADDR_PON_CNTL_1, &pon, 1);
 	if (rc) {
 		pr_err("%s: FAIL ssbi_write(0x%x)=0x%x: rc=%d\n",
@@ -335,6 +348,79 @@ get_out:
 	return rc;
 }
 EXPORT_SYMBOL(pm8058_reset_pwr_off);
+
+/*
+   power on hard reset configuration
+   config = DISABLE_HARD_RESET to disable hard reset
+	  = SHUTDOWN_ON_HARD_RESET to turn off the system on hard reset
+	  = RESTART_ON_HARD_RESET to restart the system on hard reset
+ */
+int pm8058_hard_reset_config(enum pon_config config)
+{
+	int rc, ret;
+	u8 pon, pon_5;
+
+	if (config >= MAX_PON_CONFIG)
+		return -EINVAL;
+
+	if (pmic_chip == NULL)
+		return -ENODEV;
+
+	mutex_lock(&pmic_chip->pm_lock);
+
+	rc = ssbi_read(pmic_chip->dev, SSBI_REG_ADDR_PON_CNTL_5, &pon, 1);
+	if (rc) {
+		pr_err("%s: FAIL ssbi_read(0x%x): rc=%d\n",
+		       __func__, SSBI_REG_ADDR_PON_CNTL_5, rc);
+		mutex_unlock(&pmic_chip->pm_lock);
+		return rc;
+	}
+
+	pon_5 = pon;
+	(config != DISABLE_HARD_RESET) ? (pon |= PM8058_HARD_RESET_EN_MASK) :
+					(pon &= ~PM8058_HARD_RESET_EN_MASK);
+
+	rc = ssbi_write(pmic_chip->dev, SSBI_REG_ADDR_PON_CNTL_5, &pon, 1);
+	if (rc) {
+		pr_err("%s: FAIL ssbi_write(0x%x)=0x%x: rc=%d\n",
+		       __func__, SSBI_REG_ADDR_PON_CNTL_5, pon, rc);
+		mutex_unlock(&pmic_chip->pm_lock);
+		return rc;
+	}
+
+	if (config == DISABLE_HARD_RESET) {
+		mutex_unlock(&pmic_chip->pm_lock);
+		return 0;
+	}
+
+	rc = ssbi_read(pmic_chip->dev, SSBI_REG_ADDR_PON_CNTL_4, &pon, 1);
+	if (rc) {
+		pr_err("%s: FAIL ssbi_read(0x%x): rc=%d\n",
+		       __func__, SSBI_REG_ADDR_PON_CNTL_4, rc);
+		goto err_restore_pon_5;
+	}
+
+	(config == RESTART_ON_HARD_RESET) ? (pon |= PM8058_PON_RESET_EN_MASK) :
+					(pon &= ~PM8058_PON_RESET_EN_MASK);
+
+	rc = ssbi_write(pmic_chip->dev, SSBI_REG_ADDR_PON_CNTL_4, &pon, 1);
+	if (rc) {
+		pr_err("%s: FAIL ssbi_write(0x%x)=0x%x: rc=%d\n",
+		       __func__, SSBI_REG_ADDR_PON_CNTL_4, pon, rc);
+		goto err_restore_pon_5;
+	}
+	mutex_unlock(&pmic_chip->pm_lock);
+	return 0;
+
+err_restore_pon_5:
+	ret = ssbi_write(pmic_chip->dev, SSBI_REG_ADDR_PON_CNTL_5, &pon_5, 1);
+	if (ret)
+		pr_err("%s: FAIL ssbi_write(0x%x)=0x%x: rc=%d\n",
+		       __func__, SSBI_REG_ADDR_PON_CNTL_5, pon, ret);
+	mutex_unlock(&pmic_chip->pm_lock);
+	return rc;
+}
+EXPORT_SYMBOL(pm8058_hard_reset_config);
 
 /* Internal functions */
 static inline int

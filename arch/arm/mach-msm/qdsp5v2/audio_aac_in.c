@@ -1274,9 +1274,15 @@ static int audaac_in_release(struct inode *inode, struct file *file)
 	audpreproc_aenc_free(audio->enc_id);
 	audio->audrec = NULL;
 	audio->opened = 0;
+	if (audio->data) {
+		iounmap(audio->data);
+		pmem_kfree(audio->phys);
+		audio->data = NULL;
+	}
 	if (audio->out_data) {
 		iounmap(audio->out_data);
 		pmem_kfree(audio->out_phys);
+		audio->out_data = NULL;
 	}
 	mutex_unlock(&audio->lock);
 	return 0;
@@ -1295,6 +1301,23 @@ static int audaac_in_open(struct inode *inode, struct file *file)
 		rc = -EBUSY;
 		goto done;
 	}
+	audio->phys = pmem_kalloc(DMASZ, PMEM_MEMTYPE_EBI1|
+					PMEM_ALIGNMENT_4K);
+	if (!IS_ERR((void *)audio->phys)) {
+		audio->data = ioremap(audio->phys, DMASZ);
+		if (!audio->data) {
+			MM_ERR("could not allocate DMA buffers\n");
+			rc = -ENOMEM;
+			pmem_kfree(audio->phys);
+			goto done;
+		}
+	} else {
+		MM_ERR("could not allocate DMA buffers\n");
+		rc = -ENOMEM;
+		goto done;
+	}
+	MM_DBG("Memory addr = 0x%8x  phy addr = 0x%8x\n",\
+		(int) audio->data, (int) audio->phys);
 	if ((file->f_mode & FMODE_WRITE) &&
 				(file->f_mode & FMODE_READ)) {
 		audio->mode = MSM_AUD_ENC_MODE_NONTUNNEL;
@@ -1425,15 +1448,6 @@ struct miscdevice audio_aac_in_misc = {
 
 static int __init audaac_in_init(void)
 {
-	the_audio_aac_in.data = dma_alloc_coherent(NULL, DMASZ,
-				       &the_audio_aac_in.phys, GFP_KERNEL);
-	MM_DBG("Memory addr = 0x%8x  Phy addr = 0x%8x ---- \n", \
-		(int) the_audio_aac_in.data, (int) the_audio_aac_in.phys);
-
-	if (!the_audio_aac_in.data) {
-		MM_ERR("Unable to allocate DMA buffer\n");
-		return -ENOMEM;
-	}
 	mutex_init(&the_audio_aac_in.lock);
 	mutex_init(&the_audio_aac_in.read_lock);
 	spin_lock_init(&the_audio_aac_in.dsp_lock);

@@ -110,7 +110,15 @@
 #define LP_FORCE_LPM_CONTROL_PROC 70
 #define LOW_CURRENT_LED_SET_EXT_SIGNAL_PROC 71
 #define LOW_CURRENT_LED_SET_CURRENT_PROC 72
-
+#define SPKR_SET_VSEL_LDO_PROC 86
+#define HP_SPKR_CTRL_AUX_GAIN_INPUT_PROC 87
+#define HP_SPKR_MSTR_EN_PROC 88
+#define SPKR_SET_BOOST_PROC 89
+#define HP_SPKR_PRM_IN_EN_PROC 90
+#define HP_SPKR_CTRL_PRM_GAIN_INPUT_PROC 91
+#define HP_SPKR_MUTE_EN_PROC 92
+#define SPKR_BYPASS_EN_PROC 93
+#define HP_SPKR_AUX_IN_EN_PROC 94
 
 /* rpc related */
 #define PMIC_RPC_TIMEOUT (5*HZ)
@@ -917,6 +925,28 @@ int pmic_spkr_is_mute_en(enum spkr_left_right left_right, uint *enabled)
 }
 EXPORT_SYMBOL(pmic_spkr_is_mute_en);
 
+int pmic_spkr_set_vsel_ldo(enum spkr_left_right left_right,
+					enum spkr_ldo_v_sel vlt_cntrl)
+{
+	return pmic_rpc_set_only(left_right, vlt_cntrl, 0, 0, 2,
+			SPKR_SET_VSEL_LDO_PROC);
+}
+EXPORT_SYMBOL(pmic_spkr_set_vsel_ldo);
+
+int pmic_spkr_set_boost(enum spkr_left_right left_right, uint enable)
+{
+	return pmic_rpc_set_only(left_right, enable, 0, 0, 2,
+			SPKR_SET_BOOST_PROC);
+}
+EXPORT_SYMBOL(pmic_spkr_set_boost);
+
+int pmic_spkr_bypass_en(enum spkr_left_right left_right, uint enable)
+{
+	return pmic_rpc_set_only(left_right, enable, 0, 0, 2,
+			SPKR_BYPASS_EN_PROC);
+}
+EXPORT_SYMBOL(pmic_spkr_bypass_en);
+
 /*
  * 	mic
  */
@@ -1134,3 +1164,50 @@ int pmic_low_current_led_set_current(enum low_current_led led,
 			LOW_CURRENT_LED_SET_CURRENT_PROC);
 }
 EXPORT_SYMBOL(pmic_low_current_led_set_current);
+
+/*
+ * Head phone speaker
+ */
+int pmic_hp_spkr_mstr_en(enum hp_spkr_left_right left_right, uint enable)
+{
+	return pmic_rpc_set_only(left_right, enable, 0, 0, 2,
+			HP_SPKR_MSTR_EN_PROC);
+}
+EXPORT_SYMBOL(pmic_hp_spkr_mstr_en);
+
+int pmic_hp_spkr_mute_en(enum hp_spkr_left_right left_right, uint enable)
+{
+	return pmic_rpc_set_only(left_right, enable, 0, 0, 2,
+			HP_SPKR_MUTE_EN_PROC);
+}
+EXPORT_SYMBOL(pmic_hp_spkr_mute_en);
+
+int pmic_hp_spkr_prm_in_en(enum hp_spkr_left_right left_right, uint enable)
+{
+	return pmic_rpc_set_only(left_right, enable, 0, 0, 2,
+			HP_SPKR_PRM_IN_EN_PROC);
+}
+EXPORT_SYMBOL(pmic_hp_spkr_prm_in_en);
+
+int pmic_hp_spkr_aux_in_en(enum hp_spkr_left_right left_right, uint enable)
+{
+	return pmic_rpc_set_only(left_right, enable, 0, 0, 2,
+			HP_SPKR_AUX_IN_EN_PROC);
+}
+EXPORT_SYMBOL(pmic_hp_spkr_aux_in_en);
+
+int pmic_hp_spkr_ctrl_prm_gain_input(enum hp_spkr_left_right left_right,
+							uint prm_gain_ctl)
+{
+	return pmic_rpc_set_only(left_right, prm_gain_ctl, 0, 0, 2,
+			HP_SPKR_CTRL_PRM_GAIN_INPUT_PROC);
+}
+EXPORT_SYMBOL(pmic_hp_spkr_ctrl_prm_gain_input);
+
+int pmic_hp_spkr_ctrl_aux_gain_input(enum hp_spkr_left_right left_right,
+							uint aux_gain_ctl)
+{
+	return pmic_rpc_set_only(left_right, aux_gain_ctl, 0, 0, 2,
+			HP_SPKR_CTRL_AUX_GAIN_INPUT_PROC);
+}
+EXPORT_SYMBOL(pmic_hp_spkr_ctrl_aux_gain_input);

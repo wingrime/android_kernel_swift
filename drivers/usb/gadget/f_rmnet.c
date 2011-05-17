@@ -547,9 +547,11 @@ rmnet_setup(struct usb_function *f, const struct usb_ctrlrequest *ctrl)
 		 * request will be sent with DTR being '1'.
 		 */
 		if (w_value & ACM_CTRL_DTR)
-			smd_tiocmset(dev->smd_ctl.ch, TIOCM_DTR, 0);
+			ret = smd_tiocmset(dev->smd_ctl.ch, TIOCM_DTR, 0);
 		else
-			smd_tiocmset(dev->smd_ctl.ch, 0, TIOCM_DTR);
+			ret = smd_tiocmset(dev->smd_ctl.ch, 0, TIOCM_DTR);
+
+		break;
 	default:
 
 invalid:

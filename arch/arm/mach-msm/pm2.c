@@ -95,7 +95,8 @@ module_param_named(
 			"SMSM_POWER_MASTER_DEM %x, SMSM_MODEM_STATE %x, " \
 			"SMSM_APPS_DEM %x\n", \
 			tag, \
-			readl(APPS_CLK_SLEEP_EN), readl(APPS_PWRDOWN), \
+			__raw_readl(APPS_CLK_SLEEP_EN), \
+			__raw_readl(APPS_PWRDOWN), \
 			smsm_get_state(SMSM_POWER_MASTER_DEM), \
 			smsm_get_state(SMSM_MODEM_STATE), \
 			smsm_get_state(SMSM_APPS_DEM)); \
@@ -405,16 +406,21 @@ enum {
 static void msm_pm_config_hw_before_power_down(void)
 {
 #if defined(CONFIG_ARCH_MSM7X30)
-	writel(1, APPS_PWRDOWN);
-	writel(4, APPS_SECOP);
+	__raw_writel(1, APPS_PWRDOWN);
+	dsb();
+	__raw_writel(4, APPS_SECOP);
 #elif defined(CONFIG_ARCH_MSM7X27)
-	writel(0x1f, APPS_CLK_SLEEP_EN);
-	writel(1, APPS_PWRDOWN);
+	__raw_writel(0x1f, APPS_CLK_SLEEP_EN);
+	dsb();
+	__raw_writel(1, APPS_PWRDOWN);
 #else
-	writel(0x1f, APPS_CLK_SLEEP_EN);
-	writel(1, APPS_PWRDOWN);
-	writel(0, APPS_STANDBY_CTL);
+	__raw_writel(0x1f, APPS_CLK_SLEEP_EN);
+	dsb();
+	__raw_writel(1, APPS_PWRDOWN);
+	dsb();
+	__raw_writel(0, APPS_STANDBY_CTL);
 #endif
+	dsb();
 }
 
 /*
@@ -423,12 +429,16 @@ static void msm_pm_config_hw_before_power_down(void)
 static void msm_pm_config_hw_after_power_up(void)
 {
 #if defined(CONFIG_ARCH_MSM7X30)
-	writel(0, APPS_SECOP);
-	writel(0, APPS_PWRDOWN);
+	__raw_writel(0, APPS_SECOP);
+	dsb();
+	__raw_writel(0, APPS_PWRDOWN);
+	dsb();
 	msm_spm_reinit();
 #else
-	writel(0, APPS_PWRDOWN);
-	writel(0, APPS_CLK_SLEEP_EN);
+	__raw_writel(0, APPS_PWRDOWN);
+	dsb();
+	__raw_writel(0, APPS_CLK_SLEEP_EN);
+	dsb();
 #endif
 }
 
@@ -438,10 +448,11 @@ static void msm_pm_config_hw_after_power_up(void)
 static void msm_pm_config_hw_before_swfi(void)
 {
 #if defined(CONFIG_ARCH_QSD8X50)
-	writel(0x1f, APPS_CLK_SLEEP_EN);
+	__raw_writel(0x1f, APPS_CLK_SLEEP_EN);
 #elif defined(CONFIG_ARCH_MSM7X27)
-	writel(0x0f, APPS_CLK_SLEEP_EN);
+	__raw_writel(0x0f, APPS_CLK_SLEEP_EN);
 #endif
+	dsb();
 }
 
 /*

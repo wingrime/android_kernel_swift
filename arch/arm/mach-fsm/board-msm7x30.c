@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2010, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2009-2011, Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -2669,7 +2669,7 @@ static void __init msm_qsd_spi_init(void)
 	qsd_device_spi.dev.platform_data = &qsd_spi_pdata;
 }
 
-#ifdef CONFIG_USB_EHCI_MSM
+#ifdef CONFIG_USB_EHCI_MSM_72K
 static void msm_hsusb_vbus_power(unsigned phy_info, int on)
 {
 	int rc;
@@ -2718,7 +2718,7 @@ static int hsusb_rpc_connect(int connect)
 #endif
 
 #ifdef CONFIG_USB_MSM_OTG_72K
-#ifndef CONFIG_USB_EHCI_MSM
+#ifndef CONFIG_USB_EHCI_MSM_72K
 static int ldo_on;
 static struct vreg *usb_vreg;
 static int msm_pmic_enable_ldo(int enable)
@@ -2755,7 +2755,7 @@ static void msm_pmic_notify_deinit(void)
 static struct msm_otg_platform_data msm_otg_pdata = {
 	.rpc_connect	= hsusb_rpc_connect,
 
-#ifndef CONFIG_USB_EHCI_MSM
+#ifndef CONFIG_USB_EHCI_MSM_72K
 	/* vbus notification through pmic call backs */
 	.pmic_notif_init         = msm_pmic_notify_init,
 	.pmic_notif_deinit       = msm_pmic_notify_deinit,
@@ -5164,7 +5164,7 @@ static void __init msm7x30_init(void)
 	msm_device_tsif.dev.platform_data = &tsif_platform_data;
 #endif
 	platform_add_devices(devices, ARRAY_SIZE(devices));
-#ifdef CONFIG_USB_EHCI_MSM
+#ifdef CONFIG_USB_EHCI_MSM_72K
 	msm_add_host(0, &msm_usb_host_pdata);
 #endif
 	msm7x30_init_mmc();

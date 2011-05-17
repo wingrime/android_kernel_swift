@@ -116,6 +116,8 @@ enum hs_drv_amplitude {
 	HS_DRV_AMPLITUDE_75_PERCENT = (3 << 2),
 };
 
+#define HS_DRV_SLOPE_DEFAULT	(-1)
+
 /* used to configure the analog switch to select b/w host and peripheral */
 enum usb_switch_control {
 	USB_SWITCH_PERIPHERAL = 0,	/* Configure switch in peripheral mode*/
@@ -170,6 +172,7 @@ struct msm_otg_platform_data {
 	enum cdr_auto_reset	cdr_autoreset;
 	enum hs_drv_amplitude	drv_ampl;
 	enum se1_gate_state	se1_gating;
+	int			hsdrvslope;
 	int			phy_reset_sig_inverted;
 	int			phy_can_powercollapse;
 	int			pclk_required_during_lpm;

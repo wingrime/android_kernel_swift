@@ -123,7 +123,7 @@ u32 ddl_get_property(u32 *ddl_handle,
 	if (vcd_status)
 		DDL_MSG_ERROR("ddl_get_prop:FAILED");
 	else
-		DDL_MSG_ERROR("ddl_get_prop:SUCCESS");
+		DDL_MSG_MED("ddl_get_prop:SUCCESS");
 	return vcd_status;
 }
 
@@ -384,9 +384,21 @@ static u32 ddl_set_dec_property(struct ddl_client_context *ddl,
 			}
 		}
 		break;
+	case VCD_I_DEC_PICTYPE:
+		{
+			if ((sizeof(u32) == property_hdr->sz) &&
+				DDLCLIENT_STATE_IS(ddl, DDL_CLIENT_OPEN)) {
+				decoder->idr_only_decoding =
+					*(u32 *)property_value;
+				ddl_set_default_decoder_buffer_req(
+						decoder, true);
+				vcd_status = VCD_S_SUCCESS;
+			}
+		}
+		break;
 	case VCD_I_METADATA_ENABLE:
 	case VCD_I_METADATA_HEADER:
-		DDL_MSG_ERROR("Meta Data Interface is Requested");
+		DDL_MSG_MED("Meta Data Interface is Requested");
 		vcd_status = ddl_set_metadata_params(ddl, property_hdr,
 			property_value);
 		vcd_status = VCD_S_SUCCESS;
@@ -879,6 +891,7 @@ static u32 ddl_get_dec_property(struct ddl_client_context *ddl,
 	struct vcd_property_hdr *property_hdr, void *property_value)
 {
 	struct ddl_decoder_data *decoder = &ddl->codec_data.decoder;
+	struct vcd_property_frame_size *fz_size;
 	u32 vcd_status = VCD_ERR_ILLEGAL_PARM;
 	DDL_MSG_HIGH("property_hdr->prop_id:%x\n", property_hdr->prop_id);
 	switch (property_hdr->prop_id) {
@@ -887,6 +900,14 @@ static u32 ddl_get_dec_property(struct ddl_client_context *ddl,
 			property_hdr->sz) {
 			ddl_calculate_stride(&decoder->client_frame_size,
 				!decoder->progressive_only);
+			fz_size =
+			&decoder->client_frame_size;
+			fz_size->stride =
+			DDL_TILE_ALIGN(fz_size->width,
+				DDL_TILE_ALIGN_WIDTH);
+			fz_size->scan_lines =
+			DDL_TILE_ALIGN(fz_size->height,
+				DDL_TILE_ALIGN_HEIGHT);
 			*(struct vcd_property_frame_size *)
 				property_value =
 					decoder->client_frame_size;
@@ -967,9 +988,18 @@ static u32 ddl_get_dec_property(struct ddl_client_context *ddl,
 	break;
 	case DDL_I_FRAME_PROC_UNITS:
 		if (sizeof(u32) == property_hdr->sz) {
-			*(u32 *) property_value = DDL_NO_OF_MB(
-				decoder->client_frame_size.width,
-				decoder->client_frame_size.height);
+			if (!decoder->progressive_only &&
+				(decoder->client_frame_size.width *
+				 decoder->client_frame_size.height) <=
+				DDL_FRAME_VGA_SIZE) {
+				*(u32 *) property_value = DDL_NO_OF_MB(
+					DDL_FRAME_720P_WIDTH,
+					DDL_FRAME_720P_HEIGHT);
+			} else {
+				*(u32 *) property_value = DDL_NO_OF_MB(
+					decoder->client_frame_size.width,
+					decoder->client_frame_size.height);
+			}
 			vcd_status = VCD_S_SUCCESS;
 		}
 	break;
@@ -1411,6 +1441,7 @@ void ddl_set_default_dec_property(struct ddl_client_context *ddl)
 	decoder->client_frame_size.stride = VCD_DDL_TEST_DEFAULT_WIDTH;
 	decoder->client_frame_size.scan_lines = VCD_DDL_TEST_DEFAULT_HEIGHT;
 	decoder->progressive_only = 1;
+	decoder->idr_only_decoding = false;
 	decoder->output_order = VCD_DEC_ORDER_DISPLAY;
 	ddl_set_default_metadata_flag(ddl);
 	ddl_set_default_decoder_buffer_req(decoder, true);
@@ -1625,7 +1656,8 @@ u32 ddl_set_default_decoder_buffer_req(struct ddl_decoder_data *decoder,
 					(!decoder->progressive_only),
 					decoder->hdr.decoding, NULL);
 	} else {
-		if (min_dpb >= decoder->min_dpb_num) {
+		if (min_dpb >= decoder->min_dpb_num ||
+			decoder->idr_only_decoding) {
 			frame_size = &decoder->frame_size;
 			output_buf_req = &decoder->actual_output_buf_req;
 			input_buf_req = &decoder->actual_input_buf_req;
@@ -1645,7 +1677,7 @@ u32 ddl_set_default_decoder_buffer_req(struct ddl_decoder_data *decoder,
 	}
 	memset(output_buf_req, 0,
 		sizeof(struct vcd_buffer_requirement));
-	if (!estimate)
+	if (!estimate && !decoder->idr_only_decoding)
 		output_buf_req->actual_count = min_dpb + 4;
 	else
 		output_buf_req->actual_count = min_dpb;
@@ -1706,7 +1738,7 @@ u32 ddl_get_yuv_buffer_size(struct vcd_property_frame_size *frame_size,
 			total_memory_size = frame_sz.scan_lines *
 						frame_sz.stride;
 		else
-			total_memory_size = frame_sz.height * frame_sz.width;
+			total_memory_size = frame_sz.height * frame_sz.stride;
 		c_offset = DDL_ALIGN(total_memory_size,
 			DDL_LINEAR_MULTIPLY_FACTOR);
 		total_memory_size = c_offset + DDL_ALIGN(
@@ -1753,6 +1785,13 @@ static u32 ddl_valid_buffer_requirement(struct vcd_buffer_requirement
 static u32 ddl_decoder_min_num_dpb(struct ddl_decoder_data *decoder)
 {
 	u32 min_dpb = 0;
+
+	if (decoder->idr_only_decoding) {
+		min_dpb = DDL_MIN_BUFFER_COUNT;
+		if (decoder->post_filter.post_filter)
+			min_dpb *= 2;
+		return min_dpb;
+	}
 
 	switch (decoder->codec.codec) {
 	case VCD_CODEC_H264:

@@ -302,7 +302,7 @@ static struct msm_cpuidle_state msm_cstates[] __initdata = {
 		MSM_PM_SLEEP_MODE_POWER_COLLAPSE_STANDALONE},
 };
 
-#if defined(CONFIG_USB_GADGET_MSM_72K) || defined(CONFIG_USB_EHCI_MSM)
+#if defined(CONFIG_USB_GADGET_MSM_72K) || defined(CONFIG_USB_EHCI_MSM_72K)
 static struct regulator *ldo6_3p3;
 static struct regulator *ldo7_1p8;
 static struct regulator *vdd_cx;
@@ -425,7 +425,7 @@ static int msm_hsusb_ldo_enable(int on)
 	return 0;
  }
 #endif
-#ifdef CONFIG_USB_EHCI_MSM
+#ifdef CONFIG_USB_EHCI_MSM_72K
 static void msm_hsusb_vbus_power(unsigned phy_info, int on)
 {
 	static struct regulator *votg_5v_switch;
@@ -479,7 +479,7 @@ static struct msm_usb_host_platform_data msm_usb_host_pdata = {
 };
 #endif
 
-#if defined(CONFIG_BATTERY_MSM8X60) && !defined(CONFIG_USB_EHCI_MSM)
+#if defined(CONFIG_BATTERY_MSM8X60) && !defined(CONFIG_USB_EHCI_MSM_72K)
 static int msm_hsusb_pmic_vbus_notif_init(void (*callback)(int online),
 						int init)
 {
@@ -584,7 +584,7 @@ static void msm_otg_setup_analog_switch_gpio(enum usb_switch_control mode)
 		gpio_set_value(USB_HUB_RESET_GPIO, 0);
 	}
 }
-#if defined(CONFIG_USB_GADGET_MSM_72K) || defined(CONFIG_USB_EHCI_MSM)
+#if defined(CONFIG_USB_GADGET_MSM_72K) || defined(CONFIG_USB_EHCI_MSM_72K)
 static struct msm_otg_platform_data msm_otg_pdata = {
 	/* if usb link is in sps there is no need for
 	 * usb pclk as dayatona fabric clock will be
@@ -596,10 +596,10 @@ static struct msm_otg_platform_data msm_otg_pdata = {
 	.se1_gating		 = SE1_GATING_DISABLE,
 	.init_gpio		 = msm_otg_init_analog_switch_gpio,
 	.setup_gpio		 = msm_otg_setup_analog_switch_gpio,
-#ifdef CONFIG_USB_EHCI_MSM
+#ifdef CONFIG_USB_EHCI_MSM_72K
 	.vbus_power = msm_hsusb_vbus_power,
 #endif
-#if defined(CONFIG_BATTERY_MSM8X60) && !defined(CONFIG_USB_EHCI_MSM)
+#if defined(CONFIG_BATTERY_MSM8X60) && !defined(CONFIG_USB_EHCI_MSM_72K)
 	.pmic_vbus_notif_init         = msm_hsusb_pmic_vbus_notif_init,
 #endif
 	.otg_mode		= OTG_USER_CONTROL,
@@ -840,24 +840,22 @@ static struct msm_i2c_platform_data msm_gsbi9_qup_i2c_pdata = {
 #if defined(CONFIG_SPI_QUP) || defined(CONFIG_SPI_QUP_MODULE)
 static struct msm_spi_platform_data msm_gsbi1_qup_spi_pdata = {
 	.max_clock_speed = 24000000,
-	.clk_name = "gsbi_qup_clk",
-	.pclk_name = "gsbi_pclk",
 };
 #endif
 
 #ifdef CONFIG_I2C_SSBI
 /* PMIC SSBI */
-static struct msm_ssbi_platform_data msm_ssbi1_pdata = {
+static struct msm_i2c_ssbi_platform_data msm_ssbi1_pdata = {
 	.controller_type = MSM_SBI_CTRL_PMIC_ARBITER,
 };
 
 /* PMIC SSBI */
-static struct msm_ssbi_platform_data msm_ssbi2_pdata = {
+static struct msm_i2c_ssbi_platform_data msm_ssbi2_pdata = {
 	.controller_type = MSM_SBI_CTRL_PMIC_ARBITER,
 };
 
 /* CODEC/TSSC SSBI */
-static struct msm_ssbi_platform_data msm_ssbi3_pdata = {
+static struct msm_i2c_ssbi_platform_data msm_ssbi3_pdata = {
 	.controller_type = MSM_SBI_CTRL_SSBI,
 };
 #endif
@@ -1717,7 +1715,7 @@ static struct platform_device *qrdc_devices[] __initdata = {
 #endif
 	&msm_fb_device,
 	&lcdc_qrdc_panel_device,
-	&msm_device_kgsl,
+	&msm_kgsl_3d0,
 	&lcdc_samsung_panel_device,
 #ifdef CONFIG_FB_MSM_HDMI_MSM_PANEL
 	&hdmi_msm_device,
@@ -4132,7 +4130,6 @@ static int mdp_core_clk_rate_table[] = {
 	128000000,
 	160000000,
 	200000000,
-	200000000,
 };
 static struct msm_panel_common_pdata mdp_pdata = {
 	.mdp_core_clk_rate = 200000000,
@@ -4288,7 +4285,7 @@ static void __init msm8x60_init(struct msm_board_data *board_data)
 	platform_add_devices(qrdc_devices,
 			     ARRAY_SIZE(qrdc_devices));
 	wifi_power(1);
-#ifdef CONFIG_USB_EHCI_MSM
+#ifdef CONFIG_USB_EHCI_MSM_72K
 	msm_add_host(0, &msm_usb_host_pdata);
 #endif
 	msm_fb_add_devices();

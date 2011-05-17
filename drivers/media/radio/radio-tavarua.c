@@ -3406,10 +3406,32 @@ int tavarua_set_audio_path(int digital_on, int analog_on)
 		(rx_on ? 0 : 1),
 		AUDIOTX_OFFSET,
 		AUDIOTX_MASK);
-	SET_REG_FIELD(radio->registers[AUDIOCTRL],
+	/*
+
+	I2S Master/Slave configuration:
+	Setting the FM SoC as I2S Master/Slave
+		'false'		- FM SoC is I2S Slave
+		'true'		- FM SoC is I2S Master
+
+	We get this infomation from the respective target's board file :
+		MSM7x30         - FM SoC is I2S Slave
+		MSM8x60         - FM SoC is I2S Slave
+		MSM7x27A        - FM SoC is I2S Master
+	*/
+
+	if (!radio->pdata->is_fm_soc_i2s_master) {
+		FMDBG("FM SoC is I2S Slave\n");
+		SET_REG_FIELD(radio->registers[AUDIOCTRL],
 		(0),
 		I2SCTRL_OFFSET,
 		I2SCTRL_MASK);
+	} else {
+		FMDBG("FM SoC is I2S Master\n");
+		SET_REG_FIELD(radio->registers[AUDIOCTRL],
+		(1),
+		I2SCTRL_OFFSET,
+		I2SCTRL_MASK);
+	}
 	FMDBG("%s: %x\n", __func__, radio->registers[AUDIOCTRL]);
 	return tavarua_write_register(radio, AUDIOCTRL,
 					radio->registers[AUDIOCTRL]);

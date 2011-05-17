@@ -61,6 +61,7 @@ int mmc_assume_removable;
 #else
 int mmc_assume_removable = 1;
 #endif
+EXPORT_SYMBOL(mmc_assume_removable);
 module_param_named(removable, mmc_assume_removable, bool, 0644);
 MODULE_PARM_DESC(
 	removable,
@@ -240,7 +241,7 @@ void mmc_wait_for_req(struct mmc_host *host, struct mmc_request *mrq)
 
 	mmc_start_request(host, mrq);
 
-	wait_for_completion(&complete);
+	wait_for_completion_io(&complete);
 }
 
 EXPORT_SYMBOL(mmc_wait_for_req);
@@ -555,7 +556,14 @@ int mmc_try_claim_host(struct mmc_host *host)
 }
 EXPORT_SYMBOL(mmc_try_claim_host);
 
-static void mmc_do_release_host(struct mmc_host *host)
+/**
+ *	mmc_do_release_host - release a claimed host
+ *	@host: mmc host to release
+ *
+ *	If you successfully claimed a host, this function will
+ *	release it again.
+ */
+void mmc_do_release_host(struct mmc_host *host)
 {
 	unsigned long flags;
 
@@ -570,6 +578,7 @@ static void mmc_do_release_host(struct mmc_host *host)
 		wake_up(&host->wq);
 	}
 }
+EXPORT_SYMBOL(mmc_do_release_host);
 
 void mmc_host_deeper_disable(struct work_struct *work)
 {
@@ -1130,9 +1139,12 @@ void mmc_rescan(struct work_struct *work)
 
 	mmc_bus_get(host);
 
-	/* if there is a card registered, check whether it is still present */
-	if ((host->bus_ops != NULL) && host->bus_ops->detect &&
-		!host->bus_dead) {
+	/*
+	 * if there is a _removable_ card registered, check whether it is
+	 * still present
+	 */
+	if (host->bus_ops && host->bus_ops->detect && !host->bus_dead
+	    && !(host->caps & MMC_CAP_NONREMOVABLE)) {
 		host->bus_ops->detect(host);
 		/* If the card was removed the bus will be marked
 		 * as dead - extend the wakelock so userspace

@@ -221,6 +221,9 @@ static int snddev_icodec_open_lb(struct snddev_icodec_state *icodec)
 	int trc;
 	struct snddev_icodec_drv_state *drv = &snddev_icodec_drv;
 
+	/* Voting for low power is ok here as all use cases are
+	 * supported in low power mode.
+	 */
 	if (drv->snddev_vreg)
 		vreg_mode_vote(drv->snddev_vreg, 1,
 					SNDDEV_LOW_POWER_MODE);
@@ -246,6 +249,50 @@ static int snddev_icodec_open_lb(struct snddev_icodec_state *icodec)
 
 	return 0;
 }
+static int initialize_msm_icodec_gpios(struct platform_device *pdev)
+{
+	int rc = 0;
+	struct resource *res;
+	int i = 0;
+	int *reg_defaults = pdev->dev.platform_data;
+
+	while ((res = platform_get_resource(pdev, IORESOURCE_IO, i))) {
+		rc = gpio_request(res->start, res->name);
+		if (rc) {
+			pr_err("%s: icodec gpio %d request failed\n", __func__,
+				res->start);
+			goto err;
+		} else {
+			/* This platform data structure only works if all gpio
+			 * resources are to be used only in output mode.
+			 * If gpio resources are added which are to be used in
+			 * input mode, then the platform data structure will
+			 * have to be changed.
+			 */
+
+			gpio_direction_output(res->start, reg_defaults[i]);
+			gpio_free(res->start);
+		}
+		i++;
+	}
+err:
+	return rc;
+}
+static int msm_icodec_gpio_probe(struct platform_device *pdev)
+{
+	int rc = 0;
+
+	rc = initialize_msm_icodec_gpios(pdev);
+	if (rc < 0) {
+		pr_err("%s: GPIO configuration failed\n", __func__);
+		return -ENODEV;
+	}
+	return rc;
+}
+static struct platform_driver msm_icodec_gpio_driver = {
+	.probe = msm_icodec_gpio_probe,
+	.driver = { .name = "msm_icodec_gpio"}
+};
 
 static int snddev_icodec_open_rx(struct snddev_icodec_state *icodec)
 {
@@ -477,9 +524,14 @@ error_pamp:
 
 static int snddev_icodec_close_lb(struct snddev_icodec_state *icodec)
 {
+	struct snddev_icodec_drv_state *drv = &snddev_icodec_drv;
+
 	/* Disable power amplifier */
 	if (icodec->data->pamp_off)
 		icodec->data->pamp_off();
+
+	if (drv->snddev_vreg)
+		vreg_mode_vote(drv->snddev_vreg, 0, SNDDEV_LOW_POWER_MODE);
 
 	if (icodec->adie_path) {
 		adie_codec_proceed_stage(icodec->adie_path,
@@ -988,6 +1040,13 @@ static int __init snddev_icodec_init(void)
 		goto error_msm_cdcclk_ctl_driver;
 	}
 
+	rc = platform_driver_register(&msm_icodec_gpio_driver);
+	if (IS_ERR_VALUE(rc)) {
+		pr_err("%s: platform_driver_register for msm snddev gpio failed\n",
+					__func__);
+		goto error_msm_icodec_gpio_driver;
+	}
+
 	mutex_init(&icodec_drv->rx_lock);
 	mutex_init(&icodec_drv->lb_lock);
 	mutex_init(&icodec_drv->tx_lock);
@@ -1000,7 +1059,8 @@ static int __init snddev_icodec_init(void)
 	wake_lock_init(&icodec_drv->rx_idlelock, WAKE_LOCK_IDLE,
 			"snddev_rx_idle");
 	return 0;
-
+error_msm_icodec_gpio_driver:
+	platform_driver_unregister(&msm_cdcclk_ctl_driver);
 error_msm_cdcclk_ctl_driver:
 	platform_driver_unregister(&snddev_icodec_driver);
 error_snddev_icodec_driver:
@@ -1013,6 +1073,7 @@ static void __exit snddev_icodec_exit(void)
 
 	platform_driver_unregister(&snddev_icodec_driver);
 	platform_driver_unregister(&msm_cdcclk_ctl_driver);
+	platform_driver_unregister(&msm_icodec_gpio_driver);
 
 	clk_put(icodec_drv->rx_osrclk);
 	clk_put(icodec_drv->tx_osrclk);

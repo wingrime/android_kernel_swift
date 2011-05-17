@@ -75,6 +75,8 @@
 #define NO_TIMESTAMP    0xFF00
 #define SET_TIMESTAMP   0x0000
 
+#define SESSION_MAX	0x08
+
 typedef void (*app_cb)(uint32_t opcode, uint32_t token,
 			uint32_t *payload, void *priv);
 
@@ -127,7 +129,7 @@ struct audio_client {
 	app_cb			cb;
 	void			*priv;
 	uint32_t         io_mode;
-	uint32_t         time_stamp;
+	uint64_t         time_stamp;
 };
 
 void q6asm_audio_client_free(struct audio_client *ac);
@@ -157,6 +159,8 @@ int q6asm_open_read_write(struct audio_client *ac,
 
 int q6asm_write(struct audio_client *ac, uint32_t len, uint32_t msw_ts,
 				uint32_t lsw_ts, uint32_t flags);
+int q6asm_write_nolock(struct audio_client *ac, uint32_t len, uint32_t msw_ts,
+				uint32_t lsw_ts, uint32_t flags);
 
 int q6asm_async_write(struct audio_client *ac,
 					  struct audio_aio_write_param *param);
@@ -165,6 +169,7 @@ int q6asm_async_read(struct audio_client *ac,
 					  struct audio_aio_read_param *param);
 
 int q6asm_read(struct audio_client *ac);
+int q6asm_read_nolock(struct audio_client *ac);
 
 int q6asm_memory_map(struct audio_client *ac, uint32_t buf_add,
 			int dir, uint32_t bufsz, uint32_t bufcnt);
@@ -200,6 +205,9 @@ int q6asm_enc_cfg_blk_aac(struct audio_client *ac,
 int q6asm_enc_cfg_blk_pcm(struct audio_client *ac,
 			uint32_t rate, uint32_t channels);
 
+int q6asm_enable_sbrps(struct audio_client *ac,
+			uint32_t sbr_ps);
+
 int q6asm_enc_cfg_blk_qcelp(struct audio_client *ac, uint32_t frames_per_buf,
 		uint16_t min_rate, uint16_t max_rate,
 		uint16_t reduced_rate_level, uint16_t rate_modulation_cmd);
@@ -213,6 +221,9 @@ int q6asm_enc_cfg_blk_amrnb(struct audio_client *ac, uint32_t frames_per_buf,
 
 int q6asm_media_format_block_pcm(struct audio_client *ac,
 			uint32_t rate, uint32_t channels);
+
+int q6asm_media_format_block_aac(struct audio_client *ac,
+			struct asm_aac_cfg *cfg);
 
 int q6asm_media_format_block_wma(struct audio_client *ac,
 			void *cfg);
@@ -232,8 +243,14 @@ int q6asm_set_lrgain(struct audio_client *ac, int left_gain, int right_gain);
 /* Enable Mute/unmute flag */
 int q6asm_set_mute(struct audio_client *ac, int muteflag);
 
-uint32_t q6asm_get_session_time(struct audio_client *ac);
+uint64_t q6asm_get_session_time(struct audio_client *ac);
 
 /* Client can set the IO mode to either AIO/SIO mode */
 int q6asm_set_io_mode(struct audio_client *ac, uint32_t mode);
+
+#ifdef CONFIG_MSM8X60_RTAC
+/* Get Service ID for APR communication */
+int q6asm_get_apr_service_id(int session_id);
+#endif
+
 #endif /* __Q6_ASM_H__ */

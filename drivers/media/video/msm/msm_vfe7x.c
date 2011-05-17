@@ -48,7 +48,7 @@
 
 #define VFE_ADSP_EVENT 0xFFFF
 #define SNAPSHOT_MASK_MODE 0x00000002
-#define MSM_AXI_QOS_PREVIEW	122000
+#define MSM_AXI_QOS_PREVIEW	192000
 #define MSM_AXI_QOS_SNAPSHOT	192000
 
 
@@ -62,6 +62,7 @@ struct mutex vfe_lock;
 static void     *vfe_syncdata;
 static uint8_t vfestopped;
 static uint32_t vfetask_state;
+static int cnt;
 
 static struct stop_event stopevent;
 
@@ -232,7 +233,6 @@ static struct msm_adsp_ops vfe_7x_sync = {
 static int vfe_7x_enable(struct camera_enable_cmd *enable)
 {
 	int rc = -EFAULT;
-	static int cnt;
 
 	if (!strcmp(enable->name, "QCAMTASK"))
 		rc = msm_adsp_enable(qcam_mod);
@@ -306,8 +306,9 @@ static void vfe_7x_release(struct platform_device *pdev)
 	kfree(extdata);
 	extlen = 0;
 
-	/* set back the AXI frequency to default */
-	update_axi_qos(PM_QOS_DEFAULT_VALUE);
+	/* Release AXI */
+	release_axi_qos();
+	cnt = 0;
 }
 
 static int vfe_7x_init(struct msm_vfe_callback *presp,
@@ -407,11 +408,8 @@ static int vfe_7x_config_axi(int mode,
 		regptr = &(ad->region[ad->bufnum1]);
 
 		CDBG("bufnum2 = %d\n", ad->bufnum2);
-		if (mode == OUTPUT_1_AND_2) {
-			paddr_s_y = regptr->paddr +  regptr->info.y_off;
-			paddr_s_cbcr = regptr->paddr +  regptr->info.cbcr_off;
-		}
-
+		paddr_s_y = regptr->paddr +  regptr->info.y_off;
+		paddr_s_cbcr = regptr->paddr +  regptr->info.cbcr_off;
 		CDBG("config_axi2: O2, phy = 0x%lx, y_off = %d, cbcr_off =%d\n",
 		     regptr->paddr, regptr->info.y_off, regptr->info.cbcr_off);
 

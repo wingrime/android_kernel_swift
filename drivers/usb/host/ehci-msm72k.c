@@ -153,7 +153,7 @@ static int usb_wakeup_phy(struct usb_hcd *hcd)
 
 static int usb_suspend_phy(struct usb_hcd *hcd)
 {
-	int ret;
+	int ret = 0;
 	struct msmusb_hcd *mhcd = hcd_to_mhcd(hcd);
 	struct msm_usb_host_platform_data *pdata = mhcd->pdata;
 
@@ -452,7 +452,9 @@ static void msm_hsusb_request_host(void *handle, int request)
 	struct usb_hcd *hcd = mhcd_to_hcd(mhcd);
 	struct msm_usb_host_platform_data *pdata = mhcd->pdata;
 	struct msm_otg *otg = container_of(mhcd->xceiv, struct msm_otg, otg);
+#ifdef CONFIG_USB_OTG
 	struct usb_device *udev = hcd->self.root_hub;
+#endif
 	struct device *dev = hcd->self.controller;
 
 	switch (request) {
@@ -729,8 +731,8 @@ static int __devinit ehci_msm_probe(struct platform_device *pdev)
 	retval = msm_xusb_init_host(mhcd);
 
 	if (retval < 0) {
-		usb_put_hcd(hcd);
 		wake_lock_destroy(&mhcd->wlock);
+		usb_put_hcd(hcd);
 		clk_put(pdata->ebi1_clk);
 	}
 
@@ -775,10 +777,10 @@ static int __exit ehci_msm_remove(struct platform_device *pdev)
 
 	msm_hsusb_request_host((void *)mhcd, REQUEST_STOP);
 	msm_xusb_uninit_host(mhcd);
-	usb_put_hcd(hcd);
 	retval = msm_xusb_rpc_close(mhcd);
 
 	wake_lock_destroy(&mhcd->wlock);
+	usb_put_hcd(hcd);
 	clk_put(pdata->ebi1_clk);
 
 	pm_runtime_disable(&pdev->dev);

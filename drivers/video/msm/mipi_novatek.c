@@ -158,8 +158,6 @@ static struct dsi_cmd_desc novatek_cmd_on_cmds[] = {
 		sizeof(exit_sleep), exit_sleep},
 	{DTYPE_DCS_WRITE, 1, 0, 0, 10,
 		sizeof(display_on), display_on},
-	{DTYPE_MAX_PKTSIZE, 1, 0, 0, 0,
-		sizeof(max_pktsize), max_pktsize},
 	{DTYPE_DCS_WRITE1, 1, 0, 0, 50,
 		sizeof(novatek_f4), novatek_f4},
 	{DTYPE_DCS_LWRITE, 1, 0, 0, 50,

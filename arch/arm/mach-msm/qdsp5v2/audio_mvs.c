@@ -29,6 +29,8 @@
 
 #define MVS_PROG 0x30000014
 #define MVS_VERS 0x00030001
+#define MVS_VERS_COMP_VER4 0x00040001
+#define MVS_VERS_COMP_VER5 0x00050001
 
 #define MVS_CLIENT_ID_VOIP 0x00000003
 
@@ -1613,39 +1615,60 @@ static int __init audio_mvs_init(void)
 		       "audio_mvs_idle");
 
 	audio_mvs_info.rpc_endpt = msm_rpc_connect_compatible(MVS_PROG,
-					MVS_VERS,
+					MVS_VERS_COMP_VER5,
 					MSM_RPC_UNINTERRUPTIBLE);
 
-	if (!IS_ERR(audio_mvs_info.rpc_endpt)) {
-		pr_debug("%s: MVS RPC connect succeeded\n", __func__);
-
-		audio_mvs_info.rpc_prog = MVS_PROG;
-		audio_mvs_info.rpc_ver = MVS_VERS;
-
-		audio_mvs_info.task = kthread_run(audio_mvs_thread,
-						  &audio_mvs_info,
-						  "audio_mvs");
-
-		if (IS_ERR(audio_mvs_info.task)) {
-			pr_err("%s: MVS thread create failed\n",
-				   __func__);
-
-			rc = PTR_ERR(audio_mvs_info.task);
-			audio_mvs_info.task = NULL;
-
-			msm_rpc_close(audio_mvs_info.rpc_endpt);
-			audio_mvs_info.rpc_endpt = NULL;
+	if (IS_ERR(audio_mvs_info.rpc_endpt)) {
+		pr_err("%s: MVS RPC connect failed ver 0x%x\n", __func__,
+				MVS_VERS_COMP_VER5);
+		audio_mvs_info.rpc_endpt = msm_rpc_connect_compatible(MVS_PROG,
+					MVS_VERS_COMP_VER4,
+					MSM_RPC_UNINTERRUPTIBLE);
+		if (IS_ERR(audio_mvs_info.rpc_endpt)) {
+			pr_err("%s: MVS RPC connect failed ver 0x%x\n",
+				__func__, MVS_VERS_COMP_VER4);
+			audio_mvs_info.rpc_endpt =
+				msm_rpc_connect_compatible(MVS_PROG,
+				MVS_VERS,
+				MSM_RPC_UNINTERRUPTIBLE);
+			if (IS_ERR(audio_mvs_info.rpc_endpt)) {
+				pr_err("%s: MVS RPC connect failed ver 0x%x\n",
+				   __func__, MVS_VERS);
+				rc = PTR_ERR(audio_mvs_info.rpc_endpt);
+				audio_mvs_info.rpc_endpt = NULL;
+				goto done;
+			} else {
+				pr_debug("%s: MVS RPC connect succeeded ver\
+					0x%x\n", __func__, MVS_VERS);
+				audio_mvs_info.rpc_prog = MVS_PROG;
+				audio_mvs_info.rpc_ver = MVS_VERS;
+			}
+		} else {
+			pr_debug("%s: MVS RPC connect succeeded ver 0x%x\n",
+				__func__, MVS_VERS_COMP_VER4);
+			audio_mvs_info.rpc_prog = MVS_PROG;
+			audio_mvs_info.rpc_ver = MVS_VERS_COMP_VER4;
 		}
 	} else {
-		pr_err("%s: MVS RPC connect failed with 0x%x\n",
-			   __func__, MVS_VERS);
-
-		rc = PTR_ERR(audio_mvs_info.rpc_endpt);
+		pr_debug("%s: MVS RPC connect succeeded ver 0x%x\n", __func__,
+			MVS_VERS_COMP_VER5);
+		audio_mvs_info.rpc_prog = MVS_PROG;
+		audio_mvs_info.rpc_ver = MVS_VERS_COMP_VER5;
+	}
+	audio_mvs_info.task = kthread_run(audio_mvs_thread,
+					  &audio_mvs_info,
+					  "audio_mvs");
+	if (IS_ERR(audio_mvs_info.task)) {
+		pr_err("%s: MVS thread create failed\n",  __func__);
+		rc = PTR_ERR(audio_mvs_info.task);
+		audio_mvs_info.task = NULL;
+		msm_rpc_close(audio_mvs_info.rpc_endpt);
 		audio_mvs_info.rpc_endpt = NULL;
+		goto done;
 	}
 
 	rc = misc_register(&audio_mvs_misc);
-
+done:
 	return rc;
 }
 

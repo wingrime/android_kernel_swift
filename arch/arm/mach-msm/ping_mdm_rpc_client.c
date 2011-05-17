@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2010, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2009-2011, Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -27,6 +27,7 @@
 #include <linux/sched.h>
 #include <linux/debugfs.h>
 #include <linux/uaccess.h>
+#include <linux/kfifo.h>
 #include <mach/msm_rpcrouter.h>
 
 #define PING_TEST_BASE 0x31
@@ -52,6 +53,8 @@
 #define PING_MDM_DATA_CB_PROC            1
 #define PING_MDM_CB_PROC                 2
 
+#define PING_MAX_RETRY			5
+
 static struct msm_rpc_client *rpc_client;
 static uint32_t open_count;
 static DEFINE_MUTEX(ping_mdm_lock);
@@ -71,6 +74,24 @@ struct ping_mdm_register_data_cb_cb_arg {
 struct ping_mdm_register_data_cb_cb_ret {
 	uint32_t result;
 };
+
+static struct dentry *dent;
+static uint32_t test_res;
+static int reg_cb_num, reg_cb_num_req;
+static int data_cb_num, data_cb_num_req;
+static int reg_done_flag, data_cb_done_flag;
+static DECLARE_WAIT_QUEUE_HEAD(reg_test_wait);
+static DECLARE_WAIT_QUEUE_HEAD(data_cb_test_wait);
+
+enum {
+	PING_MODEM_NOT_IN_RESET = 0,
+	PING_MODEM_IN_RESET,
+	PING_LEAVING_RESET,
+	PING_MODEM_REGISTER_CB
+};
+static int fifo_event;
+static DEFINE_MUTEX(event_fifo_lock);
+static DEFINE_KFIFO(event_fifo, sizeof(int)*16);
 
 static int ping_mdm_register_cb(struct msm_rpc_client *client,
 				struct msm_rpc_xdr *xdr)
@@ -404,6 +425,34 @@ static int ping_mdm_close(void)
 	return 0;
 }
 
+static void handle_restart_teardown(struct msm_rpc_client *client)
+{
+	int	event = PING_MODEM_IN_RESET;
+
+	pr_info("%s: modem in reset\n", __func__);
+
+	mutex_lock(&event_fifo_lock);
+	kfifo_in(&event_fifo, &event, sizeof(event));
+	fifo_event = 1;
+	mutex_unlock(&event_fifo_lock);
+
+	wake_up(&data_cb_test_wait);
+}
+
+static void handle_restart_setup(struct msm_rpc_client *client)
+{
+	int	event = PING_LEAVING_RESET;
+
+	pr_info("%s: modem leaving reset\n", __func__);
+
+	mutex_lock(&event_fifo_lock);
+	kfifo_in(&event_fifo, &event, sizeof(event));
+	fifo_event = 1;
+	mutex_unlock(&event_fifo_lock);
+
+	wake_up(&data_cb_test_wait);
+}
+
 static struct msm_rpc_client *ping_mdm_init(void)
 {
 	mutex_lock(&ping_mdm_lock);
@@ -412,24 +461,16 @@ static struct msm_rpc_client *ping_mdm_init(void)
 						      PING_MDM_PROG,
 						      PING_MDM_VERS, 1,
 						      ping_mdm_cb_func);
-		if (!IS_ERR(rpc_client))
+		if (!IS_ERR(rpc_client)) {
 			open_count++;
+			msm_rpc_register_reset_callbacks(rpc_client,
+					handle_restart_teardown,
+					handle_restart_setup);
+		}
 	}
 	mutex_unlock(&ping_mdm_lock);
 	return rpc_client;
 }
-
-static struct dentry *dent;
-
-static DEFINE_MUTEX(ping_mdm_cb_lock);
-static LIST_HEAD(ping_mdm_cb_list);
-static uint32_t test_res;
-
-static int reg_cb_num, reg_cb_num_req;
-static int data_cb_num, data_cb_num_req;
-static int reg_done_flag, data_cb_done_flag;
-static DECLARE_WAIT_QUEUE_HEAD(reg_test_wait);
-static DECLARE_WAIT_QUEUE_HEAD(data_cb_test_wait);
 
 static int ping_mdm_data_register_test(void)
 {
@@ -466,8 +507,11 @@ static int ping_mdm_test_register_data_cb(
 {
 	uint32_t i, sum = 0;
 
-	pr_info("%s: received cb_id %d, size = %d, sum = %u\n",
-		__func__, arg->cb_id, arg->size, arg->sum);
+	data_cb_num++;
+
+	pr_info("%s: received cb_id %d, size = %d, sum = %u, num = %u of %u\n",
+		__func__, arg->cb_id, arg->size, arg->sum, data_cb_num,
+		data_cb_num_req);
 
 	if (arg->data)
 		for (i = 0; i < arg->size; i++)
@@ -476,7 +520,6 @@ static int ping_mdm_test_register_data_cb(
 	if (sum != arg->sum)
 		pr_err("%s: sum mismatch %u %u\n", __func__, sum, arg->sum);
 
-	data_cb_num++;
 	if (data_cb_num == data_cb_num_req) {
 		data_cb_done_flag = 1;
 		wake_up(&data_cb_test_wait);
@@ -486,39 +529,129 @@ static int ping_mdm_test_register_data_cb(
 	return 0;
 }
 
-static int ping_mdm_data_cb_register_test(void)
+static int ping_mdm_data_cb_register(
+		struct ping_mdm_register_data_cb_ret *reg_ret)
 {
-	int rc = 0;
+	int rc;
 	struct ping_mdm_register_data_cb_arg reg_arg;
-	struct ping_mdm_unregister_data_cb_arg unreg_arg;
-	struct ping_mdm_register_data_cb_ret reg_ret;
-	struct ping_mdm_unregister_data_cb_ret unreg_ret;
-
-	data_cb_num = 0;
-	data_cb_num_req = 10;
-	data_cb_done_flag = 0;
 
 	reg_arg.cb_func = ping_mdm_test_register_data_cb;
-	reg_arg.num = 10;
+	reg_arg.num = data_cb_num_req - data_cb_num;
 	reg_arg.size = 64;
 	reg_arg.interval_ms = 10;
 	reg_arg.num_tasks = 1;
 
-	rc = ping_mdm_register_data_cb(rpc_client, &reg_arg, &reg_ret);
+	pr_info("%s: registering callback\n", __func__);
+	rc = ping_mdm_register_data_cb(rpc_client, &reg_arg, reg_ret);
+	if (rc)
+		pr_err("%s: failed to register callback %d\n", __func__, rc);
+
+	return rc;
+}
+
+
+static void retry_timer_cb(unsigned long data)
+{
+	int	event = (int)data;
+
+	pr_info("%s: retry timer triggered\n", __func__);
+
+	mutex_lock(&event_fifo_lock);
+	kfifo_in(&event_fifo, &event, sizeof(event));
+	fifo_event = 1;
+	mutex_unlock(&event_fifo_lock);
+
+	wake_up(&data_cb_test_wait);
+}
+
+static int ping_mdm_data_cb_register_test(void)
+{
+	int rc;
+	int event;
+	int retry_count = 0;
+	struct ping_mdm_register_data_cb_ret reg_ret;
+	struct ping_mdm_unregister_data_cb_arg unreg_arg;
+	struct ping_mdm_unregister_data_cb_ret unreg_ret;
+	struct timer_list retry_timer;
+
+	mutex_init(&event_fifo_lock);
+	init_timer(&retry_timer);
+
+	data_cb_done_flag = 0;
+	data_cb_num = 0;
+	if (!data_cb_num_req)
+		data_cb_num_req = 10;
+
+	rc = ping_mdm_data_cb_register(&reg_ret);
 	if (rc)
 		return rc;
 
 	pr_info("%s: data_cb_register result: 0x%x\n",
 		__func__, reg_ret.result);
-	wait_event(data_cb_test_wait, data_cb_done_flag);
 
-	unreg_arg.cb_func = reg_arg.cb_func;
+	while (!data_cb_done_flag) {
+		wait_event(data_cb_test_wait, data_cb_done_flag || fifo_event);
+		fifo_event = 0;
+
+		for (;;) {
+			mutex_lock(&event_fifo_lock);
+
+			if (kfifo_is_empty(&event_fifo)) {
+				mutex_unlock(&event_fifo_lock);
+				break;
+			}
+			rc = kfifo_out(&event_fifo, &event, sizeof(event));
+			mutex_unlock(&event_fifo_lock);
+			BUG_ON(rc != sizeof(event));
+
+			pr_info("%s: processing event data_cb_done_flag=%d,event=%d\n",
+				__func__, data_cb_done_flag, event);
+
+			if (event == PING_MODEM_IN_RESET) {
+				pr_info("%s: modem entering reset\n", __func__);
+				retry_count = 0;
+			} else if (event == PING_LEAVING_RESET) {
+				pr_info("%s: modem exiting reset - "
+					"re-registering cb\n", __func__);
+
+				rc = ping_mdm_data_cb_register(&reg_ret);
+				if (rc) {
+					retry_count++;
+					if (retry_count < PING_MAX_RETRY) {
+						pr_info("%s: retry %d failed\n",
+							__func__, retry_count);
+
+						retry_timer.expires = jiffies +
+							msecs_to_jiffies(1000);
+						retry_timer.data =
+							PING_LEAVING_RESET;
+						retry_timer.function =
+							retry_timer_cb;
+						add_timer(&retry_timer);
+					} else {
+						pr_err("%s: max retries exceeded, aborting\n",
+								__func__);
+						return -ENETRESET;
+					}
+				} else
+					pr_info("%s: data_cb_register result: 0x%x\n",
+						__func__, reg_ret.result);
+			}
+		}
+	}
+
+	while (del_timer(&retry_timer))
+		;
+
+	unreg_arg.cb_func = ping_mdm_test_register_data_cb;
 	rc = ping_mdm_unregister_data_cb(rpc_client, &unreg_arg, &unreg_ret);
 	if (rc)
 		return rc;
 
 	pr_info("%s: data_cb_unregister result: 0x%x\n",
 		__func__, unreg_ret.result);
+
+	pr_info("%s: Test completed\n", __func__);
 
 	return 0;
 }
@@ -637,6 +770,19 @@ static ssize_t ping_test_write(struct file *fp, const char __user *buf,
 		test_res = ping_mdm_data_register_test();
 	else if (!strncmp(cmd, "data_cb_reg_test", 64))
 		test_res = ping_mdm_data_cb_register_test();
+	else if (!strncmp(cmd, "count=", 6)) {
+		long tmp;
+
+		if (strict_strtol(cmd + 6, 0, &tmp) == 0) {
+			data_cb_num_req = tmp;
+			pr_info("Set repetition count to %d\n",
+				data_cb_num_req);
+		} else {
+			data_cb_num_req = 10;
+			pr_err("invalid number %s, defaulting to %d\n",
+				cmd + 6, data_cb_num_req);
+		}
+	}
 	else
 		test_res = -EINVAL;
 

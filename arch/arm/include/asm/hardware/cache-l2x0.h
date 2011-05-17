@@ -72,6 +72,7 @@
 #define L2X0_AUX_CTRL_DATA_PREFETCH_SHIFT	28
 #define L2X0_AUX_CTRL_INSTR_PREFETCH_SHIFT	29
 #define L2X0_AUX_CTRL_EARLY_BRESP_SHIFT		30
+#define L2X0_AUX_CTRL_EVNT_MON_BUS_EN_SHIFT	20
 
 #ifndef __ASSEMBLY__
 extern void __init l2x0_init(void __iomem *base, __u32 aux_val, __u32 aux_mask);

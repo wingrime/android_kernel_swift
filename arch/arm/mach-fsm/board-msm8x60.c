@@ -1,4 +1,4 @@
-/* Copyright (c) 2010, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2010-2011, Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -265,7 +265,7 @@ static struct msm_cpuidle_state msm_cstates[] __initdata = {
 	{1, 0, "C0", "WFI", MSM_PM_SLEEP_MODE_WAIT_FOR_INTERRUPT},
 };
 
-#ifdef CONFIG_USB_EHCI_MSM
+#ifdef CONFIG_USB_EHCI_MSM_72K
 struct regulator *votg_5v_switch;
 static void msm_hsusb_vbus_power(unsigned phy_info, int on)
 {
@@ -301,7 +301,7 @@ static struct msm_usb_host_platform_data msm_usb_host_pdata = {
 };
 #endif
 
-#if defined(CONFIG_USB_GADGET_MSM_72K) || defined(CONFIG_USB_EHCI_MSM)
+#if defined(CONFIG_USB_GADGET_MSM_72K) || defined(CONFIG_USB_EHCI_MSM_72K)
 static struct msm_otg_platform_data msm_otg_pdata = {
 	/* if usb link is in sps there is no need for
 	 * usb pclk as dayatona fabric clock will be
@@ -3294,7 +3294,7 @@ static void __init msm8x60_init(void)
 		msm8x60_cfg_smsc911x();
 		platform_add_devices(surf_devices,
 				     ARRAY_SIZE(surf_devices));
-#ifdef CONFIG_USB_EHCI_MSM
+#ifdef CONFIG_USB_EHCI_MSM_72K
 		msm_add_host(0, &msm_usb_host_pdata);
 #endif
 	} else {

@@ -27,6 +27,7 @@
 #include <linux/slab.h>
 #include <linux/i2c/smb137b.h>
 #include <linux/power_supply.h>
+#include <linux/msm-charger.h>
 
 #define SMB137B_MASK(BITS, POS)  ((unsigned char)(((1 << BITS) - 1) << POS))
 
@@ -193,7 +194,7 @@
 #define	COMMAND_A_REG_DEFAULT		0xA0
 #define	COMMAND_A_REG_OTG_MODE		0xA2
 
-#define	PIN_CTRL_REG_DEFAULT		0x08
+#define	PIN_CTRL_REG_DEFAULT		0x00
 #define	PIN_CTRL_REG_CHG_OFF		0x04
 
 #define	FAST_CHG_E_STATUS 0x2
@@ -211,7 +212,6 @@ struct smb137b_data {
 
 	int valid_n_gpio;
 
-	struct power_supply psy_batt;
 	int batt_status;
 	int batt_chg_type;
 	int batt_present;
@@ -219,145 +219,20 @@ struct smb137b_data {
 	int max_design;
 	int batt_mah_rating;
 
-	struct power_supply psy_usb;
 	int usb_status;
 
-	bool stop_heartbeat;
-
 	u8 dev_id_reg;
+	struct msm_hardware_charger adapter_hw_chg;
 };
 
 static unsigned int disabled;
-
-static void (*notify_vbus_state_func_ptr)(int);
-static int usb_notified_of_insertion;
-static struct smb137b_data *usb_smb137b_chg;
-int smb137b_register_vbus_sn(void (*callback)(int))
-{
-	pr_debug(KERN_INFO "%s\n", __func__);
-	notify_vbus_state_func_ptr = callback;
-	return 0;
-}
-
-void smb137b_unregister_vbus_sn(void (*callback)(int))
-{
-	pr_debug(KERN_INFO "%s\n", __func__);
-	notify_vbus_state_func_ptr = NULL;
-}
-
-static void smb137b_notify_usb_of_the_plugin_event(struct smb137b_data
-					*smb137b_chg,
-					   int plugin)
-{
-	plugin = !!plugin;
-	if (plugin == 1 && usb_notified_of_insertion == 0) {
-		usb_notified_of_insertion = 1;
-		if (notify_vbus_state_func_ptr) {
-			pr_debug("%s notifying plugin\n", __func__);
-			(*notify_vbus_state_func_ptr) (plugin);
-		} else
-			pr_debug("%s unable to notify plugin\n",
-				__func__);
-	}
-	if (plugin == 0 && usb_notified_of_insertion == 1) {
-		if (notify_vbus_state_func_ptr) {
-			pr_debug("%s notifying unplugin\n",
-				__func__);
-			(*notify_vbus_state_func_ptr) (plugin);
-		} else
-			pr_debug("%s unable to notify unplugin\n",
-				__func__);
-		usb_notified_of_insertion = 0;
-	}
-}
-
 enum charger_stat {
 	SMB137B_ABSENT,
 	SMB137B_PRESENT,
 	SMB137B_ENUMERATED,
 };
 
-static enum power_supply_property power_props[] = {
-	POWER_SUPPLY_PROP_PRESENT,
-	POWER_SUPPLY_PROP_ONLINE,
-};
-
-static char *power_supplied_to[] = {
-	"battery",
-};
-
-static int power_get_property(struct power_supply *psy,
-				  enum power_supply_property psp,
-				  union power_supply_propval *val)
-{
-	struct smb137b_data *smb137b_chg;
-
-	smb137b_chg = container_of(psy, struct smb137b_data,
-			psy_usb);
-	switch (psp) {
-	case POWER_SUPPLY_PROP_PRESENT:
-		val->intval = (smb137b_chg->usb_status != SMB137B_ABSENT);
-		break;
-	case POWER_SUPPLY_PROP_ONLINE:
-		val->intval = (smb137b_chg->usb_status == SMB137B_ENUMERATED);
-		break;
-	default:
-		return -EINVAL;
-	}
-	return 0;
-}
-
-static enum power_supply_property batt_power_props[] = {
-	POWER_SUPPLY_PROP_STATUS,
-	POWER_SUPPLY_PROP_CHARGE_TYPE,
-	POWER_SUPPLY_PROP_PRESENT,
-	POWER_SUPPLY_PROP_TECHNOLOGY,
-	POWER_SUPPLY_PROP_VOLTAGE_MAX_DESIGN,
-	POWER_SUPPLY_PROP_VOLTAGE_MIN_DESIGN,
-	POWER_SUPPLY_PROP_VOLTAGE_NOW,
-	POWER_SUPPLY_PROP_CAPACITY,
-};
-
-static int batt_power_get_property(struct power_supply *psy,
-				       enum power_supply_property psp,
-				       union power_supply_propval *val)
-{
-	struct smb137b_data *smb137b_chg;
-
-	smb137b_chg = container_of(psy, struct smb137b_data,
-			psy_batt);
-	switch (psp) {
-	case POWER_SUPPLY_PROP_STATUS:
-		val->intval  =  smb137b_chg->batt_status;
-		break;
-	case POWER_SUPPLY_PROP_CHARGE_TYPE:
-		val->intval  =  smb137b_chg->batt_chg_type;
-		break;
-	case POWER_SUPPLY_PROP_PRESENT:
-		val->intval  =  smb137b_chg->batt_present;
-		break;
-	case POWER_SUPPLY_PROP_TECHNOLOGY:
-		val->intval = POWER_SUPPLY_TECHNOLOGY_LION;
-		break;
-	case POWER_SUPPLY_PROP_VOLTAGE_MAX_DESIGN:
-		val->intval = smb137b_chg->max_design;
-		break;
-	case POWER_SUPPLY_PROP_VOLTAGE_MIN_DESIGN:
-		val->intval = smb137b_chg->min_design;
-		break;
-	case POWER_SUPPLY_PROP_VOLTAGE_NOW:
-		/*TODO when the gauge driver is ready*/
-		val->intval = 3500000;
-		break;
-	case POWER_SUPPLY_PROP_CAPACITY:
-		/*TODO when the gauge driver is ready*/
-		val->intval = 50;
-		break;
-	default:
-		return -EINVAL;
-	}
-	return 0;
-}
+static struct smb137b_data *usb_smb137b_chg;
 
 static int smb137b_read_reg(struct i2c_client *client, int reg,
 	u8 *val)
@@ -434,13 +309,15 @@ static void smb137b_dbg_print_status_regs(struct smb137b_data *smb137b_chg)
 }
 #endif
 
-static int smb137b_start_charging(struct smb137b_data *smb137b_chg,
-					int chg_current)
+static int smb137b_start_charging(struct msm_hardware_charger *hw_chg,
+		int chg_voltage, int chg_current)
 {
 	int cmd_val = COMMAND_A_REG_DEFAULT;
 	u8 temp = 0;
 	int ret = 0;
+	struct smb137b_data *smb137b_chg;
 
+	smb137b_chg = container_of(hw_chg, struct smb137b_data, adapter_hw_chg);
 	if (disabled) {
 		dev_err(&smb137b_chg->client->dev,
 			"%s called when disabled\n", __func__);
@@ -506,17 +383,19 @@ static int smb137b_start_charging(struct smb137b_data *smb137b_chg,
 			smb137b_chg->batt_chg_type
 						= POWER_SUPPLY_CHARGE_TYPE_FAST;
 	}
-
+	/*schedule charge_work to keep track of battery charging state*/
 	schedule_delayed_work(&smb137b_chg->charge_work, SMB137B_CHG_PERIOD);
-	power_supply_changed(&smb137b_chg->psy_batt);
 
 out:
 	return ret;
 }
 
-static int smb137b_stop_charging(struct smb137b_data *smb137b_chg)
+static int smb137b_stop_charging(struct msm_hardware_charger *hw_chg)
 {
 	int ret = 0;
+	struct smb137b_data *smb137b_chg;
+
+	smb137b_chg = container_of(hw_chg, struct smb137b_data, adapter_hw_chg);
 
 	dev_dbg(&smb137b_chg->client->dev, "%s\n", __func__);
 	if (smb137b_chg->charging == false)
@@ -540,9 +419,17 @@ static int smb137b_stop_charging(struct smb137b_data *smb137b_chg)
 		dev_err(&smb137b_chg->client->dev,
 			"%s couldn't write to pin ctrl reg\n", __func__);
 
-	power_supply_changed(&smb137b_chg->psy_batt);
 out:
 	return ret;
+}
+
+static int smb137b_charger_switch(struct msm_hardware_charger *hw_chg)
+{
+	struct smb137b_data *smb137b_chg;
+
+	smb137b_chg = container_of(hw_chg, struct smb137b_data, adapter_hw_chg);
+	dev_dbg(&smb137b_chg->client->dev, "%s\n", __func__);
+	return 0;
 }
 
 static irqreturn_t smb137b_valid_handler(int irq, void *dev_id)
@@ -553,6 +440,7 @@ static irqreturn_t smb137b_valid_handler(int irq, void *dev_id)
 
 	smb137b_chg = i2c_get_clientdata(client);
 
+	pr_debug("%s Cable Detected USB inserted\n", __func__);
 	/*extra delay needed to allow CABLE_DET_N settling down and debounce
 	 before	trying to sample its correct value*/
 	usleep_range(1000, 1200);
@@ -567,18 +455,15 @@ static irqreturn_t smb137b_valid_handler(int irq, void *dev_id)
 
 	if (val) {
 		if (smb137b_chg->usb_status != SMB137B_ABSENT) {
-			smb137b_notify_usb_of_the_plugin_event(smb137b_chg,
-					   0);
-			smb137b_stop_charging(smb137b_chg);
 			smb137b_chg->usb_status = SMB137B_ABSENT;
-			power_supply_changed(&smb137b_chg->psy_usb);
+			msm_charger_notify_event(&smb137b_chg->adapter_hw_chg,
+					CHG_REMOVED_EVENT);
 		}
 	} else {
 		if (smb137b_chg->usb_status == SMB137B_ABSENT) {
-			smb137b_notify_usb_of_the_plugin_event(smb137b_chg,
-					   1);
 			smb137b_chg->usb_status = SMB137B_PRESENT;
-			power_supply_changed(&smb137b_chg->psy_usb);
+			msm_charger_notify_event(&smb137b_chg->adapter_hw_chg,
+					CHG_INSERTED_EVENT);
 		}
 	}
 err:
@@ -630,14 +515,15 @@ static int set_disable_status_param(const char *val, struct kernel_param *kp)
 		return ret;
 
 	if (usb_smb137b_chg && disabled)
-		smb137b_stop_charging(usb_smb137b_chg);
+		msm_charger_notify_event(&usb_smb137b_chg->adapter_hw_chg,
+				CHG_DONE_EVENT);
 
 	pr_debug("%s disabled =%d\n", __func__, disabled);
 	return 0;
 }
 module_param_call(disabled, set_disable_status_param, param_get_uint,
 					&disabled, 0644);
-static void smb137b_heartbeat(struct work_struct *smb137b_work)
+static void smb137b_charge_sm(struct work_struct *smb137b_work)
 {
 	int ret;
 	struct smb137b_data *smb137b_chg;
@@ -647,7 +533,8 @@ static void smb137b_heartbeat(struct work_struct *smb137b_work)
 	smb137b_chg = container_of(smb137b_work, struct smb137b_data,
 			charge_work.work);
 
-	if (smb137b_chg->stop_heartbeat)
+	/*if not charging, exit smb137b charging state transition*/
+	if (!smb137b_chg->charging)
 		return;
 
 	dev_dbg(&smb137b_chg->client->dev, "%s\n", __func__);
@@ -667,7 +554,8 @@ static void smb137b_heartbeat(struct work_struct *smb137b_work)
 		smb137b_chg->batt_chg_type = POWER_SUPPLY_CHARGE_TYPE_NONE;
 
 	if (!smb137b_chg->batt_present && smb137b_chg->charging)
-		smb137b_stop_charging(smb137b_chg);
+		msm_charger_notify_event(&smb137b_chg->adapter_hw_chg,
+				CHG_DONE_EVENT);
 
 	if (smb137b_chg->batt_present
 		&& smb137b_chg->charging
@@ -681,7 +569,7 @@ static void smb137b_heartbeat(struct work_struct *smb137b_work)
 			goto out;
 
 		} else {
-			if (temp && CHARGER_ERROR_STAT) {
+			if (temp & CHARGER_ERROR_STAT) {
 				dev_err(&smb137b_chg->client->dev,
 					"%s error E=0x%x\n", __func__, temp);
 				smb137b_dbg_print_status_regs(smb137b_chg);
@@ -691,6 +579,9 @@ static void smb137b_heartbeat(struct work_struct *smb137b_work)
 				smb137b_chg->batt_chg_type
 					= POWER_SUPPLY_CHARGE_TYPE_FAST;
 				notify_batt_changed = 1;
+				msm_charger_notify_event(
+					&smb137b_chg->adapter_hw_chg,
+					CHG_BATT_BEGIN_FAST_CHARGING);
 			} else {
 				smb137b_chg->batt_chg_type
 					= POWER_SUPPLY_CHARGE_TYPE_TRICKLE;
@@ -699,12 +590,8 @@ static void smb137b_heartbeat(struct work_struct *smb137b_work)
 	}
 
 out:
-	if (notify_batt_changed == 1)
-		power_supply_changed(&smb137b_chg->psy_batt);
-
-	if (!smb137b_chg->stop_heartbeat)
-		schedule_delayed_work(&smb137b_chg->charge_work,
-						SMB137B_CHG_PERIOD);
+	schedule_delayed_work(&smb137b_chg->charge_work,
+					SMB137B_CHG_PERIOD);
 }
 
 static int __devinit smb137b_probe(struct i2c_client *client,
@@ -712,7 +599,6 @@ static int __devinit smb137b_probe(struct i2c_client *client,
 {
 	const struct smb137b_platform_data *pdata;
 	struct smb137b_data *smb137b_chg;
-	u8 temp;
 	int ret = 0;
 
 	pdata = client->dev.platform_data;
@@ -735,12 +621,20 @@ static int __devinit smb137b_probe(struct i2c_client *client,
 		goto out;
 	}
 
-	INIT_DELAYED_WORK(&smb137b_chg->charge_work, smb137b_heartbeat);
+	INIT_DELAYED_WORK(&smb137b_chg->charge_work, smb137b_charge_sm);
 	smb137b_chg->client = client;
 	smb137b_chg->valid_n_gpio = pdata->valid_n_gpio;
 	smb137b_chg->batt_mah_rating = pdata->batt_mah_rating;
 	if (smb137b_chg->batt_mah_rating == 0)
 		smb137b_chg->batt_mah_rating = SMB137B_DEFAULT_BATT_RATING;
+
+	/*It supports USB-WALL charger and PC USB charger */
+	smb137b_chg->adapter_hw_chg.type = CHG_TYPE_USB;
+	smb137b_chg->adapter_hw_chg.rating = pdata->batt_mah_rating;
+	smb137b_chg->adapter_hw_chg.name = "smb137b-charger";
+	smb137b_chg->adapter_hw_chg.start_charging = smb137b_start_charging;
+	smb137b_chg->adapter_hw_chg.stop_charging = smb137b_stop_charging;
+	smb137b_chg->adapter_hw_chg.charging_switched = smb137b_charger_switch;
 
 	if (pdata->chg_detection_config)
 		ret = pdata->chg_detection_config();
@@ -759,6 +653,20 @@ static int __devinit smb137b_probe(struct i2c_client *client,
 
 	i2c_set_clientdata(client, smb137b_chg);
 
+	ret = msm_charger_register(&smb137b_chg->adapter_hw_chg);
+	if (ret) {
+		dev_err(&client->dev, "%s msm_charger_register\
+			failed for ret=%d\n", __func__, ret);
+		goto free_valid_gpio;
+	}
+
+	ret = set_irq_wake(client->irq, 1);
+	if (ret) {
+		dev_err(&client->dev, "%s failed for set_irq_wake %d ret =%d\n",
+			 __func__, client->irq, ret);
+		goto unregister_charger;
+	}
+
 	ret = request_threaded_irq(client->irq, NULL,
 				   smb137b_valid_handler,
 				   IRQF_TRIGGER_FALLING | IRQF_TRIGGER_RISING,
@@ -767,7 +675,7 @@ static int __devinit smb137b_probe(struct i2c_client *client,
 		dev_err(&client->dev,
 			"%s request_threaded_irq failed for %d ret =%d\n",
 			__func__, client->irq, ret);
-		goto free_valid_gpio;
+		goto disable_irq_wake;
 	}
 
 	ret = gpio_get_value_cansleep(smb137b_chg->valid_n_gpio);
@@ -779,23 +687,13 @@ static int __devinit smb137b_probe(struct i2c_client *client,
 		ret = 1;
 	}
 	if (!ret) {
-		smb137b_notify_usb_of_the_plugin_event(smb137b_chg, 1);
+		msm_charger_notify_event(&smb137b_chg->adapter_hw_chg,
+			CHG_INSERTED_EVENT);
 		smb137b_chg->usb_status = SMB137B_PRESENT;
 	}
 
 	/* enable the writes to non-volatile mirrors */
 	ret = smb137b_write_reg(client, COMMAND_A_REG, COMMAND_A_REG_DEFAULT);
-
-	temp = 0;
-	ret = smb137b_read_reg(smb137b_chg->client, OTG_LBR_CTRL_REG, &temp);
-	temp |= BATT_MISSING_DET_EN_BIT;
-	ret |= smb137b_write_reg(client, OTG_LBR_CTRL_REG, temp);
-	if (ret) {
-		dev_err(&smb137b_chg->client->dev,
-			"%s couldn't set registers for batt missing %d\n",
-			__func__, ret);
-		goto free_valid_irq;
-	}
 
 	/* turn off charging */
 	ret = smb137b_write_reg(smb137b_chg->client,
@@ -806,20 +704,6 @@ static int __devinit smb137b_probe(struct i2c_client *client,
 
 	ret = device_create_file(&smb137b_chg->client->dev, &dev_attr_id_reg);
 
-	smb137b_chg->psy_batt.name = "battery";
-	smb137b_chg->psy_batt.type = POWER_SUPPLY_TYPE_BATTERY;
-	smb137b_chg->psy_batt.properties = batt_power_props;
-	smb137b_chg->psy_batt.num_properties = ARRAY_SIZE(batt_power_props);
-	smb137b_chg->psy_batt.get_property = batt_power_get_property;
-
-	smb137b_chg->psy_usb.name = "usb";
-	smb137b_chg->psy_usb.type = POWER_SUPPLY_TYPE_USB;
-	smb137b_chg->psy_usb.supplied_to = power_supplied_to;
-	smb137b_chg->psy_usb.num_supplicants = ARRAY_SIZE(power_supplied_to);
-	smb137b_chg->psy_usb.properties = power_props;
-	smb137b_chg->psy_usb.num_properties = ARRAY_SIZE(power_props);
-	smb137b_chg->psy_usb.get_property = power_get_property;
-
 	/*TODO read min_design and max_design from chip registers*/
 	smb137b_chg->min_design = 3200;
 	smb137b_chg->max_design = 4200;
@@ -827,44 +711,19 @@ static int __devinit smb137b_probe(struct i2c_client *client,
 	smb137b_chg->batt_status = POWER_SUPPLY_STATUS_DISCHARGING;
 	smb137b_chg->batt_chg_type = POWER_SUPPLY_CHARGE_TYPE_NONE;
 
-	ret = smb137b_read_reg(smb137b_chg->client, STATUS_F_REG, &temp);
-	if (ret) {
-		dev_err(&smb137b_chg->client->dev,
-			"%s couldn't read status f reg %d\n", __func__, ret);
-		goto free_valid_irq;
-	}
-	if (!(temp & BATT_PRESENT_STAT))
-		smb137b_chg->batt_present = 1;
-
-	ret = power_supply_register(&client->dev, &smb137b_chg->psy_batt);
-	if (ret) {
-		dev_err(&client->dev,
-			"%s power_supply_register fail for battery ret=%d\n",
-			__func__, ret);
-		goto free_valid_irq;
-	}
-
-	ret = power_supply_register(&client->dev, &smb137b_chg->psy_usb);
-	if (ret) {
-		dev_err(&client->dev,
-			"%s power_supply_register fail for usb ret=%d\n",
-			__func__, ret);
-		goto free_batt_psy;
-	}
+	device_init_wakeup(&client->dev, 1);
 
 	usb_smb137b_chg = smb137b_chg;
-	dev_dbg(&smb137b_chg->client->dev, "%s start heartbeat\n", __func__);
-	schedule_delayed_work(&smb137b_chg->charge_work, SMB137B_CHG_PERIOD);
 	smb137b_create_debugfs_entries(smb137b_chg);
 	dev_dbg(&client->dev,
 		"%s OK device_id = %x chg_state=%d\n", __func__,
 		smb137b_chg->dev_id_reg, smb137b_chg->usb_status);
 	return 0;
 
-free_batt_psy:
-	power_supply_unregister(&smb137b_chg->psy_batt);
-free_valid_irq:
-	free_irq(client->irq, client);
+disable_irq_wake:
+	set_irq_wake(client->irq, 0);
+unregister_charger:
+	msm_charger_unregister(&smb137b_chg->adapter_hw_chg);
 free_valid_gpio:
 	gpio_free(pdata->valid_n_gpio);
 free_smb137b_chg:
@@ -910,34 +769,21 @@ void smb137b_otg_power(int on)
 	}
 }
 
-void smb137b_vbus_draw(unsigned int mA)
-{
-	pr_debug("%s mA=%d\n", __func__, mA);
-	if (usb_smb137b_chg == NULL) {
-		pr_err("%s Called without charger notifying USB\n", __func__);
-		return;
-	}
-
-	if (mA == 0)
-		smb137b_stop_charging(usb_smb137b_chg);
-	else
-		smb137b_start_charging(usb_smb137b_chg, mA);
-}
-
 static int __devexit smb137b_remove(struct i2c_client *client)
 {
 	const struct smb137b_platform_data *pdata;
 	struct smb137b_data *smb137b_chg = i2c_get_clientdata(client);
 
-	smb137b_chg->stop_heartbeat = true;
-	smp_mb();
 	pdata = client->dev.platform_data;
+	device_init_wakeup(&client->dev, 0);
+	set_irq_wake(client->irq, 0);
 	free_irq(client->irq, client);
 	gpio_free(pdata->valid_n_gpio);
 	cancel_delayed_work_sync(&smb137b_chg->charge_work);
-	smb137b_stop_charging(smb137b_chg);
-	power_supply_unregister(&smb137b_chg->psy_usb);
-	power_supply_unregister(&smb137b_chg->psy_batt);
+
+	msm_charger_notify_event(&smb137b_chg->adapter_hw_chg,
+			 CHG_REMOVED_EVENT);
+	msm_charger_unregister(&smb137b_chg->adapter_hw_chg);
 	smb137b_destroy_debugfs_entries();
 	kfree(smb137b_chg);
 	return 0;
@@ -949,11 +795,8 @@ static int smb137b_suspend(struct device *dev)
 	struct smb137b_data *smb137b_chg = dev_get_drvdata(dev);
 
 	dev_dbg(&smb137b_chg->client->dev, "%s\n", __func__);
-	if (delayed_work_pending(&smb137b_chg->charge_work)) {
-		smb137b_chg->stop_heartbeat = true;
-		smp_mb();
-		cancel_delayed_work_sync(&smb137b_chg->charge_work);
-	}
+	if (smb137b_chg->charging)
+		return -EBUSY;
 	return 0;
 }
 
@@ -962,9 +805,6 @@ static int smb137b_resume(struct device *dev)
 	struct smb137b_data *smb137b_chg = dev_get_drvdata(dev);
 
 	dev_dbg(&smb137b_chg->client->dev, "%s\n", __func__);
-	smb137b_chg->stop_heartbeat = false;
-	schedule_delayed_work(&smb137b_chg->charge_work,
-					SMB137B_CHG_PERIOD);
 	return 0;
 }
 

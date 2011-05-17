@@ -162,6 +162,7 @@ struct pm8058_gpio {
 	int		out_strength;
 	int		function;
 	int		inv_int_pol;	/* invert interrupt polarity */
+	int		disable_pin;	/* disable pin and tri-state its pad */
 };
 
 /* chip revision */
@@ -176,6 +177,13 @@ struct pm8058_gpio {
 #define PM8058_UART_MUX_1		0x20
 #define PM8058_UART_MUX_2		0x40
 #define PM8058_UART_MUX_3		0x60
+
+enum pon_config{
+	DISABLE_HARD_RESET = 0,
+	SHUTDOWN_ON_HARD_RESET,
+	RESTART_ON_HARD_RESET,
+	MAX_PON_CONFIG,
+};
 
 /* Note -do not call pm8058_read and pm8058_write in an atomic context */
 int pm8058_read(struct pm8058_chip *pm_chip, u16 addr, u8 *values,
@@ -194,3 +202,5 @@ int pm8058_misc_control(struct pm8058_chip *pm_chip, int mask, int flag);
 int pm8058_reset_pwr_off(int reset);
 
 void pm8058_show_resume_irq(void);
+
+int pm8058_hard_reset_config(enum pon_config config);

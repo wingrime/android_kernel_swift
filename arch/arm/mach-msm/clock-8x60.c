@@ -609,6 +609,9 @@ static void set_rate_div_banked(struct clk_local *clk, struct clk_freq_tbl *nf)
 		.sys_vdd = v, \
 	}
 static struct clk_freq_tbl clk_tbl_gsbi_uart[] = {
+	F_GSBI_UART(       0, BB_GND,  1,  0,   0, NONE),
+	F_GSBI_UART( 1843200, BB_PLL8, 1,  3, 625, LOW),
+	F_GSBI_UART( 3686400, BB_PLL8, 1,  6, 625, LOW),
 	F_GSBI_UART( 7372800, BB_PLL8, 1, 12, 625, LOW),
 	F_GSBI_UART(14745600, BB_PLL8, 1, 24, 625, LOW),
 	F_GSBI_UART(16000000, BB_PLL8, 4,  1,   6, LOW),
@@ -1264,7 +1267,7 @@ static struct bank_masks bmnd_info_mdp = {
 			.mode_mask =		BM(7, 6),
 	},
 };
-#define CLK_MDP(id) \
+#define CLK_MDP(id, par) \
 	[L_##id##_CLK] = { \
 		.type = MND, \
 		.ns_reg = MDP_NS_REG, \
@@ -1279,7 +1282,7 @@ static struct bank_masks bmnd_info_mdp = {
 		.set_rate = set_rate_mnd_banked, \
 		.freq_tbl = clk_tbl_mdp, \
 		.bank_masks = &bmnd_info_mdp, \
-		.parent = L_NONE_CLK, \
+		.parent = L_##par##_CLK, \
 		.test_vector = TEST_MM_HS(0x1A), \
 		.current_freq = &local_dummy_freq, \
 	}
@@ -1683,8 +1686,6 @@ static struct clk_freq_tbl clk_tbl_aif_osr[] = {
 		.type = BASIC, \
 		.ns_reg = ns, \
 		.cc_reg = ns, \
-		.reset_reg = ns, \
-		.reset_mask = BIT(19), \
 		.halt_reg = h_r, \
 		.halt_check = DELAY, \
 		.br_en_mask = BIT(15), \
@@ -1976,7 +1977,7 @@ struct clk_local soc_clk_local_tbl[] = {
 
 	CLK_JPEGD(JPEGD, JPEGD_AXI),
 
-	CLK_MDP(MDP),
+	CLK_MDP(MDP, MDP_AXI),
 	CLK_MDP_VSYNC(MDP_VSYNC),
 
 	CLK_PIXEL_MDP(PIXEL_MDP),
@@ -2017,11 +2018,12 @@ struct clk_local soc_clk_local_tbl[] = {
 		DBG_BUS_VEC_E_REG, HALT, 7, TEST_MM_HS(0x13)),
 	CLK_NORATE(JPEGD_AXI, MAXI_EN_REG, BIT(25), NULL, 0,
 		DBG_BUS_VEC_E_REG, HALT, 5, TEST_MM_HS(0x14)),
+	CLK_NORATE(MDP_AXI,  MAXI_EN_REG, BIT(23), SW_RESET_AXI_REG, BIT(13),
+		DBG_BUS_VEC_E_REG, HALT, 8, TEST_MM_HS(0x15)),
 	CLK_NORATE(VCODEC_AXI,   MAXI_EN_REG, BIT(19), SW_RESET_AXI_REG,
 		BIT(4)|BIT(5), DBG_BUS_VEC_E_REG, HALT, 3, TEST_MM_HS(0x17)),
 	CLK_NORATE(VFE_AXI,   MAXI_EN_REG, BIT(18), SW_RESET_AXI_REG, BIT(9),
 		DBG_BUS_VEC_E_REG, HALT, 0, TEST_MM_HS(0x18)),
-	CLK_RESET(MDP_AXI,    SW_RESET_AXI_REG, BIT(13)),
 	CLK_RESET(ROT_AXI,    SW_RESET_AXI_REG, BIT(6)),
 	CLK_RESET(VPE_AXI,    SW_RESET_AXI_REG, BIT(15)),
 
@@ -2403,16 +2405,16 @@ static void reg_init(void)
 
 	/* TODO:
 	 * The ADM clock votes below should removed once all users of the ADMs
-	 * begin voting for the clocks appropriately. Similarly, sc_aclk and
-	 * sc_hclk's sleep vote bits should be set once other subsystems begin
-	 * voting for them.
+	 * begin voting for the clocks appropriately.
 	 */
 	/* The clock driver doesn't use SC1's voting register to control
 	 * HW-voteable clocks.  Clear its bits so that disabling bits in the
 	 * SC0 register will cause the corresponding clocks to be disabled. */
-	writel(0, SC0_U_CLK_SLEEP_ENA_VOTE_REG);
-	writel(0, SC1_U_CLK_SLEEP_ENA_VOTE_REG);
+	rmwreg(BIT(12)|BIT(11), SC0_U_CLK_BRANCH_ENA_VOTE_REG, BM(12, 11));
 	writel(BIT(12)|BIT(11)|BM(5, 2), SC1_U_CLK_BRANCH_ENA_VOTE_REG);
+	/* Let sc_aclk and sc_clk halt when both Scorpions are collapsed. */
+	writel(BIT(12)|BIT(11), SC0_U_CLK_SLEEP_ENA_VOTE_REG);
+	writel(BIT(12)|BIT(11), SC1_U_CLK_SLEEP_ENA_VOTE_REG);
 
 	/* Deassert MM SW_RESET_ALL signal. */
 	writel(0, SW_RESET_ALL_REG);
@@ -2430,7 +2432,7 @@ static void reg_init(void)
 	/* Initialize MM AXI registers: Enable HW gating for all clocks that
 	 * support it. Also set FORCE_CORE_ON bits, and any sleep and wake-up
 	 * delays to safe values. */
-	rmwreg(0x000307F9, MAXI_EN_REG,  0x0FFFFFFF);
+	rmwreg(0x000207F9, MAXI_EN_REG,  0x0FFFFFFF);
 	/* MAXI_EN2_REG is owned by the RPM.  Don't touch it. */
 	writel(0x3FE7FCFF, MAXI_EN3_REG);
 	writel(0x000001D8, SAXI_EN_REG);
@@ -2453,7 +2455,7 @@ static void reg_init(void)
 	writel(0x80FF0000, ROT_CC_REG);
 	writel(0x80FF0000, TV_CC_REG);
 	writel(0x000004FF, TV_CC2_REG);
-	writel(0x80FF0000, VCODEC_CC_REG);
+	writel(0xC0FF0000, VCODEC_CC_REG);
 	writel(0x80FF0000, VFE_CC_REG);
 	writel(0x80FF0000, VPE_CC_REG);
 
@@ -2507,6 +2509,13 @@ void __init msm_clk_soc_init(void)
 	local_clk_set_rate(C(USB_HS1_XCVR), 60000000);
 	local_clk_set_rate(C(USB_FS1_SRC), 60000000);
 	local_clk_set_rate(C(USB_FS2_SRC), 60000000);
+
+	/* The halt status bits for PDM and TSSC may be incorrect at boot.
+	 * Toggle these clocks on and off to refresh them. */
+	local_clk_enable(C(PDM));
+	local_clk_disable(C(PDM));
+	local_clk_enable(C(TSSC));
+	local_clk_disable(C(TSSC));
 }
 
 static int msm_clk_soc_late_init(void)

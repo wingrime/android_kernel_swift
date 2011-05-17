@@ -1,4 +1,4 @@
-/* Copyright (c) 2010, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2010-2011, Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -28,7 +28,9 @@
 #include <mach/debug_mm.h>
 #include <mach/qdsp6v2/apr_audio.h>
 #include <mach/qdsp6v2/q6afe.h>
+#include <mach/qdsp6v2/q6voice.h>
 #include "q6adm.h"
+#include "rtac.h"
 
 #ifndef MAX
 #define  MAX(x, y) (((x) > (y)) ? (x) : (y))
@@ -64,7 +66,7 @@ struct audio_routing_info {
 	unsigned short audrec_mixer_mask[MAX_SESSIONS];
 	struct session_freq dec_freq[MAX_SESSIONS];
 	struct session_freq enc_freq[MAX_SESSIONS];
-	unsigned char copp_list[MAX_SESSIONS][AFE_MAX_PORTS];
+	unsigned short copp_list[MAX_SESSIONS][AFE_MAX_PORTS];
 	int voice_tx_dev_id;
 	int voice_rx_dev_id;
 	int voice_tx_sample_rate;
@@ -118,6 +120,9 @@ int msm_reset_all_device(void)
 			broadcast_event(AUDDEV_EVT_DEV_RLS,
 				dev_id,
 				SESSION_IGNORE);
+
+			if (dev_info->copp_id == VOICE_PLAYBACK_TX)
+				voice_start_playback(0);
 		}
 		dev_info->sessions = 0;
 	}
@@ -359,6 +364,11 @@ int msm_snddev_set_dec(int popp_id, int copp_id, int set,
 				break;
 			}
 		}
+	}
+
+	if (copp_id == VOICE_PLAYBACK_TX) {
+		/* Signal uplink playback. */
+		rc = voice_start_playback(set);
 	}
 fail_cmd:
 	mutex_unlock(&routing_info.adm_mutex);
@@ -915,6 +925,232 @@ int msm_snddev_enable_sidetone(u32 dev_id, u32 enable, uint16_t gain)
 }
 EXPORT_SYMBOL(msm_snddev_enable_sidetone);
 
+int msm_enable_incall_recording(int popp_id, int rec_mode, int rate,
+				int channel_mode)
+{
+	int rc = 0;
+	int port_id[2];
+	port_id[0] = VOICE_RECORD_TX;
+	port_id[1] = VOICE_RECORD_RX;
+
+	pr_debug("%s: popp_id %d, rec_mode %d, rate %d, channel_mode %d\n",
+		 __func__, popp_id, rec_mode, rate, channel_mode);
+
+	mutex_lock(&routing_info.adm_mutex);
+
+	if (rec_mode == VOC_REC_UPLINK) {
+		rc = afe_start_pseudo_port(port_id[0]);
+		if (rc < 0) {
+			pr_err("%s: Error %d in Tx pseudo port start\n",
+			       __func__, rc);
+
+			goto fail_cmd;
+		}
+
+		rc = adm_open(port_id[0], LIVE_RECORDING, rate, channel_mode,
+				DEFAULT_COPP_TOPOLOGY);
+		if (rc < 0) {
+			pr_err("%s: Error %d in ADM open %d\n",
+			       __func__, rc, port_id[0]);
+
+			goto fail_cmd;
+		}
+
+		rc = adm_matrix_map(popp_id, LIVE_RECORDING, 1, &port_id[0]);
+		if (rc < 0) {
+			pr_err("%s: Error %d in ADM matrix map %d\n",
+			       __func__, rc, port_id[0]);
+
+			goto fail_cmd;
+		}
+
+		msm_set_copp_id(popp_id, port_id[0]);
+
+	} else if (rec_mode == VOC_REC_DOWNLINK) {
+		rc = afe_start_pseudo_port(port_id[1]);
+		if (rc < 0) {
+			pr_err("%s: Error %d in Rx pseudo port start\n",
+			       __func__, rc);
+
+			goto fail_cmd;
+		}
+
+		rc = adm_open(port_id[1], LIVE_RECORDING, rate, channel_mode,
+				DEFAULT_COPP_TOPOLOGY);
+		if (rc < 0) {
+			pr_err("%s: Error %d in ADM open %d\n",
+			       __func__, rc, port_id[1]);
+
+			goto fail_cmd;
+		}
+
+		rc = adm_matrix_map(popp_id, LIVE_RECORDING, 1, &port_id[1]);
+		if (rc < 0) {
+			pr_err("%s: Error %d in ADM matrix map %d\n",
+			       __func__, rc, port_id[1]);
+
+			goto fail_cmd;
+		}
+
+		msm_set_copp_id(popp_id, port_id[1]);
+
+	} else if (rec_mode == VOC_REC_BOTH) {
+		rc = afe_start_pseudo_port(port_id[0]);
+		if (rc < 0) {
+			pr_err("%s: Error %d in Tx pseudo port start\n",
+			       __func__, rc);
+
+			goto fail_cmd;
+		}
+
+		rc = adm_open(port_id[0], LIVE_RECORDING, rate, channel_mode,
+				DEFAULT_COPP_TOPOLOGY);
+		if (rc < 0) {
+			pr_err("%s: Error %d in ADM open %d\n",
+			       __func__, rc, port_id[0]);
+
+			goto fail_cmd;
+		}
+
+		msm_set_copp_id(popp_id, port_id[0]);
+
+		rc = afe_start_pseudo_port(port_id[1]);
+		if (rc < 0) {
+			pr_err("%s: Error %d in Rx pseudo port start\n",
+			       __func__, rc);
+
+			goto fail_cmd;
+		}
+
+		rc = adm_open(port_id[1], LIVE_RECORDING, rate, channel_mode,
+				DEFAULT_COPP_TOPOLOGY);
+		if (rc < 0) {
+			pr_err("%s: Error %d in ADM open %d\n",
+			       __func__, rc, port_id[0]);
+
+			goto fail_cmd;
+		}
+
+		rc = adm_matrix_map(popp_id, LIVE_RECORDING, 2, &port_id[0]);
+		if (rc < 0) {
+			pr_err("%s: Error %d in ADM matrix map\n",
+			       __func__, rc);
+
+			goto fail_cmd;
+		}
+
+		msm_set_copp_id(popp_id, port_id[1]);
+	} else {
+		pr_err("%s Unknown rec_mode %d\n", __func__, rec_mode);
+
+		goto fail_cmd;
+	}
+
+	rc = voice_start_record(rec_mode, 1);
+
+fail_cmd:
+	mutex_unlock(&routing_info.adm_mutex);
+	return rc;
+}
+
+int msm_disable_incall_recording(uint32_t popp_id, uint32_t rec_mode)
+{
+	int rc = 0;
+	uint32_t port_id[2];
+	port_id[0] = VOICE_RECORD_TX;
+	port_id[1] = VOICE_RECORD_RX;
+
+	pr_debug("%s: popp_id %d, rec_mode %d\n", __func__, popp_id, rec_mode);
+
+	mutex_lock(&routing_info.adm_mutex);
+
+	rc = voice_start_record(rec_mode, 0);
+	if (rc < 0) {
+		pr_err("%s: Error %d stopping record\n", __func__, rc);
+
+		goto fail_cmd;
+	}
+
+	if (rec_mode == VOC_REC_UPLINK) {
+		rc = adm_close(port_id[0]);
+		if (rc < 0) {
+			pr_err("%s: Error %d in ADM close %d\n",
+			       __func__, rc, port_id[0]);
+
+			goto fail_cmd;
+		}
+
+		msm_clear_copp_id(popp_id, port_id[0]);
+
+		rc = afe_stop_pseudo_port(port_id[0]);
+		if (rc < 0) {
+			pr_err("%s: Error %d in Tx pseudo port stop\n",
+			       __func__, rc);
+			goto fail_cmd;
+		}
+
+	} else if (rec_mode == VOC_REC_DOWNLINK) {
+		rc = adm_close(port_id[1]);
+		if (rc < 0) {
+			pr_err("%s: Error %d in ADM close %d\n",
+			       __func__, rc, port_id[1]);
+
+			goto fail_cmd;
+		}
+
+		msm_clear_copp_id(popp_id, port_id[1]);
+
+		rc = afe_stop_pseudo_port(port_id[1]);
+		if (rc < 0) {
+			pr_err("%s: Error %d in Rx pseudo port stop\n",
+			       __func__, rc);
+			goto fail_cmd;
+		}
+	} else if (rec_mode == VOC_REC_BOTH) {
+		rc = adm_close(port_id[0]);
+		if (rc < 0) {
+			pr_err("%s: Error %d in ADM close %d\n",
+			       __func__, rc, port_id[0]);
+
+			goto fail_cmd;
+		}
+
+		msm_clear_copp_id(popp_id, port_id[0]);
+
+		rc = afe_stop_pseudo_port(port_id[0]);
+		if (rc < 0) {
+			pr_err("%s: Error %d in Tx pseudo port stop\n",
+			       __func__, rc);
+			goto fail_cmd;
+		}
+
+		rc = adm_close(port_id[1]);
+		if (rc < 0) {
+			pr_err("%s: Error %d in ADM close %d\n",
+			       __func__, rc, port_id[1]);
+
+			goto fail_cmd;
+		}
+
+		msm_clear_copp_id(popp_id, port_id[1]);
+
+		rc = afe_stop_pseudo_port(port_id[1]);
+		if (rc < 0) {
+			pr_err("%s: Error %d in Rx pseudo port stop\n",
+			       __func__, rc);
+			goto fail_cmd;
+		}
+	} else {
+		pr_err("%s Unknown rec_mode %d\n", __func__, rec_mode);
+
+		goto fail_cmd;
+	}
+
+fail_cmd:
+	mutex_unlock(&routing_info.adm_mutex);
+	return rc;
+}
+
 static int audio_dev_ctrl_ioctl(struct inode *inode, struct file *file,
 	unsigned int cmd, unsigned long arg)
 {
@@ -1066,6 +1302,10 @@ void broadcast_event(u32 evt_id, u32 dev_id, u64 session_id)
 		&& (evt_id != AUDDEV_EVT_STREAM_VOL_CHG)
 		&& (evt_id != AUDDEV_EVT_VOICE_STATE_CHG))
 		dev_info = audio_dev_ctrl_find_dev(dev_id);
+
+#ifdef CONFIG_MSM8X60_RTAC
+	update_rtac(evt_id, dev_id, dev_info);
+#endif
 
 	if (event.cb != NULL)
 		callback = event.cb;
@@ -1394,7 +1634,7 @@ static int __init audio_dev_ctrl_init(void)
 	mutex_init(&routing_info.adm_mutex);
 
 	memset(routing_info.copp_list, DEVICE_IGNORE,
-		(sizeof(char) * MAX_SESSIONS * AFE_MAX_PORTS));
+		(sizeof(unsigned short) * MAX_SESSIONS * AFE_MAX_PORTS));
 	return misc_register(&audio_dev_ctrl_misc);
 }
 

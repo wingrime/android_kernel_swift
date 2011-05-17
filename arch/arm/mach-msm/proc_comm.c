@@ -1,7 +1,7 @@
 /* arch/arm/mach-msm/proc_comm.c
  *
  * Copyright (C) 2007-2008 Google, Inc.
- * Copyright (c) 2009-2010, Code Aurora Forum. All rights reserved.
+ * Copyright (c) 2009-2011, Code Aurora Forum. All rights reserved.
  * Author: Brian Swetland <swetland@google.com>
  *
  * This software is licensed under the terms of the GNU General Public
@@ -26,17 +26,17 @@
 #include "proc_comm.h"
 #include "smd_private.h"
 
-#if defined(CONFIG_ARCH_MSM7X30)
-#define MSM_TRIG_A2M_PC_INT (writel(1 << 6, MSM_GCC_BASE + 0x8))
-#elif defined(CONFIG_ARCH_MSM8X60)
-#define MSM_TRIG_A2M_PC_INT (writel(1 << 5, MSM_GCC_BASE + 0x8))
-#else
-#define MSM_TRIG_A2M_PC_INT (writel(1, MSM_CSR_BASE + 0x400 + (6) * 4))
-#endif
-
 static inline void notify_other_proc_comm(void)
 {
-	MSM_TRIG_A2M_PC_INT;
+#if defined(CONFIG_ARCH_MSM7X30)
+	writel_relaxed(1 << 6, MSM_GCC_BASE + 0x8);
+#elif defined(CONFIG_ARCH_MSM8X60)
+	writel_relaxed(1 << 5, MSM_GCC_BASE + 0x8);
+#else
+	writel_relaxed(1, MSM_CSR_BASE + 0x400 + (6) * 4);
+#endif
+	/* Make sure the write completes before returning */
+	wmb();
 }
 
 #define APP_COMMAND 0x00
@@ -62,7 +62,9 @@ static DEFINE_SPINLOCK(proc_comm_lock);
 static int proc_comm_wait_for(unsigned addr, unsigned value)
 {
 	while (1) {
-		if (readl(addr) == value)
+		/* Barrier here prevents excessive spinning */
+		mb();
+		if (readl_relaxed(addr) == value)
 			return 0;
 
 		if (smsm_check_for_modem_crash())
@@ -83,12 +85,14 @@ again:
 	if (proc_comm_wait_for(base + MDM_STATUS, PCOM_READY))
 		goto again;
 
-	writel(PCOM_RESET_MODEM, base + APP_COMMAND);
-	writel(0, base + APP_DATA1);
-	writel(0, base + APP_DATA2);
+	writel_relaxed(PCOM_RESET_MODEM, base + APP_COMMAND);
+	writel_relaxed(0, base + APP_DATA1);
+	writel_relaxed(0, base + APP_DATA2);
 
 	spin_unlock_irqrestore(&proc_comm_lock, flags);
 
+	/* Make sure the writes complete before notifying the other side */
+	wmb();
 	notify_other_proc_comm();
 
 	return;
@@ -107,27 +111,31 @@ again:
 	if (proc_comm_wait_for(base + MDM_STATUS, PCOM_READY))
 		goto again;
 
-	writel(cmd, base + APP_COMMAND);
-	writel(data1 ? *data1 : 0, base + APP_DATA1);
-	writel(data2 ? *data2 : 0, base + APP_DATA2);
+	writel_relaxed(cmd, base + APP_COMMAND);
+	writel_relaxed(data1 ? *data1 : 0, base + APP_DATA1);
+	writel_relaxed(data2 ? *data2 : 0, base + APP_DATA2);
 
+	/* Make sure the writes complete before notifying the other side */
+	wmb();
 	notify_other_proc_comm();
 
 	if (proc_comm_wait_for(base + APP_COMMAND, PCOM_CMD_DONE))
 		goto again;
 
-	if (readl(base + APP_STATUS) == PCOM_CMD_SUCCESS) {
+	if (readl_relaxed(base + APP_STATUS) == PCOM_CMD_SUCCESS) {
 		if (data1)
-			*data1 = readl(base + APP_DATA1);
+			*data1 = readl_relaxed(base + APP_DATA1);
 		if (data2)
-			*data2 = readl(base + APP_DATA2);
+			*data2 = readl_relaxed(base + APP_DATA2);
 		ret = 0;
 	} else {
 		ret = -EIO;
 	}
 
-	writel(PCOM_CMD_IDLE, base + APP_COMMAND);
+	writel_relaxed(PCOM_CMD_IDLE, base + APP_COMMAND);
 
+	/* Make sure the writes complete before returning */
+	wmb();
 	spin_unlock_irqrestore(&proc_comm_lock, flags);
 	return ret;
 }

@@ -362,6 +362,7 @@ static int _rmnet_xmit(struct sk_buff *skb, struct net_device *dev)
 	if (smd_ret != skb->len) {
 		pr_err("[%s] %s: smd_write returned error %d",
 			dev->name, __func__, smd_ret);
+		p->stats.tx_errors++;
 		goto xmit_out;
 	}
 
@@ -439,21 +440,36 @@ static void smd_net_notify(void *_dev, unsigned event)
 {
 	struct rmnet_private *p = netdev_priv((struct net_device *)_dev);
 
-	if (event != SMD_EVENT_DATA)
-		return;
+	switch (event) {
+	case SMD_EVENT_DATA:
+		spin_lock(&p->lock);
+		if (p->skb && (smd_write_avail(p->ch) >= p->skb->len)) {
+			smd_disable_read_intr(p->ch);
+			tasklet_hi_schedule(&p->tsklt);
+		}
 
-	spin_lock(&p->lock);
-	if (p->skb && (smd_write_avail(p->ch) >= p->skb->len)) {
-		smd_disable_read_intr(p->ch);
-		tasklet_hi_schedule(&p->tsklt);
-	}
+		spin_unlock(&p->lock);
 
-	spin_unlock(&p->lock);
+		if (smd_read_avail(p->ch) &&
+			(smd_read_avail(p->ch) >= smd_cur_packet_size(p->ch))) {
+			smd_net_data_tasklet.data = (unsigned long) _dev;
+			tasklet_schedule(&smd_net_data_tasklet);
+		}
+		break;
 
-	if (smd_read_avail(p->ch) &&
-	    (smd_read_avail(p->ch) >= smd_cur_packet_size(p->ch))) {
-		smd_net_data_tasklet.data = (unsigned long) _dev;
-		tasklet_schedule(&smd_net_data_tasklet);
+	case SMD_EVENT_OPEN:
+		DBG0("%s: opening SMD port\n", __func__);
+		netif_carrier_on(_dev);
+		if (netif_queue_stopped(_dev)) {
+			DBG0("%s: re-starting if queue\n", __func__);
+			netif_wake_queue(_dev);
+		}
+		break;
+
+	case SMD_EVENT_CLOSE:
+		DBG0("%s: closing SMD port\n", __func__);
+		netif_carrier_off(_dev);
+		break;
 	}
 }
 

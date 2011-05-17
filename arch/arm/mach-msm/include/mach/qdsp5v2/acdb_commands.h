@@ -69,12 +69,14 @@
 /* struct acdb_cmd_get_device_info */
 #define ACDB_GET_DEVICE_INFO		0x0108f5cb
 
+/*command to intitialize ACDB based on codec type*/
+#define ACDB_CMD_INITIALIZE_FOR_ADIE	0x00011283
 
 
 /* ACDB Error codes */
 
 #define ACDB_RES_SUCCESS		0
-#define ACDB_RES_FAILURE		1
+#define ACDB_RES_FAILURE		-1
 #define ACDB_RES_BADPARM		-2
 #define ACDB_RES_BADSTATE		-3
 
@@ -262,7 +264,16 @@ struct acdb_dev_info {
 	s32	max_volume;		/* Max volume (mB) */
 };
 
+/*structure is used to intialize ACDB software on modem
+based on adie type detected*/
+struct acdb_cmd_init_adie {
+    u32 command_id;
+    u32 adie_type;
+};
 
+#define ACDB_CURRENT_ADIE_MODE_UNKNOWN 0
+#define ACDB_CURRENT_ADIE_MODE_TIMPANI 1
+#define ACDB_CURRENT_ADIE_MODE_MARIMBA 2
 
 /* Sample Rate Bit Mask */
 

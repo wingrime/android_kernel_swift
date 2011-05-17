@@ -41,6 +41,7 @@
 #include "timpani_profile_8x60.h"
 #include "snddev_hdmi.h"
 #include "snddev_mi2s.h"
+#include "snddev_virtual.h"
 
 #ifdef CONFIG_DEBUG_FS
 static struct dentry *debugfs_hsed_config;
@@ -55,6 +56,7 @@ static void snddev_hsed_config_restore_setting(void);
 #define SNDDEV_GPIO_CLASS_D1_EN 229
 
 #define SNDDEV_GPIO_MIC2_ANCR_SEL 294
+#define SNDDEV_GPIO_MIC1_ANCL_SEL 295
 
 static struct resource msm_cdcclk_ctl_resources[] = {
 	{
@@ -145,6 +147,53 @@ static struct platform_device msm_mi2s_device = {
 	.resource	= msm_mi2s_gpio_resources,
 };
 
+/* Must be same size as msm_icodec_gpio_resources */
+static int msm_icodec_gpio_defaults[] = {
+	0,
+	0,
+};
+
+static struct resource msm_icodec_gpio_resources[] = {
+	{
+		.name   = "msm_icodec_speaker_left",
+		.start  = SNDDEV_GPIO_CLASS_D0_EN,
+		.end    = SNDDEV_GPIO_CLASS_D0_EN,
+		.flags  = IORESOURCE_IO,
+	},
+	{
+		.name   = "msm_icodec_speaker_right",
+		.start  = SNDDEV_GPIO_CLASS_D1_EN,
+		.end    = SNDDEV_GPIO_CLASS_D1_EN,
+		.flags  = IORESOURCE_IO,
+	},
+};
+
+static struct platform_device msm_icodec_gpio_device = {
+	.name   = "msm_icodec_gpio",
+	.num_resources  = ARRAY_SIZE(msm_icodec_gpio_resources),
+	.resource       = msm_icodec_gpio_resources,
+	.dev = { .platform_data = &msm_icodec_gpio_defaults },
+};
+
+static int msm_qt_icodec_gpio_defaults[] = {
+	0,
+};
+
+static struct resource msm_qt_icodec_gpio_resources[] = {
+	{
+		.name   = "msm_icodec_speaker_gpio",
+		.start  = SNDDEV_GPIO_CLASS_D0_EN,
+		.end    = SNDDEV_GPIO_CLASS_D0_EN,
+		.flags  = IORESOURCE_IO,
+	},
+};
+
+static struct platform_device msm_qt_icodec_gpio_device = {
+	.name   = "msm_icodec_gpio",
+	.num_resources  = ARRAY_SIZE(msm_qt_icodec_gpio_resources),
+	.resource       = msm_qt_icodec_gpio_resources,
+	.dev = { .platform_data = &msm_qt_icodec_gpio_defaults },
+};
 
 static struct regulator *s3;
 static struct regulator *mvs;
@@ -453,6 +502,15 @@ static int msm_snddev_enable_amic_power(void)
 		}
 		gpio_direction_output(SNDDEV_GPIO_MIC2_ANCR_SEL, 0);
 
+		ret = gpio_request(SNDDEV_GPIO_MIC1_ANCL_SEL, "MIC1_ANCL_SEL");
+		if (ret) {
+			pr_err("%s: mic1 ancl gpio %d request failed\n",
+				__func__, SNDDEV_GPIO_MIC1_ANCL_SEL);
+			gpio_free(SNDDEV_GPIO_MIC2_ANCR_SEL);
+			return ret;
+		}
+		gpio_direction_output(SNDDEV_GPIO_MIC1_ANCL_SEL, 0);
+
 	} else {
 		ret = pm8058_micbias_enable(OTHC_MICBIAS_2,
 				OTHC_SIGNAL_ALWAYS_ON);
@@ -470,12 +528,70 @@ static void msm_snddev_disable_amic_power(void)
 	if (machine_is_msm8x60_fluid()) {
 		ret = pm8058_micbias_enable(OTHC_MICBIAS_0,
 				OTHC_SIGNAL_OFF);
+		gpio_free(SNDDEV_GPIO_MIC1_ANCL_SEL);
 		gpio_free(SNDDEV_GPIO_MIC2_ANCR_SEL);
 	} else
 		ret = pm8058_micbias_enable(OTHC_MICBIAS_2, OTHC_SIGNAL_OFF);
 
 	if (ret)
 		pr_err("%s: Disabling amic power failed\n", __func__);
+#endif
+}
+
+static int msm_snddev_enable_anc_power(void)
+{
+	int ret = 0;
+#ifdef CONFIG_PMIC8058_OTHC
+	ret = pm8058_micbias_enable(OTHC_MICBIAS_2,
+		OTHC_SIGNAL_ALWAYS_ON);
+	if (ret)
+		pr_err("%s: Enabling anc micbias 2 failed\n", __func__);
+
+	if (machine_is_msm8x60_fluid()) {
+
+		ret = pm8058_micbias_enable(OTHC_MICBIAS_0,
+				OTHC_SIGNAL_ALWAYS_ON);
+		if (ret)
+			pr_err("%s: Enabling anc micbias 0 failed\n", __func__);
+
+		ret = gpio_request(SNDDEV_GPIO_MIC2_ANCR_SEL, "MIC2_ANCR_SEL");
+		if (ret) {
+			pr_err("%s: mic2 ancr gpio %d request failed\n",
+				__func__, SNDDEV_GPIO_MIC2_ANCR_SEL);
+			return ret;
+		}
+		gpio_direction_output(SNDDEV_GPIO_MIC2_ANCR_SEL, 1);
+
+		ret = gpio_request(SNDDEV_GPIO_MIC1_ANCL_SEL, "MIC1_ANCL_SEL");
+		if (ret) {
+			pr_err("%s: mic1 ancl gpio %d request failed\n",
+				__func__, SNDDEV_GPIO_MIC1_ANCL_SEL);
+			gpio_free(SNDDEV_GPIO_MIC2_ANCR_SEL);
+			return ret;
+		}
+		gpio_direction_output(SNDDEV_GPIO_MIC1_ANCL_SEL, 1);
+
+	}
+#endif
+	return ret;
+}
+
+static void msm_snddev_disable_anc_power(void)
+{
+#ifdef CONFIG_PMIC8058_OTHC
+	int ret;
+
+	ret = pm8058_micbias_enable(OTHC_MICBIAS_2, OTHC_SIGNAL_OFF);
+
+	if (machine_is_msm8x60_fluid()) {
+		ret |= pm8058_micbias_enable(OTHC_MICBIAS_0,
+				OTHC_SIGNAL_OFF);
+		gpio_free(SNDDEV_GPIO_MIC2_ANCR_SEL);
+		gpio_free(SNDDEV_GPIO_MIC1_ANCL_SEL);
+	}
+
+	if (ret)
+		pr_err("%s: Disabling anc power failed\n", __func__);
 #endif
 }
 
@@ -574,6 +690,23 @@ static struct platform_device msm_imic_device = {
 	.dev = { .platform_data = &snddev_imic_data },
 };
 
+static struct snddev_icodec_data snddev_fluid_ispkr_mic_data = {
+	.capability = (SNDDEV_CAP_TX | SNDDEV_CAP_VOICE),
+	.name = "speaker_mono_tx",
+	.copp_id = PRIMARY_I2S_TX,
+	.profile = &imic_profile,
+	.channel_mode = 1,
+	.default_sample_rate = 48000,
+	.pamp_on = msm_snddev_enable_amic_power,
+	.pamp_off = msm_snddev_disable_amic_power,
+};
+
+static struct platform_device msm_fluid_ispkr_mic_device = {
+	.name = "snddev_icodec",
+	.dev = { .platform_data = &snddev_fluid_ispkr_mic_data },
+};
+
+
 static struct adie_codec_action_unit headset_ab_cpls_48KHz_osr256_actions[] =
 	HEADSET_AB_CPLS_48000_OSR_256;
 
@@ -633,8 +766,8 @@ static struct snddev_icodec_data snddev_anc_headset_data = {
 	.profile = &headset_anc_profile,
 	.channel_mode = 2,
 	.default_sample_rate = 48000,
-	.pamp_on = msm_snddev_enable_amic_power,
-	.pamp_off = msm_snddev_disable_amic_power,
+	.pamp_on = msm_snddev_enable_anc_power,
+	.pamp_off = msm_snddev_disable_anc_power,
 	.voltage_on = msm_snddev_voltage_on,
 	.voltage_off = msm_snddev_voltage_off,
 };
@@ -1189,6 +1322,17 @@ static struct platform_device msm_auxpga_lb_hs_device = {
 	.dev = { .platform_data = &snddev_auxpga_lb_hs_data },
 };
 
+static struct snddev_virtual_data snddev_uplink_rx_data = {
+	.capability = SNDDEV_CAP_RX,
+	.name = "uplink_rx",
+	.copp_id = VOICE_PLAYBACK_TX,
+};
+
+static struct platform_device msm_uplink_rx_device = {
+	.name = "snddev_virtual",
+	.dev = { .platform_data = &snddev_uplink_rx_data },
+};
+
 #ifdef CONFIG_DEBUG_FS
 static struct adie_codec_action_unit
 	ihs_stereo_rx_class_d_legacy_48KHz_osr256_actions[] =
@@ -1331,6 +1475,7 @@ static struct platform_device *snd_devices_ffa[] __initdata = {
 	&msm_auxpga_lb_hs_device,
 	&msm_auxpga_lb_lo_device,
 	&msm_linein_pri_device,
+	&msm_icodec_gpio_device,
 };
 
 static struct platform_device *snd_devices_surf[] __initdata = {
@@ -1351,6 +1496,7 @@ static struct platform_device *snd_devices_surf[] __initdata = {
 	&msm_auxpga_lb_hs_device,
 	&msm_auxpga_lb_lo_device,
 	&msm_linein_pri_device,
+	&msm_icodec_gpio_device,
 };
 
 static struct platform_device *snd_devices_fluid[] __initdata = {
@@ -1360,6 +1506,7 @@ static struct platform_device *snd_devices_fluid[] __initdata = {
 	&msm_snddev_hdmi_stereo_rx_device,
 	&msm_headset_stereo_device,
 	&msm_headset_mic_device,
+	&msm_fluid_ispkr_mic_device,
 	&msm_bt_sco_earpiece_device,
 	&msm_bt_sco_mic_device,
 	&msm_mi2s_fm_tx_device,
@@ -1367,6 +1514,7 @@ static struct platform_device *snd_devices_fluid[] __initdata = {
 	&msm_anc_headset_device,
 	&msm_auxpga_lb_hs_device,
 	&msm_auxpga_lb_lo_device,
+	&msm_icodec_gpio_device,
 };
 
 static struct platform_device *snd_devices_qt[] __initdata = {
@@ -1375,19 +1523,20 @@ static struct platform_device *snd_devices_qt[] __initdata = {
 	&msm_ispkr_stereo_device,
 	&msm_qt_dual_dmic_d0_device,
 	&msm_snddev_hdmi_stereo_rx_device,
+	&msm_qt_icodec_gpio_device,
 };
 
 static struct platform_device *snd_devices_common[] __initdata = {
 	&msm_aux_pcm_device,
 	&msm_cdcclk_ctl_device,
 	&msm_mi2s_device,
+	&msm_uplink_rx_device,
 };
 
 void __init msm_snddev_init(void)
 {
 	int i;
 	int dev_id;
-	int rc;
 
 	atomic_set(&pamp_ref_cnt, 0);
 
@@ -1430,13 +1579,4 @@ void __init msm_snddev_init(void)
 				S_IFREG | S_IRUGO, NULL,
 		(void *) "msm_hsed_config", &snddev_hsed_config_debug_fops);
 #endif
-
-	rc = gpio_request(SNDDEV_GPIO_CLASS_D1_EN, "CLASSD1_EN");
-	if (rc) {
-		pr_err("%s: spkr pamp gpio %d request"
-			"failed\n", __func__, SNDDEV_GPIO_CLASS_D1_EN);
-	} else {
-		gpio_direction_output(SNDDEV_GPIO_CLASS_D1_EN, 0);
-		gpio_free(SNDDEV_GPIO_CLASS_D1_EN);
-	}
 }

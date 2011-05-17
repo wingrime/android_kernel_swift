@@ -33,8 +33,9 @@
 #include <asm/irq.h>
 #include <asm/mach/irq.h>
 #include <asm/hardware/gic.h>
+#include <asm/system.h>
 
-#ifdef CONFIG_MSM_RPM
+#ifdef CONFIG_MSM_MPM
 #include <../mach-msm/mpm.h>
 #endif
 
@@ -113,7 +114,7 @@ static void gic_mask_irq(unsigned int irq)
 	writel(mask, gic_dist_base(irq) + GIC_DIST_ENABLE_CLEAR + (gic_irq(irq) / 32) * 4);
 	spin_unlock(&irq_controller_lock);
 
-#ifdef CONFIG_MSM_RPM
+#ifdef CONFIG_MSM_MPM
 	msm_mpm_enable_irq(irq, 0);
 #endif
 }
@@ -126,12 +127,12 @@ static void gic_unmask_irq(unsigned int irq)
 	writel(mask, gic_dist_base(irq) + GIC_DIST_ENABLE_SET + (gic_irq(irq) / 32) * 4);
 	spin_unlock(&irq_controller_lock);
 
-#ifdef CONFIG_MSM_RPM
+#ifdef CONFIG_MSM_MPM
 	msm_mpm_enable_irq(irq, 1);
 #endif
 }
 
-#ifdef CONFIG_MSM_RPM
+#ifdef CONFIG_MSM_MPM
 static void gic_disable_irq(unsigned int irq)
 {
 	msm_mpm_enable_irq(irq, 0);
@@ -206,6 +207,7 @@ static int gic_suspend(struct sys_device *sysdev, pm_message_t state)
 		writel(gic_data[gic_nr].wakeup_irqs[i],
 			base + GIC_DIST_ENABLE_SET + i * 4);
 	}
+	mb();
 	return 0;
 }
 
@@ -246,6 +248,7 @@ static int gic_resume(struct sys_device *sysdev)
 		writel(gic_data[gic_nr].enabled_irqs[i],
 			base + GIC_DIST_ENABLE_SET + i * 4);
 	}
+	mb();
 	return 0;
 }
 
@@ -352,7 +355,7 @@ static int gic_set_type(unsigned int irq, unsigned int type)
 	if ((type & IRQ_TYPE_EDGE_RISING) && gicirq > 31)
 		__set_irq_handler_unlocked(irq, handle_edge_irq);
 
-#ifdef CONFIG_MSM_RPM
+#ifdef CONFIG_MSM_MPM
 	msm_mpm_set_irq_type(irq, type);
 #endif
 
@@ -441,7 +444,8 @@ void __init gic_dist_init(unsigned int gic_nr, void __iomem *base,
 	/*
 	 * Setup the Linux IRQ subsystem.
 	 */
-	for (i = irq_start; i < gic_data[gic_nr].irq_offset + max_irq; i++) {
+	for (i = irq_start;
+		i < gic_data[gic_nr].irq_offset + max_irq && i < NR_IRQS; i++) {
 		set_irq_chip(i, &gic_chip);
 		set_irq_chip_data(i, &gic_data[gic_nr]);
 		set_irq_handler(i, handle_level_irq);
@@ -449,6 +453,7 @@ void __init gic_dist_init(unsigned int gic_nr, void __iomem *base,
 	}
 
 	writel(1, base + GIC_DIST_CTRL);
+	mb();
 }
 
 void __cpuinit gic_cpu_init(unsigned int gic_nr, void __iomem *base)
@@ -460,6 +465,7 @@ void __cpuinit gic_cpu_init(unsigned int gic_nr, void __iomem *base)
 
 	writel(0xf0, base + GIC_CPU_PRIMASK);
 	writel(1, base + GIC_CPU_CTRL);
+	mb();
 }
 
 #ifdef CONFIG_SMP
@@ -469,6 +475,7 @@ void gic_raise_softirq(const struct cpumask *mask, unsigned int irq)
 
 	/* this always happens on GIC0 */
 	writel(map << 16 | irq, gic_data[0].dist_base + GIC_DIST_SOFTINT);
+	mb();
 }
 #endif
 

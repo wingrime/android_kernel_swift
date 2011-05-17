@@ -33,7 +33,7 @@
 
 
 /* Buffer with meta*/
-#define PCM_BUF_SIZE		(32768 + sizeof(struct meta_in))
+#define PCM_BUF_SIZE		(4096 + sizeof(struct meta_in))
 
 /* Maximum 5 frames in buffer with meta */
 #define FRAME_SIZE		(1 + ((1536+sizeof(struct meta_out_dsp)) * 5))
@@ -71,7 +71,7 @@ void q6asm_aac_in_cb(uint32_t opcode, uint32_t token,
 			__func__, audio->ac->session);
 		break;
 	default:
-		pr_err("%s:session id %d: Ignore opcode[0x%x]\n", __func__,
+		pr_debug("%s:session id %d: Ignore opcode[0x%x]\n", __func__,
 			audio->ac->session, opcode);
 		break;
 	}

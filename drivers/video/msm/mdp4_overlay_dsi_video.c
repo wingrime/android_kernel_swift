@@ -1,4 +1,4 @@
-/* Copyright (c) 2010, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2010-2011, Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -41,6 +41,13 @@ static int first_pixel_start_x;
 static int first_pixel_start_y;
 
 static struct mdp4_overlay_pipe *dsi_pipe;
+
+static cmd_fxn_t display_on;
+
+void mdp4_dsi_video_fxn_register(cmd_fxn_t fxn)
+{
+	display_on = fxn;
+}
 
 int mdp4_dsi_video_on(struct platform_device *pdev)
 {
@@ -162,17 +169,19 @@ int mdp4_dsi_video_on(struct platform_device *pdev)
 	dsi_height = mfd->panel_info.yres;
 	dsi_bpp = mfd->panel_info.bpp;
 
-	hsync_period = h_back_porch + dsi_width + h_front_porch;
+	hsync_period = hsync_pulse_width + h_back_porch + dsi_width
+				+ h_front_porch;
 	hsync_ctrl = (hsync_period << 16) | hsync_pulse_width;
-	hsync_start_x = h_back_porch;
+	hsync_start_x = h_back_porch + hsync_pulse_width;
 	hsync_end_x = hsync_period - h_front_porch - 1;
 	display_hctl = (hsync_end_x << 16) | hsync_start_x;
 
 	vsync_period =
-	    (v_back_porch + dsi_height + v_front_porch) * hsync_period;
-	display_v_start = v_back_porch * hsync_period + dsi_hsync_skew;
+	    (vsync_pulse_width + v_back_porch + dsi_height + v_front_porch);
+	display_v_start = ((vsync_pulse_width + v_back_porch) * hsync_period)
+				+ dsi_hsync_skew;
 	display_v_end =
-	    vsync_period - (v_front_porch * hsync_period) + dsi_hsync_skew - 1;
+	  ((vsync_period - v_front_porch) * hsync_period) + dsi_hsync_skew - 1;
 
 	if (dsi_width != var->xres) {
 		active_h_start = hsync_start_x + first_pixel_start_x;
@@ -202,7 +211,7 @@ int mdp4_dsi_video_on(struct platform_device *pdev)
 	    (data_en_polarity << 2) | (vsync_polarity << 1) | (hsync_polarity);
 
 	MDP_OUTP(MDP_BASE + DSI_VIDEO_BASE + 0x4, hsync_ctrl);
-	MDP_OUTP(MDP_BASE + DSI_VIDEO_BASE + 0x8, vsync_period);
+	MDP_OUTP(MDP_BASE + DSI_VIDEO_BASE + 0x8, vsync_period * hsync_period);
 	MDP_OUTP(MDP_BASE + DSI_VIDEO_BASE + 0xc,
 				vsync_pulse_width * hsync_period);
 	MDP_OUTP(MDP_BASE + DSI_VIDEO_BASE + 0x10, display_hctl);
@@ -216,12 +225,18 @@ int mdp4_dsi_video_on(struct platform_device *pdev)
 	MDP_OUTP(MDP_BASE + DSI_VIDEO_BASE + 0x30, dsi_hsync_skew);
 	MDP_OUTP(MDP_BASE + DSI_VIDEO_BASE + 0x38, ctrl_polarity);
 	mdp4_overlay_reg_flush(pipe, 1);
+	mdp_histogram_ctrl(TRUE);
 
 	ret = panel_next_on(pdev);
 	if (ret == 0) {
 		/* enable DSI block */
 		MDP_OUTP(MDP_BASE + DSI_VIDEO_BASE, 1);
 		mdp_pipe_ctrl(MDP_OVERLAY0_BLOCK, MDP_BLOCK_POWER_ON, FALSE);
+
+		if (display_on != NULL) {
+			msleep(50);
+			display_on(pdev);
+		}
 	}
 	/* MDP cmd block disable */
 	mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_OFF, FALSE);
@@ -239,7 +254,7 @@ int mdp4_dsi_video_off(struct platform_device *pdev)
 	/* MDP cmd block disable */
 	mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_OFF, FALSE);
 	mdp_pipe_ctrl(MDP_OVERLAY0_BLOCK, MDP_BLOCK_POWER_OFF, FALSE);
-
+	mdp_histogram_ctrl(FALSE);
 	ret = panel_next_off(pdev);
 
 #ifdef MIPI_DSI_RGB_UNSTAGE

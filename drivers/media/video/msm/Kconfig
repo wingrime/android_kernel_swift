@@ -115,6 +115,13 @@ config S5K3E2FX
 	---help---
 	  Samsung 5M with Autofocus
 
+config QS_S5K4E1
+	bool "Sensor qs_s5k4e1 (Samsung 5M)"
+	depends on MSM_CAMERA && ARCH_MSM8X60 && !MSM_CAMERA_V4L2
+	default y
+	---help---
+	  Samsung 5M with Autofocus
+
 config VB6801
 	bool "Sensor vb6801"
 	depends on MSM_CAMERA && !ARCH_MSM8X60 && !MSM_CAMERA_V4L2

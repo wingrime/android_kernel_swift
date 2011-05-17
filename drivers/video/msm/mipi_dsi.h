@@ -68,6 +68,21 @@ enum {		/* mipi dsi panel */
 	DSI_CMD_MODE,
 };
 
+enum {
+	ST_DSI_CLK_OFF,
+	ST_DSI_SUSPEND,
+	ST_DSI_RESUME,
+	ST_DSI_PLAYING,
+	ST_DSI_NUM
+};
+
+enum {
+	EV_DSI_UPDATE,
+	EV_DSI_DONE,
+	EV_DSI_TOUT,
+	EV_DSI_NUM
+};
+
 #define DSI_NON_BURST_SYNCH_PULSE	0
 #define DSI_NON_BURST_SYNCH_EVENT	1
 #define DSI_BURST_MODE			2
@@ -115,6 +130,8 @@ struct dsi_clk_desc {
 	uint32 m;
 	uint32 n;
 	uint32 d;
+	uint32 mnd_mode;
+	uint32 pre_div_func;
 };
 
 #define DSI_HOST_HDR_SIZE	4
@@ -130,7 +147,7 @@ struct dsi_clk_desc {
 #define DSI_BUF_SIZE	1024
 #define MIPI_DSI_MRPS	0x04  /* Maximum Return Packet Size */
 
-#define MIPI_DSI_REG_LEN 16 /* 4 x 4 bytes register */
+#define MIPI_DSI_LEN 8 /* 4 x 4 - 6 - 2, bytes dcs header+crc-align  */
 
 struct dsi_buf {
 	uint32 *hdr;	/* dsi host header */
@@ -178,9 +195,6 @@ struct dsi_cmd_desc {
 	char *payload;
 };
 
-
-/* MIPI_DSI_MRPS, Maximum Return Packet Size */
-extern char max_pktsize[2]; /* defined at mipi_dsi.c */
 
 char *mipi_dsi_buf_reserve_hdr(struct dsi_buf *dp, int hlen);
 char *mipi_dsi_buf_init(struct dsi_buf *dp);

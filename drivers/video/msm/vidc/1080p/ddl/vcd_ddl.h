@@ -300,6 +300,7 @@ struct ddl_decoder_data {
 	u32  dynmic_prop_change_req;
 	u32  flush_pending;
 	u32  meta_data_exists;
+	u32  idr_only_decoding;
 };
 union ddl_codec_data{
 	struct ddl_codec_data_hdr  hdr;
@@ -330,7 +331,7 @@ struct ddl_context{
 	void (*interrupt_clr) (void);
 	void (*vidc_decode_seq_start[2])
 		(struct vidc_1080p_dec_seq_start_param *param);
-	void (*vidc_set_divx3_resolution[2])
+	void (*vidc_set_dec_resolution[2])
 		(u32 width, u32 height);
 	void(*vidc_decode_init_buffers[2])
 		(struct vidc_1080p_dec_init_buffers_param *param);

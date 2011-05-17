@@ -41,6 +41,8 @@ extern unsigned long ebi2_register_base;
 #define MSM_NAND_SFLASHC_STATUS       MSM_NAND_REG(0x001C)
 #define MSM_NAND_DEV0_CFG0            MSM_NAND_REG(0x0020)
 #define MSM_NAND_DEV0_CFG1            MSM_NAND_REG(0x0024)
+#define MSM_NAND_DEV0_ECC_CFG	      MSM_NAND_REG(0x0028)
+#define MSM_NAND_DEV1_ECC_CFG	      MSM_NAND_REG(0x002C)
 #define MSM_NAND_DEV1_CFG0            MSM_NAND_REG(0x0030)
 #define MSM_NAND_DEV1_CFG1            MSM_NAND_REG(0x0034)
 #define MSM_NAND_SFLASHC_CMD          MSM_NAND_REG(0x0038)
@@ -79,6 +81,7 @@ extern unsigned long ebi2_register_base;
 #define MSM_NAND_SFLASHC_BURST_CFG    MSM_NAND_REG(0x00E0)
 #define MSM_NAND_ADDR6                MSM_NAND_REG(0x00E4)
 #define MSM_NAND_EBI2_ECC_BUF_CFG     MSM_NAND_REG(0x00F0)
+#define MSM_NAND_HW_INFO	      MSM_NAND_REG(0x00FC)
 #define MSM_NAND_FLASH_BUFFER         MSM_NAND_REG(0x0100)
 
 /* device commands */

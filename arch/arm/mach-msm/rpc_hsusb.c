@@ -1,6 +1,6 @@
 /* linux/arch/arm/mach-msm/rpc_hsusb.c
  *
- * Copyright (c) 2008-2010, Code Aurora Forum. All rights reserved.
+ * Copyright (c) 2008-2011, Code Aurora Forum. All rights reserved.
  *
  * All source code in this file is licensed under the following license except
  * where indicated.
@@ -19,6 +19,7 @@
  */
 
 #include <linux/err.h>
+#include <linux/slab.h>
 #include <mach/rpc_hsusb.h>
 #include <asm/mach-types.h>
 
@@ -307,12 +308,12 @@ EXPORT_SYMBOL(msm_hsusb_send_productID);
 
 int msm_hsusb_send_serial_number(const char *serial_number)
 {
-	int rc = 0, serial_len;
-	struct hsusb_phy_start_req {
+	int rc = 0, serial_len, rlen;
+	struct hsusb_send_sn_req {
 		struct rpc_request_hdr hdr;
 		uint32_t length;
-		char serial_num[20];
-	} req;
+		char sn[0];
+	} *req;
 
 	if (!usb_ep || IS_ERR(usb_ep)) {
 		pr_err("%s: rpc connect failed: rc = %ld\n",
@@ -320,18 +321,29 @@ int msm_hsusb_send_serial_number(const char *serial_number)
 		return -EAGAIN;
 	}
 
+	/*
+	 * USB driver passes null terminated string to us. Modem processor
+	 * expects serial number to be 32 bit aligned.
+	 */
 	serial_len  = strlen(serial_number)+1;
-	strncpy(req.serial_num, serial_number, 20);
-	req.length = cpu_to_be32(serial_len);
+	rlen = sizeof(struct rpc_request_hdr) + sizeof(uint32_t) +
+			((serial_len + 3) & ~3);
+
+	req = kmalloc(rlen, GFP_KERNEL);
+	if (!req)
+		return -ENOMEM;
+
+	req->length = cpu_to_be32(serial_len);
+	strncpy(req->sn , serial_number, serial_len);
 	rc = msm_rpc_call(usb_ep, usb_rpc_ids.update_serial_num,
-				&req, sizeof(req),
-				5 * HZ);
+				req, rlen, 5 * HZ);
 	if (rc < 0)
 		pr_err("%s: rpc call failed! error: %d\n",
 			__func__, rc);
 	else
 		pr_debug("%s: rpc call success\n", __func__);
 
+	kfree(req);
 	return rc;
 }
 EXPORT_SYMBOL(msm_hsusb_send_serial_number);

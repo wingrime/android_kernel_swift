@@ -27,6 +27,8 @@ int smd_open(const char *name, smd_channel_t **ch, void *priv,
 #define SMD_EVENT_DATA 1
 #define SMD_EVENT_OPEN 2
 #define SMD_EVENT_CLOSE 3
+#define SMD_EVENT_STATUS 4
+#define SMD_EVENT_REOPEN_READY 4
 
 int smd_close(smd_channel_t *ch);
 
@@ -109,5 +111,48 @@ void smd_disable_read_intr(smd_channel_t *ch);
 
 /* cleanup smd ports required during modem restart */
 void smd_channel_reset(void);
+
+/* Starts a packet transaction.  The size of the packet may exceed the total
+ * size of the smd ring buffer.
+ *
+ * @ch: channel to write the packet to
+ * @len: total length of the packet
+ *
+ * Returns:
+ *      0 - success
+ *      -ENODEV - invalid smd channel
+ *      -EACCES - non-packet channel specified
+ *      -EINVAL - invalid length
+ *      -EBUSY - transaction already in progress
+ *      -EAGAIN - no enough memory in ring buffer to start transaction
+ *      -EPERM - unable to sucessfully start transaction due to write error
+ */
+int smd_write_start(smd_channel_t *ch, int len);
+
+/* Writes a segment of the packet for a packet transaction.
+ *
+ * @ch: channel to write packet to
+ * @data: buffer of data to write
+ * @len: length of data buffer
+ * @user_buf: (0) - buffer from kernelspace    (1) - buffer from userspace
+ *
+ * Returns:
+ *      number of bytes written
+ *      -ENODEV - invalid smd channel
+ *      -EINVAL - invalid length
+ *      -ENOEXEC - transaction not started
+ */
+int smd_write_segment(smd_channel_t *ch, void *data, int len, int user_buf);
+
+/* Completes a packet transaction.  Do not call from interrupt context.
+ *
+ * @ch: channel to complete transaction on
+ *
+ * Returns:
+ *      0 - success
+ *      -ENODEV - invalid smd channel
+ *      -E2BIG - some ammount of packet is not yet written
+ */
+int smd_write_end(smd_channel_t *ch);
 
 #endif

@@ -85,6 +85,12 @@ struct marimba_fm_platform_data{
 	void (*fm_shutdown)(struct marimba_fm_platform_data *pdata);
 	struct vreg *vreg_s2;
 	struct vreg *vreg_xo_out;
+	/*
+	This is to indicate whether Fm SoC is I2S master/slave
+		false	- FM SoC is I2S slave
+		true	- FM SoC is I2S master
+	*/
+	bool is_fm_soc_i2s_master;
 };
 
 struct marimba_codec_platform_data{

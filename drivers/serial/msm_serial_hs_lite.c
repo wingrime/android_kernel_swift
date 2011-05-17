@@ -428,57 +428,54 @@ static void msm_hsl_set_baud_rate(struct uart_port *port, unsigned int baud)
 {
 	unsigned int baud_code, rxstale, watermark;
 
-	/* Since requested clock rate is 4 times the clock
-	   rate assumed for CSR calculation, the CSR should
-	   programmed with 1/4th the requested baud rate */
 	switch (baud) {
 	case 300:
-		baud_code = UARTDM_CSR_75;
-		rxstale = 1;
-		break;
-	case 600:
-		baud_code = UARTDM_CSR_150;
-		rxstale = 1;
-		break;
-	case 1200:
 		baud_code = UARTDM_CSR_300;
 		rxstale = 1;
 		break;
-	case 2400:
+	case 600:
 		baud_code = UARTDM_CSR_600;
 		rxstale = 1;
 		break;
-	case 4800:
+	case 1200:
 		baud_code = UARTDM_CSR_1200;
 		rxstale = 1;
 		break;
-	case 9600:
+	case 2400:
 		baud_code = UARTDM_CSR_2400;
+		rxstale = 1;
+		break;
+	case 4800:
+		baud_code = UARTDM_CSR_4800;
+		rxstale = 1;
+		break;
+	case 9600:
+		baud_code = UARTDM_CSR_9600;
 		rxstale = 2;
 		break;
 	case 14400:
-		baud_code = UARTDM_CSR_3600;
+		baud_code = UARTDM_CSR_14400;
 		rxstale = 3;
 		break;
 	case 19200:
-		baud_code = UARTDM_CSR_4800;
+		baud_code = UARTDM_CSR_19200;
 		rxstale = 4;
 		break;
 	case 28800:
-		baud_code = UARTDM_CSR_7200;
+		baud_code = UARTDM_CSR_28800;
 		rxstale = 6;
 		break;
 	case 38400:
-		baud_code = UARTDM_CSR_9600;
+		baud_code = UARTDM_CSR_38400;
 		rxstale = 8;
 		break;
 	case 57600:
-		baud_code = UARTDM_CSR_14400;
+		baud_code = UARTDM_CSR_57600;
 		rxstale = 16;
 		break;
 	case 115200:
 	default:
-		baud_code = UARTDM_CSR_28800;
+		baud_code = UARTDM_CSR_115200;
 		rxstale = 31;
 		break;
 	}
@@ -1063,7 +1060,7 @@ static int __init msm_serial_hsl_probe(struct platform_device *pdev)
 	}
 
 	/* Set up the MREG/NREG/DREG/MNDREG */
-	ret = clk_set_rate(msm_hsl_port->clk, 7372800);
+	ret = clk_set_rate(msm_hsl_port->clk, 1843200);
 	if (ret) {
 		printk(KERN_WARNING "Error setting clock rate on UART\n");
 		return ret;

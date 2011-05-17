@@ -364,4 +364,20 @@ config MPP_PMIC8901
           work like GPIO pins when configured as digital input and/or
           output signals.
 
+config GPIO_PM8XXX
+	tristate "Qualcomm PM8xxx GPIO support"
+	depends on MFD_PM8XXX
+	default y if MFD_PM8XXX
+	help
+	  This option enables support for on-chip GPIO found on Qualcomm PM8xxx
+	  PMICs.
+
+config GPIO_PM8XXX_MPP
+	tristate "Support for Qualcomm PM8xxx MPP features"
+	depends on MFD_PM8XXX
+	default y if MFD_PM8XXX
+	help
+	  This is the multi-purpose pin (MPP) driver for Qualcomm PM 8xxx PMIC
+	  chips.
+
 endif

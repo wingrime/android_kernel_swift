@@ -15,68 +15,53 @@
  * 02110-1301, USA.
  */
 
-#include <linux/kernel.h>
-#include <linux/init.h>
-#include <linux/err.h>
-#include <linux/list.h>
-#include <mach/socinfo.h>
 #include "clock.h"
-#include "clock-dummy.h"
 
-int dummy_clk_enable(unsigned id)
+static int dummy_clk_enable(unsigned id)
 {
 	return 0;
 }
 
-void dummy_clk_disable(unsigned id)
+static void dummy_clk_disable(unsigned id)
 {
 }
 
-void dummy_clk_auto_off(unsigned id)
-{
-}
-
-int dummy_clk_reset(unsigned id, enum clk_reset_action action)
+static int dummy_clk_reset(unsigned id, enum clk_reset_action action)
 {
 	return 0;
 }
 
-int dummy_clk_set_rate(unsigned id, unsigned rate)
+static int dummy_clk_set_rate(unsigned id, unsigned rate)
 {
 	return 0;
 }
 
-int dummy_clk_set_min_rate(unsigned id, unsigned rate)
+static int dummy_clk_set_min_rate(unsigned id, unsigned rate)
 {
 	return 0;
 }
 
-int dummy_clk_set_max_rate(unsigned id, unsigned rate)
+static int dummy_clk_set_max_rate(unsigned id, unsigned rate)
 {
 	return 0;
 }
 
-int dummy_clk_set_flags(unsigned id, unsigned flags)
+static int dummy_clk_set_flags(unsigned id, unsigned flags)
 {
 	return 0;
 }
 
-unsigned dummy_clk_get_rate(unsigned id)
+static unsigned dummy_clk_get_rate(unsigned id)
 {
 	return 0;
 }
 
-signed dummy_clk_measure_rate(unsigned id)
-{
-	return -EPERM;
-}
-
-int dummy_clk_is_enabled(unsigned id)
+static int dummy_clk_is_enabled(unsigned id)
 {
 	return 0;
 }
 
-long dummy_clk_round_rate(unsigned id, unsigned rate)
+static long dummy_clk_round_rate(unsigned id, unsigned rate)
 {
 	return rate;
 }
@@ -84,17 +69,17 @@ long dummy_clk_round_rate(unsigned id, unsigned rate)
 struct clk_ops clk_ops_dummy = {
 	.enable = dummy_clk_enable,
 	.disable = dummy_clk_disable,
-	.auto_off = dummy_clk_auto_off,
 	.reset = dummy_clk_reset,
 	.set_rate = dummy_clk_set_rate,
 	.set_min_rate = dummy_clk_set_min_rate,
 	.set_max_rate = dummy_clk_set_max_rate,
 	.set_flags = dummy_clk_set_flags,
 	.get_rate = dummy_clk_get_rate,
-	.measure_rate = dummy_clk_measure_rate,
 	.is_enabled = dummy_clk_is_enabled,
 	.round_rate = dummy_clk_round_rate,
 };
 
+#if defined(CONFIG_ARCH_MSM8960)
 struct clk_ops clk_ops_remote = {
 };
+#endif

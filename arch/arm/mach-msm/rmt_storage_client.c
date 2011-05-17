@@ -80,6 +80,7 @@ struct rmt_storage_client_info {
 	/* Wakelock to be acquired when processing requests from modem */
 	struct wake_lock wlock;
 	atomic_t wcount;
+	struct workqueue_struct *workq;
 };
 
 struct rmt_storage_kevent {
@@ -93,6 +94,7 @@ struct rmt_storage_srv {
 	int sync_token;
 	struct platform_driver plat_drv;
 	struct msm_rpc_client *rpc_client;
+	struct delayed_work restart_work;
 };
 
 /* Remote storage client on modem */
@@ -117,6 +119,7 @@ static uint32_t rmt_storage_get_sid(const char *path);
 static struct rmt_storage_client_info *rmc;
 
 #ifdef CONFIG_MSM_SDIO_SMEM
+#define MDM_LOCAL_BUF_SZ	0xC0000
 static struct sdio_smem_client *sdio_smem;
 #endif
 
@@ -177,6 +180,16 @@ static struct rmt_storage_client *rmt_storage_get_client(uint32_t handle)
 	struct rmt_storage_client *rs_client;
 	list_for_each_entry(rs_client, &rmc->client_list, list)
 		if (rs_client->handle == handle)
+			return rs_client;
+	return NULL;
+}
+
+static struct rmt_storage_client *
+rmt_storage_get_client_by_path(const char *path)
+{
+	struct rmt_storage_client *rs_client;
+	list_for_each_entry(rs_client, &rmc->client_list, list)
+		if (!strncmp(path, rs_client->path, MAX_PATH_NAME))
 			return rs_client;
 	return NULL;
 }
@@ -288,7 +301,7 @@ static int rmt_storage_event_open_cb(struct rmt_storage_event *event_args,
 	char *path;
 	int ret;
 	struct rmt_storage_srv *srv;
-	struct rmt_storage_client *rs_client;
+	struct rmt_storage_client *rs_client = NULL;
 #ifdef CONFIG_MSM_RMT_STORAGE_CLIENT_STATS
 	struct rmt_storage_stats *stats;
 #endif
@@ -302,11 +315,6 @@ static int rmt_storage_event_open_cb(struct rmt_storage_event *event_args,
 		return -1;
 
 	pr_info("%s: open callback received\n", __func__);
-	rs_client = kzalloc(sizeof(struct rmt_storage_client), GFP_KERNEL);
-	if (!rs_client) {
-		pr_err("%s: Error allocating rmt storage client\n", __func__);
-		return -ENOMEM;
-	}
 
 	ret = xdr_recv_bytes(xdr, (void **)&path, &len);
 	if (ret || !path) {
@@ -315,9 +323,24 @@ static int rmt_storage_event_open_cb(struct rmt_storage_event *event_args,
 			ret = -1;
 		goto free_rs_client;
 	}
-	memcpy(event_args->path, path, len);
-	pr_info("open partition %s\n", event_args->path);
 
+	rs_client = rmt_storage_get_client_by_path(path);
+	if (rs_client) {
+		pr_debug("%s: Handle %d found for %s\n",
+			__func__, rs_client->handle, path);
+		event_args->id = RMT_STORAGE_NOOP;
+		cid = rs_client->handle;
+		goto end_open_cb;
+	}
+
+	rs_client = kzalloc(sizeof(struct rmt_storage_client), GFP_KERNEL);
+	if (!rs_client) {
+		pr_err("%s: Error allocating rmt storage client\n", __func__);
+		ret = -ENOMEM;
+		goto free_path;
+	}
+
+	memcpy(event_args->path, path, len);
 	rs_client->sid = rmt_storage_get_sid(event_args->path);
 	if (!rs_client->sid) {
 		pr_err("%s: No storage id found for %s\n", __func__,
@@ -327,13 +350,14 @@ static int rmt_storage_event_open_cb(struct rmt_storage_event *event_args,
 	}
 	strncpy(rs_client->path, event_args->path, MAX_PATH_NAME);
 
-	cid = find_first_zero_bit(&rmc->cids, sizeof(rmc->cids));
+	cid = find_first_zero_bit(&rmc->cids, sizeof(rmc->cids) * 8);
 	if (cid > MAX_NUM_CLIENTS) {
 		pr_err("%s: Max clients are reached\n", __func__);
 		cid = 0;
 		return cid;
 	}
 	__set_bit(cid, &rmc->cids);
+	pr_info("open partition %s handle=%d\n", event_args->path, cid);
 
 #ifdef CONFIG_MSM_RMT_STORAGE_CLIENT_STATS
 	stats = &client_stats[cid - 1];
@@ -354,6 +378,7 @@ static int rmt_storage_event_open_cb(struct rmt_storage_event *event_args,
 	list_add_tail(&rs_client->list, &rmc->client_list);
 	spin_unlock(&rmc->lock);
 
+end_open_cb:
 	kfree(path);
 	return cid;
 
@@ -727,9 +752,10 @@ static int rmt_storage_event_alloc_rmt_buf_cb(
 {
 	struct rmt_storage_client *rs_client;
 	struct rmt_shrd_mem_param *shrd_mem;
-	uint32_t event_type, handle, size, start, vstart;
+	uint32_t event_type, handle, size;
+#ifdef CONFIG_MSM_SDIO_SMEM
 	int ret;
-
+#endif
 	xdr_recv_uint32(xdr, &event_type);
 	if (event_type != RMT_STORAGE_EVNT_ALLOC_RMT_BUF)
 		return -EINVAL;
@@ -754,34 +780,30 @@ static int rmt_storage_event_alloc_rmt_buf_cb(
 		return -EINVAL;
 	}
 
-	/* Check if another client has already allocated memory
-	   for this sid */
 	shrd_mem = rmt_storage_get_shrd_mem(rs_client->sid);
-	if (shrd_mem)
-		return (int) shrd_mem->start;
-
-	/* Allocate memory from heap for MDM only */
-	if (rs_client->srv->prog != MDM_RMT_STORAGE_APIPROG)
-		return -EINVAL;
-
-	vstart = (uint32_t)kzalloc(size, GFP_KERNEL);
-	if (!vstart)
+	if (!shrd_mem) {
+		pr_err("%s: No shared memory entry found\n",
+		       __func__);
 		return -ENOMEM;
-
-	start = __pa(vstart);
-	ret = rmt_storage_add_shrd_mem(rs_client->sid, start, size,
-				       NULL, NULL, rs_client->srv);
-	if (ret < 0)
-		return ret;
-	pr_debug("%s: Allocated %d bytes at phys_addr=0x%x for handle=%d\n",
-		__func__, size, start, rs_client->handle);
+	}
+	if (shrd_mem->size < size) {
+		pr_err("%s: Size mismatch for handle=%d\n",
+		       __func__, rs_client->handle);
+		return -EINVAL;
+	}
+	pr_debug("%s: %d bytes at phys=0x%x for handle=%d found\n",
+		__func__, size, shrd_mem->start, rs_client->handle);
 
 #ifdef CONFIG_MSM_SDIO_SMEM
-	ret = platform_driver_register(&sdio_smem_drv);
-	if (ret)
-		pr_err("%s: Unable to register sdio smem client\n", __func__);
+	if (rs_client->srv->prog == MDM_RMT_STORAGE_APIPROG) {
+		ret = platform_driver_register(&sdio_smem_drv);
+		if (ret)
+			pr_err("%s: Unable to register sdio smem client\n",
+			       __func__);
+	}
 #endif
-	return (int)start;
+	event_args->id = RMT_STORAGE_NOOP;
+	return (int)shrd_mem->start;
 }
 
 static int handle_rmt_storage_call(struct msm_rpc_client *client,
@@ -851,7 +873,7 @@ static int handle_rmt_storage_call(struct msm_rpc_client *client,
 		goto out;
 	}
 
-	if (req->procedure != RMT_STORAGE_ALLOC_RMT_BUF_CB_TYPE_PROC) {
+	if (kevent->event.id != RMT_STORAGE_NOOP) {
 		put_event(rmc, kevent);
 		atomic_inc(&rmc->total_events);
 		wake_up(&rmc->event_q);
@@ -1366,6 +1388,114 @@ static struct attribute_group dev_attr_grp = {
 	.attrs = dev_attrs,
 };
 
+static void handle_restart_teardown(struct msm_rpc_client *client)
+{
+	struct rmt_storage_srv *srv;
+
+	srv = rmt_storage_get_srv(client->prog);
+	if (!srv)
+		return;
+	pr_debug("%s: Modem restart for 0x%08x\n", __func__, srv->prog);
+	cancel_delayed_work_sync(&srv->restart_work);
+}
+
+#define RESTART_WORK_DELAY_MS	1000
+
+static void handle_restart_setup(struct msm_rpc_client *client)
+{
+	struct rmt_storage_srv *srv;
+
+	srv = rmt_storage_get_srv(client->prog);
+	if (!srv)
+		return;
+	pr_debug("%s: Scheduling restart for 0x%08x\n", __func__, srv->prog);
+	queue_delayed_work(rmc->workq, &srv->restart_work,
+			msecs_to_jiffies(RESTART_WORK_DELAY_MS));
+}
+
+static int rmt_storage_reg_callbacks(struct msm_rpc_client *client)
+{
+	int ret;
+
+	ret = rmt_storage_reg_cb(client,
+				 RMT_STORAGE_REGISTER_OPEN_PROC,
+				 RMT_STORAGE_EVNT_OPEN,
+				 rmt_storage_event_open_cb);
+	if (ret)
+		return ret;
+	ret = rmt_storage_reg_cb(client,
+				 RMT_STORAGE_REGISTER_CB_PROC,
+				 RMT_STORAGE_EVNT_CLOSE,
+				 rmt_storage_event_close_cb);
+	if (ret)
+		return ret;
+	ret = rmt_storage_reg_cb(client,
+				 RMT_STORAGE_REGISTER_CB_PROC,
+				 RMT_STORAGE_EVNT_WRITE_BLOCK,
+				 rmt_storage_event_write_block_cb);
+	if (ret)
+		return ret;
+	ret = rmt_storage_reg_cb(client,
+				 RMT_STORAGE_REGISTER_CB_PROC,
+				 RMT_STORAGE_EVNT_GET_DEV_ERROR,
+				 rmt_storage_event_get_err_cb);
+	if (ret)
+		return ret;
+	ret = rmt_storage_reg_cb(client,
+				 RMT_STORAGE_REGISTER_WRITE_IOVEC_PROC,
+				 RMT_STORAGE_EVNT_WRITE_IOVEC,
+				 rmt_storage_event_write_iovec_cb);
+	if (ret)
+		return ret;
+	ret = rmt_storage_reg_cb(client,
+				 RMT_STORAGE_REGISTER_READ_IOVEC_PROC,
+				 RMT_STORAGE_EVNT_READ_IOVEC,
+				 rmt_storage_event_read_iovec_cb);
+	if (ret)
+		return ret;
+	ret = rmt_storage_reg_cb(client,
+				 RMT_STORAGE_REGISTER_CB_PROC,
+				 RMT_STORAGE_EVNT_SEND_USER_DATA,
+				 rmt_storage_event_user_data_cb);
+	if (ret)
+		return ret;
+	ret = rmt_storage_reg_cb(client,
+				 RMT_STORAGE_REGISTER_ALLOC_RMT_BUF_PROC,
+				 RMT_STORAGE_EVNT_ALLOC_RMT_BUF,
+				 rmt_storage_event_alloc_rmt_buf_cb);
+	if (ret)
+		pr_info("%s: Unable (%d) registering aloc_rmt_buf\n",
+			__func__, ret);
+
+	pr_debug("%s: Callbacks (re)registered for 0x%08x\n\n", __func__,
+		 client->prog);
+	return 0;
+}
+
+static void rmt_storage_restart_work(struct work_struct *work)
+{
+	struct rmt_storage_srv *srv;
+	int ret;
+
+	srv = container_of((struct delayed_work *)work,
+			   struct rmt_storage_srv, restart_work);
+	if (!rmt_storage_get_srv(srv->prog)) {
+		pr_err("%s: Invalid server\n", __func__);
+		return;
+	}
+
+	ret = rmt_storage_reg_callbacks(srv->rpc_client);
+	if (!ret)
+		return;
+
+	pr_err("%s: Error (%d) re-registering callbacks for0x%08x\n",
+	       __func__, ret, srv->prog);
+
+	if (!msm_rpc_client_in_reset(srv->rpc_client))
+		queue_delayed_work(rmc->workq, &srv->restart_work,
+				msecs_to_jiffies(RESTART_WORK_DELAY_MS));
+}
+
 static int rmt_storage_probe(struct platform_device *pdev)
 {
 	struct rpcsvr_platform_device *dev;
@@ -1382,6 +1512,8 @@ static int rmt_storage_probe(struct platform_device *pdev)
 	rmt_storage_init_ramfs(srv);
 	rmt_storage_get_ramfs(srv);
 
+	INIT_DELAYED_WORK(&srv->restart_work, rmt_storage_restart_work);
+
 	/* Client Registration */
 	srv->rpc_client = msm_rpc_register_client2("rmt_storage",
 						   dev->prog, dev->vers, 1,
@@ -1393,75 +1525,19 @@ static int rmt_storage_probe(struct platform_device *pdev)
 		return ret;
 	}
 
+	ret = msm_rpc_register_reset_callbacks(srv->rpc_client,
+		handle_restart_teardown,
+		handle_restart_setup);
+	if (ret)
+		goto unregister_client;
+
 	pr_info("%s: Remote storage RPC client (0x%x)initialized\n",
 		__func__, dev->prog);
 
-	/* Register a callback for each event */
-	ret = rmt_storage_reg_cb(srv->rpc_client,
-				 RMT_STORAGE_REGISTER_OPEN_PROC,
-				 RMT_STORAGE_EVNT_OPEN,
-				 rmt_storage_event_open_cb);
-
+	/* register server callbacks */
+	ret = rmt_storage_reg_callbacks(srv->rpc_client);
 	if (ret)
 		goto unregister_client;
-
-	ret = rmt_storage_reg_cb(srv->rpc_client,
-				 RMT_STORAGE_REGISTER_CB_PROC,
-				 RMT_STORAGE_EVNT_CLOSE,
-				 rmt_storage_event_close_cb);
-
-	if (ret)
-		goto unregister_client;
-
-	ret = rmt_storage_reg_cb(srv->rpc_client,
-				 RMT_STORAGE_REGISTER_CB_PROC,
-				 RMT_STORAGE_EVNT_WRITE_BLOCK,
-				 rmt_storage_event_write_block_cb);
-
-	if (ret)
-		goto unregister_client;
-
-	ret = rmt_storage_reg_cb(srv->rpc_client,
-				 RMT_STORAGE_REGISTER_CB_PROC,
-				 RMT_STORAGE_EVNT_GET_DEV_ERROR,
-				 rmt_storage_event_get_err_cb);
-
-	if (ret)
-		goto unregister_client;
-
-	ret = rmt_storage_reg_cb(srv->rpc_client,
-				 RMT_STORAGE_REGISTER_WRITE_IOVEC_PROC,
-				 RMT_STORAGE_EVNT_WRITE_IOVEC,
-				 rmt_storage_event_write_iovec_cb);
-
-	if (ret)
-		goto unregister_client;
-
-	ret = rmt_storage_reg_cb(srv->rpc_client,
-				 RMT_STORAGE_REGISTER_READ_IOVEC_PROC,
-				 RMT_STORAGE_EVNT_READ_IOVEC,
-				 rmt_storage_event_read_iovec_cb);
-
-	if (ret)
-		pr_err("%s: unable to register read iovec callback %d\n",
-			__func__, ret);
-
-	ret = rmt_storage_reg_cb(srv->rpc_client,
-				 RMT_STORAGE_REGISTER_CB_PROC,
-				 RMT_STORAGE_EVNT_SEND_USER_DATA,
-				 rmt_storage_event_user_data_cb);
-
-	if (ret)
-		goto unregister_client;
-
-	ret = rmt_storage_reg_cb(srv->rpc_client,
-				 RMT_STORAGE_REGISTER_ALLOC_RMT_BUF_PROC,
-				 RMT_STORAGE_EVNT_ALLOC_RMT_BUF,
-				 rmt_storage_event_alloc_rmt_buf_cb);
-
-	if (ret)
-		pr_info("%s: unable to register alloc rmt buf callback %d\n",
-			__func__, ret);
 
 	/* For targets that poll SMEM, set status to ready */
 	rmt_storage_set_client_status(srv, 1);
@@ -1563,6 +1639,9 @@ static uint32_t rmt_storage_get_sid(const char *path)
 
 static int __init rmt_storage_init(void)
 {
+#ifdef CONFIG_MSM_SDIO_SMEM
+	void *mdm_local_buf;
+#endif
 	int ret = 0;
 
 	rmc = kzalloc(sizeof(struct rmt_storage_client_info), GFP_KERNEL);
@@ -1591,6 +1670,30 @@ static int __init rmt_storage_init(void)
 		goto unreg_mdm_rpc;
 	}
 
+	rmc->workq = create_singlethread_workqueue("rmt_storage");
+	if (!rmc->workq)
+		return -ENOMEM;
+#ifdef CONFIG_MSM_SDIO_SMEM
+	mdm_local_buf = kzalloc(MDM_LOCAL_BUF_SZ, GFP_KERNEL);
+	if (!mdm_local_buf) {
+		pr_err("%s: Unable to allocate shadow mem\n", __func__);
+		ret = -ENOMEM;
+		goto unreg_misc;
+	}
+
+	ret = rmt_storage_add_shrd_mem(RAMFS_MDM_STORAGE_ID,
+				       __pa(mdm_local_buf),
+				       MDM_LOCAL_BUF_SZ,
+				       NULL, NULL, &mdm_srv);
+	if (ret) {
+		pr_err("%s: Unable to add shadow mem entry\n", __func__);
+		goto free_mdm_local_buf;
+	}
+
+	pr_debug("%s: Shadow memory at %p (phys=%lx), %d bytes\n", __func__,
+		 mdm_local_buf, __pa(mdm_local_buf), MDM_LOCAL_BUF_SZ);
+#endif
+
 #ifdef CONFIG_MSM_RMT_STORAGE_CLIENT_STATS
 	stats_dentry = debugfs_create_file("rmt_storage_stats", 0444, 0,
 					NULL, &debug_ops);
@@ -1599,6 +1702,12 @@ static int __init rmt_storage_init(void)
 #endif
 	return 0;
 
+#ifdef CONFIG_MSM_SDIO_SMEM
+free_mdm_local_buf:
+	kfree(mdm_local_buf);
+unreg_misc:
+	misc_deregister(&rmt_storage_device);
+#endif
 unreg_mdm_rpc:
 	platform_driver_unregister(&mdm_srv.plat_drv);
 unreg_msm_rpc:

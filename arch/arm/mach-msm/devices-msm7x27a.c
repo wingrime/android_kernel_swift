@@ -24,10 +24,12 @@
 #include <mach/dma.h>
 #include <asm/mach/flash.h>
 #include <asm/mach/mmc.h>
+#include <mach/usbdiag.h>
+#include <mach/usb_gadget_fserial.h>
 
 #include "clock.h"
-#include "clock-dummy.h"
 #include "clock-voter.h"
+#include "clock-pcom.h"
 #include "devices.h"
 #include "devices-msm7x2xa.h"
 
@@ -97,6 +99,117 @@ struct platform_device msm_gsbi1_qup_i2c_device = {
 	.resource	= gsbi1_qup_i2c_resources,
 };
 
+#define MSM_HSUSB_PHYS        0xA0800000
+static struct resource resources_hsusb_otg[] = {
+	{
+		.start	= MSM_HSUSB_PHYS,
+		.end	= MSM_HSUSB_PHYS + SZ_1K - 1,
+		.flags	= IORESOURCE_MEM,
+	},
+	{
+		.start	= INT_USB_HS,
+		.end	= INT_USB_HS,
+		.flags	= IORESOURCE_IRQ,
+	},
+};
+
+static u64 dma_mask = 0xffffffffULL;
+struct platform_device msm_device_otg = {
+	.name		= "msm_otg",
+	.id		= -1,
+	.num_resources	= ARRAY_SIZE(resources_hsusb_otg),
+	.resource	= resources_hsusb_otg,
+	.dev		= {
+		.dma_mask		= &dma_mask,
+		.coherent_dma_mask	= 0xffffffffULL,
+	},
+};
+
+static struct resource resources_gadget_peripheral[] = {
+	{
+		.start	= MSM_HSUSB_PHYS,
+		.end	= MSM_HSUSB_PHYS + SZ_1K - 1,
+		.flags	= IORESOURCE_MEM,
+	},
+	{
+		.start	= INT_USB_HS,
+		.end	= INT_USB_HS,
+		.flags	= IORESOURCE_IRQ,
+	},
+};
+
+struct platform_device msm_device_gadget_peripheral = {
+	.name		= "msm_hsusb",
+	.id		= -1,
+	.num_resources	= ARRAY_SIZE(resources_gadget_peripheral),
+	.resource	= resources_gadget_peripheral,
+	.dev		= {
+		.dma_mask		= &dma_mask,
+		.coherent_dma_mask	= 0xffffffffULL,
+	},
+};
+
+static struct resource resources_hsusb_host[] = {
+	{
+		.start	= MSM_HSUSB_PHYS,
+		.end	= MSM_HSUSB_PHYS + SZ_1K - 1,
+		.flags	= IORESOURCE_MEM,
+	},
+	{
+		.start	= INT_USB_HS,
+		.end	= INT_USB_HS,
+		.flags	= IORESOURCE_IRQ,
+	},
+};
+
+struct platform_device msm_device_hsusb_host = {
+	.name		= "msm_hsusb_host",
+	.id		= 0,
+	.num_resources	= ARRAY_SIZE(resources_hsusb_host),
+	.resource	= resources_hsusb_host,
+	.dev		= {
+		.dma_mask		= &dma_mask,
+		.coherent_dma_mask	= 0xffffffffULL,
+	},
+};
+
+static struct platform_device *msm_host_devices[] = {
+	&msm_device_hsusb_host,
+};
+
+int msm_add_host(unsigned int host, struct msm_usb_host_platform_data *plat)
+{
+	struct platform_device	*pdev;
+
+	pdev = msm_host_devices[host];
+	if (!pdev)
+		return -ENODEV;
+	pdev->dev.platform_data = plat;
+	return platform_device_register(pdev);
+}
+
+struct usb_diag_platform_data usb_diag_pdata = {
+	.ch_name = DIAG_LEGACY,
+};
+
+struct platform_device usb_diag_device = {
+	.name	= "usb_diag",
+	.id	= -1,
+	.dev	= {
+		.platform_data = &usb_diag_pdata,
+	},
+};
+static struct usb_gadget_fserial_platform_data fserial_pdata = {
+	.no_ports	= 2,
+};
+
+struct platform_device usb_gadget_fserial_device = {
+	.name	= "usb_fserial",
+	.id	= -1,
+	.dev	= {
+		.platform_data = &fserial_pdata,
+	},
+};
 static struct resource msm_dmov_resource[] = {
 	{
 		.start	= INT_ADM_AARM,
@@ -110,6 +223,11 @@ struct platform_device msm_device_dmov = {
 	.id		= -1,
 	.resource	= msm_dmov_resource,
 	.num_resources	= ARRAY_SIZE(msm_dmov_resource),
+};
+
+struct platform_device msm_device_smd = {
+	.name	= "msm_smd",
+	.id	= -1,
 };
 
 static struct resource resources_uart1[] = {
@@ -339,57 +457,66 @@ int __init msm_add_sdcc(unsigned int controller, struct mmc_platform_data *plat)
 }
 
 struct clk_lookup msm_clocks_7x27a[] = {
-	CLK_DUMMY("adm_clk",	ADM_CLK,	NULL, 0),
-	CLK_DUMMY("adsp_clk",	ADSP_CLK,	NULL, 0),
-	CLK_DUMMY("ebi1_clk",	EBI1_CLK,	NULL, CLK_MIN),
-	CLK_DUMMY("ebi2_clk",	EBI2_CLK,	NULL, 0),
-	CLK_DUMMY("ecodec_clk",	ECODEC_CLK,	NULL, 0),
-	CLK_DUMMY("gp_clk",	GP_CLK,		NULL, 0),
-	CLK_DUMMY("grp_clk",	GRP_3D_CLK,	NULL, 0),
-	CLK_DUMMY("grp_pclk",	GRP_3D_P_CLK,	NULL, 0),
-	CLK_DUMMY("i2c_clk",	I2C_CLK,	"msm_i2c.0", 0),
-	CLK_DUMMY("icodec_rx_clk",	ICODEC_RX_CLK,	NULL, 0),
-	CLK_DUMMY("icodec_tx_clk",	ICODEC_TX_CLK,	NULL, 0),
-	CLK_DUMMY("imem_clk",	IMEM_CLK,	NULL, OFF),
-	CLK_DUMMY("mdc_clk",	MDC_CLK,	NULL, 0),
-	CLK_DUMMY("mddi_clk",	PMDH_CLK,	NULL, OFF | CLK_MINMAX),
-	CLK_DUMMY("mdp_clk",	MDP_CLK,	NULL, OFF),
-	CLK_DUMMY("mdp_lcdc_pclk_clk", MDP_LCDC_PCLK_CLK, NULL, 0),
-	CLK_DUMMY("mdp_lcdc_pad_pclk_clk", MDP_LCDC_PAD_PCLK_CLK, NULL, 0),
-	CLK_DUMMY("mdp_vsync_clk",	MDP_VSYNC_CLK,	NULL, OFF),
-	CLK_DUMMY("pbus_clk",	PBUS_CLK,	NULL, CLK_MIN),
-	CLK_DUMMY("pcm_clk",	PCM_CLK,	NULL, 0),
-	CLK_DUMMY("sdac_clk",	SDAC_CLK,	NULL, OFF),
-	CLK_DUMMY("sdc_clk",	SDC1_CLK,	"msm_sdcc.1", OFF),
-	CLK_DUMMY("sdc_pclk",	SDC1_P_CLK,	"msm_sdcc.1", OFF),
-	CLK_DUMMY("sdc_clk",	SDC2_CLK,	"msm_sdcc.2", OFF),
-	CLK_DUMMY("sdc_pclk",	SDC2_P_CLK,	"msm_sdcc.2", OFF),
-	CLK_DUMMY("sdc_clk",	SDC3_CLK,	"msm_sdcc.3", OFF),
-	CLK_DUMMY("sdc_pclk",	SDC3_P_CLK,	"msm_sdcc.3", OFF),
-	CLK_DUMMY("sdc_clk",	SDC4_CLK,	"msm_sdcc.4", OFF),
-	CLK_DUMMY("sdc_pclk",	SDC4_P_CLK,	"msm_sdcc.4", OFF),
-	CLK_DUMMY("tsif_clk",	TSIF_CLK,	NULL, 0),
-	CLK_DUMMY("tsif_ref_clk", TSIF_REF_CLK,	NULL, 0),
-	CLK_DUMMY("tsif_pclk",	TSIF_P_CLK,	NULL, 0),
-	CLK_DUMMY("uart_clk",	UART1_CLK,	"msm_serial.0", OFF),
-	CLK_DUMMY("uart_clk",	UART2_CLK,	"msm_serial.1", 0),
-	CLK_DUMMY("uartdm_clk",	UART1DM_CLK,	"msm_serial_hs.0", OFF),
-	CLK_DUMMY("uartdm_clk",	UART2DM_CLK,	"msm_serial_hs.1", 0),
-	CLK_DUMMY("usb_hs_clk",	USB_HS_CLK,	NULL, OFF),
-	CLK_DUMMY("usb_hs_pclk",	USB_HS_P_CLK,	NULL, OFF),
-	CLK_DUMMY("usb_otg_clk",	USB_OTG_CLK,	NULL, 0),
-	CLK_DUMMY("usb_phy_clk",	USB_PHY_CLK,	NULL, 0),
-	CLK_DUMMY("vdc_clk",	VDC_CLK,	NULL, OFF | CLK_MIN),
-	CLK_DUMMY("vfe_clk",	VFE_CLK,	NULL, OFF),
-	CLK_DUMMY("vfe_mdc_clk",	VFE_MDC_CLK,	NULL, OFF),
-	CLK_DUMMY("gsbi_qup_clk", GSBI1_QUP_CLK,	"qup_i2c.0", OFF),
-	CLK_DUMMY("gsbi_qup_clk", GSBI2_QUP_CLK,	"qup_i2c.1", OFF),
-	CLK_DUMMY("gsbi_qup_pclk", GSBI1_QUP_P_CLK,	"qup_i2c.0", OFF),
-	CLK_DUMMY("gsbi_qup_pclk", GSBI2_QUP_P_CLK,	"qup_i2c.1", OFF),
-	CLK_DUMMY("dsi_clk",	DSI_CLK,		NULL, OFF),
-	CLK_DUMMY("dsi_esc_clk",	DSI_ESC_CLK,		NULL, OFF),
-	CLK_DUMMY("dsi_pixel_clk", DSI_PIXEL_CLK,	NULL, OFF),
-	CLK_DUMMY("dsi_byte_clk",  DSI_BYTE_CLK,		NULL, OFF),
+	CLK_PCOM("adm_clk",	ADM_CLK,	NULL, 0),
+	CLK_PCOM("adsp_clk",	ADSP_CLK,	NULL, 0),
+	CLK_PCOM("csi_clk",		CSI0_CLK,	NULL, 0),
+	CLK_PCOM("csi_pclk",		CSI0_P_CLK,	NULL, 0),
+	CLK_PCOM("csi_vfe_clk",	CSI0_VFE_CLK,	NULL, 0),
+	CLK_PCOM("csi_clk",		CSI1_CLK,	NULL, 0),
+	CLK_PCOM("csi_pclk",		CSI1_P_CLK,	NULL, 0),
+	CLK_PCOM("csi_vfe_clk",	CSI1_VFE_CLK,	NULL, 0),
+	CLK_PCOM("dsi_byte_clk",	DSI_BYTE_CLK,	NULL, OFF),
+	CLK_PCOM("dsi_clk",		DSI_CLK,	NULL, OFF),
+	CLK_PCOM("dsi_esc_clk",	DSI_ESC_CLK,	NULL, OFF),
+	CLK_PCOM("dsi_pixel_clk",	DSI_PIXEL_CLK,	NULL, OFF),
+	CLK_PCOM("ebi1_clk",	EBI1_CLK,	NULL, CLK_MIN),
+	CLK_PCOM("ebi2_clk",	EBI2_CLK,	NULL, 0),
+	CLK_PCOM("ecodec_clk",	ECODEC_CLK,	NULL, 0),
+	CLK_PCOM("gp_clk",	GP_CLK,		NULL, 0),
+	CLK_PCOM("grp_clk",	GRP_3D_CLK,	NULL, 0),
+	CLK_PCOM("grp_pclk",	GRP_3D_P_CLK,	NULL, 0),
+	CLK_PCOM("gsbi_qup_clk", GSBI1_QUP_CLK,	"qup_i2c.0", OFF),
+	CLK_PCOM("gsbi_qup_clk", GSBI2_QUP_CLK,	"qup_i2c.1", OFF),
+	CLK_PCOM("gsbi_qup_pclk", GSBI1_QUP_P_CLK,	"qup_i2c.0", OFF),
+	CLK_PCOM("gsbi_qup_pclk", GSBI2_QUP_P_CLK,	"qup_i2c.1", OFF),
+	CLK_PCOM("hdmi_clk",	HDMI_CLK,	NULL, 0),
+	CLK_PCOM("i2c_clk",	I2C_CLK,	"msm_i2c.0", 0),
+	CLK_PCOM("icodec_rx_clk",	ICODEC_RX_CLK,	NULL, 0),
+	CLK_PCOM("icodec_tx_clk",	ICODEC_TX_CLK,	NULL, 0),
+	CLK_PCOM("imem_clk",	IMEM_CLK,	NULL, OFF),
+	CLK_PCOM("mdc_clk",	MDC_CLK,	NULL, 0),
+	CLK_PCOM("mddi_clk",	PMDH_CLK,	NULL, OFF | CLK_MINMAX),
+	CLK_PCOM("mdp_clk",	MDP_CLK,	NULL, OFF),
+	CLK_PCOM("mdp_lcdc_pclk_clk", MDP_LCDC_PCLK_CLK, NULL, 0),
+	CLK_PCOM("mdp_lcdc_pad_pclk_clk", MDP_LCDC_PAD_PCLK_CLK, NULL, 0),
+	CLK_PCOM("mdp_vsync_clk",	MDP_VSYNC_CLK,	NULL, OFF),
+	CLK_PCOM("pbus_clk",	PBUS_CLK,	NULL, CLK_MIN),
+	CLK_PCOM("pcm_clk",	PCM_CLK,	NULL, 0),
+	CLK_PCOM("rotator_clk",	AXI_ROTATOR_CLK,	NULL, OFF),
+	CLK_PCOM("sdac_clk",	SDAC_CLK,	NULL, OFF),
+	CLK_PCOM("sdc_clk",	SDC1_CLK,	"msm_sdcc.1", OFF),
+	CLK_PCOM("sdc_pclk",	SDC1_P_CLK,	"msm_sdcc.1", OFF),
+	CLK_PCOM("sdc_clk",	SDC2_CLK,	"msm_sdcc.2", OFF),
+	CLK_PCOM("sdc_pclk",	SDC2_P_CLK,	"msm_sdcc.2", OFF),
+	CLK_PCOM("sdc_clk",	SDC3_CLK,	"msm_sdcc.3", OFF),
+	CLK_PCOM("sdc_pclk",	SDC3_P_CLK,	"msm_sdcc.3", OFF),
+	CLK_PCOM("sdc_clk",	SDC4_CLK,	"msm_sdcc.4", OFF),
+	CLK_PCOM("sdc_pclk",	SDC4_P_CLK,	"msm_sdcc.4", OFF),
+	CLK_PCOM("tsif_clk",	TSIF_CLK,	NULL, 0),
+	CLK_PCOM("tsif_ref_clk", TSIF_REF_CLK,	NULL, 0),
+	CLK_PCOM("tsif_pclk",	TSIF_P_CLK,	NULL, 0),
+	CLK_PCOM("uart_clk",	UART1_CLK,	"msm_serial.0", OFF),
+	CLK_PCOM("uart_clk",	UART2_CLK,	"msm_serial.1", 0),
+	CLK_PCOM("uartdm_clk",	UART1DM_CLK,	"msm_serial_hs.0", OFF),
+	CLK_PCOM("uartdm_clk",	UART2DM_CLK,	"msm_serial_hs.1", 0),
+	CLK_PCOM("usb_hs_clk",	USB_HS_CLK,	NULL, OFF),
+	CLK_PCOM("usb_hs_pclk",	USB_HS_P_CLK,	NULL, OFF),
+	CLK_PCOM("usb_otg_clk",	USB_OTG_CLK,	NULL, 0),
+	CLK_PCOM("usb_phy_clk",	USB_PHY_CLK,	NULL, 0),
+	CLK_PCOM("vdc_clk",	VDC_CLK,	NULL, OFF | CLK_MIN),
+	CLK_PCOM("vfe_clk",	VFE_CLK,	NULL, OFF),
+	CLK_PCOM("vfe_mdc_clk",	VFE_MDC_CLK,	NULL, OFF),
+	CLK_PCOM("usb_hs_core_clk",	USB_HS_CORE_CLK,	NULL, OFF),
 
 	CLK_VOTER("ebi1_acpu_clk",	EBI_ACPU_CLK,	"ebi1_clk", NULL, 0),
 	CLK_VOTER("ebi1_kgsl_clk",	EBI_KGSL_CLK,	"ebi1_clk", NULL, 0),

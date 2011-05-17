@@ -1148,8 +1148,8 @@ MODULE_LICENSE ("GPL");
 #define	PLATFORM_DRIVER		ixp4xx_ehci_driver
 #endif
 
-#ifdef CONFIG_USB_EHCI_MSM
-#include "ehci-msm.c"
+#ifdef CONFIG_USB_EHCI_MSM_72K
+#include "ehci-msm72k.c"
 #define PLATFORM_DRIVER		ehci_msm_driver
 #endif
 

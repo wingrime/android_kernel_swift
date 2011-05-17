@@ -52,6 +52,7 @@ enum msm_cpu {
 	MSM_CPU_8X55,
 	MSM_CPU_8X60,
 	MSM_CPU_8960,
+	MSM_CPU_7X27A,
 };
 
 enum msm_cpu socinfo_get_msm_cpu(void);
@@ -59,6 +60,7 @@ uint32_t socinfo_get_id(void);
 uint32_t socinfo_get_version(void);
 char *socinfo_get_build_id(void);
 uint32_t socinfo_get_platform_type(void);
+uint32_t socinfo_get_platform_subtype(void);
 uint32_t socinfo_get_platform_version(void);
 int __init socinfo_init(void) __must_check;
 
@@ -84,6 +86,14 @@ static inline int cpu_is_msm7x27(void)
 
 	BUG_ON(cpu == MSM_CPU_UNKNOWN);
 	return cpu == MSM_CPU_7X27;
+}
+
+static inline int cpu_is_msm7x27a(void)
+{
+	enum msm_cpu cpu = socinfo_get_msm_cpu();
+
+	BUG_ON(cpu == MSM_CPU_UNKNOWN);
+	return cpu == MSM_CPU_7X27A;
 }
 
 static inline int cpu_is_msm7x30(void)

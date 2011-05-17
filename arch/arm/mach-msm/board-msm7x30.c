@@ -89,6 +89,7 @@
 #include <mach/qdsp5v2/audio_dev_ctl.h>
 #include <mach/sdio_al.h>
 #include "smd_private.h"
+#include <linux/bma150.h>
 
 #define MSM_PMEM_SF_SIZE	0x1700000
 #ifdef CONFIG_FB_MSM_TRIPLE_BUFFER
@@ -96,7 +97,7 @@
 #else
 #define MSM_FB_SIZE            0x500000
 #endif
-#define MSM_PMEM_ADSP_SIZE      0x1800000
+#define MSM_PMEM_ADSP_SIZE      0x1E00000
 #define MSM_FLUID_PMEM_ADSP_SIZE	0x2800000
 #define PMEM_KERNEL_EBI1_SIZE   0x600000
 #define MSM_PMEM_AUDIO_SIZE     0x200000
@@ -108,7 +109,7 @@
 #define PMIC_GPIO_HDMI_5V_EN_V3 32  /* PMIC GPIO for V3 H/W */
 #define PMIC_GPIO_HDMI_5V_EN_V2 39 /* PMIC GPIO for V2 H/W */
 
-
+#define ADV7520_I2C_ADDR	0x39
 
 #define FPGA_SDCC_STATUS       0x8E0001A8
 
@@ -125,6 +126,8 @@
 #define PMIC_GPIO_HAP_ENABLE   16  /* PMIC GPIO Number 17 */
 
 #define PMIC_GPIO_WLAN_EXT_POR  22 /* PMIC GPIO NUMBER 23 */
+
+#define BMA150_GPIO_INT 1
 
 #define HAP_LVL_SHFT_MSM_GPIO 24
 
@@ -872,6 +875,7 @@ static struct i2c_board_info msm_camera_boardinfo[] __initdata = {
 };
 
 #ifdef CONFIG_MSM_CAMERA
+#define	CAM_STNDBY	143
 static uint32_t camera_off_vcm_gpio_table[] = {
 GPIO_CFG(1, 0, GPIO_CFG_OUTPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), /* VCM */
 };
@@ -921,15 +925,15 @@ static uint32_t camera_on_gpio_table[] = {
 static uint32_t camera_off_gpio_fluid_table[] = {
 	/* FLUID: CAM_VGA_RST_N */
 	GPIO_CFG(31, 0, GPIO_CFG_OUTPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),
-	/* FLUID: Disable CAMIF_STANDBY */
-	GPIO_CFG(143, 0, GPIO_CFG_OUTPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA)
+	/* FLUID: CAMIF_STANDBY */
+	GPIO_CFG(CAM_STNDBY, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA)
 };
 
 static uint32_t camera_on_gpio_fluid_table[] = {
 	/* FLUID: CAM_VGA_RST_N */
 	GPIO_CFG(31, 0, GPIO_CFG_OUTPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),
-	/* FLUID: Disable CAMIF_STANDBY */
-	GPIO_CFG(143, 1, GPIO_CFG_OUTPUT, GPIO_CFG_PULL_UP, GPIO_CFG_2MA)
+	/* FLUID: CAMIF_STANDBY */
+	GPIO_CFG(CAM_STNDBY, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA)
 };
 
 static void config_gpio_table(uint32_t *table, int len)
@@ -961,6 +965,8 @@ static int config_camera_on_gpios(void)
 		/* FLUID: turn on 5V booster */
 		gpio_set_value(
 			PM8058_GPIO_PM_TO_SYS(PMIC_GPIO_FLASH_BOOST_ENABLE), 1);
+		/* FLUID: drive high to put secondary sensor to STANDBY */
+		gpio_set_value(CAM_STNDBY, 1);
 	}
 	return 0;
 }
@@ -1050,6 +1056,11 @@ static struct platform_device msm_camera_sensor_mt9d112 = {
 #endif
 
 #ifdef CONFIG_WEBCAM_OV9726
+
+static struct msm_camera_sensor_platform_info ov9726_sensor_7630_info = {
+	.mount_angle = 90
+};
+
 static struct msm_camera_sensor_flash_data flash_ov9726 = {
 	.flash_type	= MSM_CAMERA_FLASH_LED,
 	.flash_src	= &msm_flash_src_pwm
@@ -1064,6 +1075,7 @@ static struct msm_camera_sensor_info msm_camera_sensor_ov9726_data = {
 	.resource	= msm_camera_resources,
 	.num_resources	= ARRAY_SIZE(msm_camera_resources),
 	.flash_data	= &flash_ov9726,
+	.sensor_platform_info = &ov9726_sensor_7630_info,
 	.csi_if		= 1
 };
 struct platform_device msm_camera_sensor_ov9726 = {
@@ -2017,6 +2029,7 @@ static struct marimba_fm_platform_data marimba_fm_pdata = {
 	.irq = MSM_GPIO_TO_INT(147),
 	.vreg_s2 = NULL,
 	.vreg_xo_out = NULL,
+	.is_fm_soc_i2s_master = false,
 };
 
 
@@ -3077,6 +3090,7 @@ static int hdmi_init_irq(void);
 static int hdmi_enable_5v(int on);
 static int hdmi_core_power(int on, int show);
 static int hdmi_cec_power(int on);
+static bool hdmi_check_hdcp_hw_support(void);
 
 static struct msm_hdmi_platform_data adv7520_hdmi_data = {
 	.irq = MSM_GPIO_TO_INT(18),
@@ -3085,7 +3099,92 @@ static struct msm_hdmi_platform_data adv7520_hdmi_data = {
 	.enable_5v = hdmi_enable_5v,
 	.core_power = hdmi_core_power,
 	.cec_power = hdmi_cec_power,
+	.check_hdcp_hw_support = hdmi_check_hdcp_hw_support,
 };
+
+#ifdef CONFIG_BOSCH_BMA150
+static struct vreg *vreg_gp6;
+static int sensors_ldo_enable(void)
+{
+	int rc;
+
+	/*
+	 * Enable the VREGs L8(gp7), L15(gp6)
+	 * for I2C communication with sensors.
+	 */
+	pr_info("sensors_ldo_enable called!!\n");
+	vreg_gp7 = vreg_get(NULL, "gp7");
+	if (IS_ERR(vreg_gp7)) {
+		pr_err("%s: vreg_get gp7 failed\n", __func__);
+		rc = PTR_ERR(vreg_gp7);
+		goto fail_gp7_get;
+	}
+
+	rc = vreg_set_level(vreg_gp7, 1800);
+	if (rc) {
+		pr_err("%s: vreg_set_level gp7 failed\n", __func__);
+		goto fail_gp7_level;
+	}
+
+	rc = vreg_enable(vreg_gp7);
+	if (rc) {
+		pr_err("%s: vreg_enable gp7 failed\n", __func__);
+		goto fail_gp7_level;
+	}
+
+	vreg_gp6 = vreg_get(NULL, "gp6");
+	if (IS_ERR(vreg_gp6)) {
+		pr_err("%s: vreg_get gp6 failed\n", __func__);
+		rc = PTR_ERR(vreg_gp6);
+		goto fail_gp6_get;
+	}
+
+	rc = vreg_set_level(vreg_gp6, 3050);
+	if (rc) {
+		pr_err("%s: vreg_set_level gp6 failed\n", __func__);
+		goto fail_gp6_level;
+	}
+
+	rc = vreg_enable(vreg_gp6);
+	if (rc) {
+		pr_err("%s: vreg_enable gp6 failed\n", __func__);
+		goto fail_gp6_level;
+	}
+
+	return 0;
+
+fail_gp6_level:
+	vreg_put(vreg_gp6);
+fail_gp6_get:
+	vreg_disable(vreg_gp7);
+fail_gp7_level:
+	vreg_put(vreg_gp7);
+fail_gp7_get:
+	return rc;
+}
+
+static void sensors_ldo_disable(void)
+{
+	pr_info("sensors_ldo_disable called!!\n");
+	vreg_disable(vreg_gp6);
+	vreg_put(vreg_gp6);
+	vreg_disable(vreg_gp7);
+	vreg_put(vreg_gp7);
+}
+static struct bma150_platform_data bma150_data = {
+	.power_on = sensors_ldo_enable,
+	.power_off = sensors_ldo_disable,
+};
+
+static struct i2c_board_info bma150_board_info[] __initdata = {
+	{
+		I2C_BOARD_INFO("bma150", 0x38),
+		.flags = I2C_CLIENT_WAKE,
+		.irq = MSM_GPIO_TO_INT(BMA150_GPIO_INT),
+		.platform_data = &bma150_data,
+	},
+};
+#endif
 
 static struct i2c_board_info msm_i2c_board_info[] = {
 	{
@@ -3094,7 +3193,7 @@ static struct i2c_board_info msm_i2c_board_info[] = {
 		.platform_data = &optnav_data,
 	},
 	{
-		I2C_BOARD_INFO("adv7520", 0x72 >> 1),
+		I2C_BOARD_INFO("adv7520", ADV7520_I2C_ADDR),
 		.platform_data = &adv7520_hdmi_data,
 	},
 };
@@ -3351,8 +3450,6 @@ static void msm_qsd_spi_gpio_release(void)
 
 static struct msm_spi_platform_data qsd_spi_pdata = {
 	.max_clock_speed = 26331429,
-	.clk_name = "spi_clk",
-	.pclk_name = "spi_pclk",
 	.gpio_config  = msm_qsd_spi_gpio_config,
 	.gpio_release = msm_qsd_spi_gpio_release,
 	.dma_config = msm_qsd_spi_dma_config,
@@ -3363,7 +3460,7 @@ static void __init msm_qsd_spi_init(void)
 	qsd_device_spi.dev.platform_data = &qsd_spi_pdata;
 }
 
-#ifdef CONFIG_USB_EHCI_MSM
+#ifdef CONFIG_USB_EHCI_MSM_72K
 static void msm_hsusb_vbus_power(unsigned phy_info, int on)
 {
         int rc;
@@ -3475,13 +3572,13 @@ static int msm_hsusb_ldo_set_voltage(int mV)
 }
 #endif
 
-#ifndef CONFIG_USB_EHCI_MSM
+#ifndef CONFIG_USB_EHCI_MSM_72K
 static int msm_hsusb_pmic_notif_init(void (*callback)(int online), int init);
 #endif
 static struct msm_otg_platform_data msm_otg_pdata = {
 	.rpc_connect	= hsusb_rpc_connect,
 
-#ifndef CONFIG_USB_EHCI_MSM
+#ifndef CONFIG_USB_EHCI_MSM_72K
 	.pmic_vbus_notif_init         = msm_hsusb_pmic_notif_init,
 #else
 	.vbus_power = msm_hsusb_vbus_power,
@@ -3504,7 +3601,7 @@ static struct msm_hsusb_gadget_platform_data msm_gadget_pdata = {
 	.is_phy_status_timer_on = 1,
 };
 #endif
-#ifndef CONFIG_USB_EHCI_MSM
+#ifndef CONFIG_USB_EHCI_MSM_72K
 typedef void (*notify_vbus_state) (int);
 notify_vbus_state notify_vbus_state_func_ptr;
 int vbus_on_irq;
@@ -3680,6 +3777,114 @@ static int gpio_set(const char *label, const char *name, int level, int on)
 	return rc;
 }
 
+#if defined(CONFIG_FB_MSM_HDMI_ADV7520_PANEL) || defined(CONFIG_BOSCH_BMA150)
+/* there is an i2c address conflict between adv7520 and bma150 sensor after
+ * power up on fluid. As a solution, the default address of adv7520's packet
+ * memory is changed as soon as possible
+ */
+static int __init fluid_i2c_address_fixup(void)
+{
+	unsigned char wBuff[16];
+	unsigned char rBuff[16];
+	struct i2c_msg msgs[3];
+	int res;
+	int rc = -EINVAL;
+	struct vreg *vreg_ldo8;
+	struct i2c_adapter *adapter;
+
+	if (machine_is_msm7x30_fluid()) {
+		adapter = i2c_get_adapter(0);
+		if (!adapter) {
+			pr_err("%s: invalid i2c adapter\n", __func__);
+			return PTR_ERR(adapter);
+		}
+
+		/* turn on LDO8 */
+		vreg_ldo8 = vreg_get(NULL, "gp7");
+		if (!vreg_ldo8) {
+			pr_err("%s: VREG L8 get failed\n", __func__);
+			goto adapter_put;
+		}
+
+		rc = vreg_set_level(vreg_ldo8, 1800);
+		if (rc) {
+			pr_err("%s: VREG L8 set failed\n", __func__);
+			goto ldo8_put;
+		}
+
+		rc = vreg_enable(vreg_ldo8);
+		if (rc) {
+			pr_err("%s: VREG L8 enable failed\n", __func__);
+			goto ldo8_put;
+		}
+
+		/* change packet memory address to 0x74 */
+		wBuff[0] = 0x45;
+		wBuff[1] = 0x74;
+
+		msgs[0].addr = ADV7520_I2C_ADDR;
+		msgs[0].flags = 0;
+		msgs[0].buf = (unsigned char *) wBuff;
+		msgs[0].len = 2;
+
+		res = i2c_transfer(adapter, msgs, 1);
+		if (res != 1) {
+			pr_err("%s: error writing adv7520\n", __func__);
+			goto ldo8_disable;
+		}
+
+		/* powerdown adv7520 using bit 6 */
+		/* i2c read first */
+		wBuff[0] = 0x41;
+
+		msgs[0].addr = ADV7520_I2C_ADDR;
+		msgs[0].flags = 0;
+		msgs[0].buf = (unsigned char *) wBuff;
+		msgs[0].len = 1;
+
+		msgs[1].addr = ADV7520_I2C_ADDR;
+		msgs[1].flags = I2C_M_RD;
+		msgs[1].buf = rBuff;
+		msgs[1].len = 1;
+		res = i2c_transfer(adapter, msgs, 2);
+		if (res != 2) {
+			pr_err("%s: error reading adv7520\n", __func__);
+			goto ldo8_disable;
+		}
+
+		/* i2c write back */
+		wBuff[0] = 0x41;
+		wBuff[1] = rBuff[0] | 0x40;
+
+		msgs[0].addr = ADV7520_I2C_ADDR;
+		msgs[0].flags = 0;
+		msgs[0].buf = (unsigned char *) wBuff;
+		msgs[0].len = 2;
+
+		res = i2c_transfer(adapter, msgs, 1);
+		if (res != 1) {
+			pr_err("%s: error writing adv7520\n", __func__);
+			goto ldo8_disable;
+		}
+
+		/* for successful fixup, we release the i2c adapter */
+		/* but leave ldo8 on so that the adv7520 is not repowered */
+		i2c_put_adapter(adapter);
+		pr_info("%s: fluid i2c address conflict resolved\n", __func__);
+	}
+	return 0;
+
+ldo8_disable:
+	vreg_disable(vreg_ldo8);
+ldo8_put:
+	vreg_put(vreg_ldo8);
+adapter_put:
+	i2c_put_adapter(adapter);
+	return rc;
+}
+fs_initcall_sync(fluid_i2c_address_fixup);
+#endif
+
 static int hdmi_comm_power(int on, int show)
 {
 	int rc = gpio_set("gp7", "LDO8", 1800, on);
@@ -3749,6 +3954,14 @@ static int hdmi_cec_power(int on)
 {
 	pr_info("%s: %d <LDO17>\n", __func__, on);
 	return gpio_set("gp11", "LDO17", 2600, on);
+}
+
+static bool hdmi_check_hdcp_hw_support(void)
+{
+	if (machine_is_msm7x30_fluid())
+		return false;
+	else
+		return true;
 }
 
 static int dtv_panel_power(int on)
@@ -3902,13 +4115,19 @@ static struct platform_device android_pmem_audio_device = {
        .dev = { .platform_data = &android_pmem_audio_pdata },
 };
 
-static struct kgsl_core_platform_data kgsl_core_pdata = {
-	.pt_va_base = 0x66000000,
-#ifdef CONFIG_KGSL_PER_PROCESS_PAGE_TABLE
-	.pt_va_size = SZ_32M,
-#else
-	.pt_va_size = SZ_128M,
-#endif
+static struct resource kgsl_3d0_resources[] = {
+	{
+		.name  = KGSL_3D0_REG_MEMORY,
+		.start = 0xA3500000, /* 3D GRP address */
+		.end = 0xA351ffff,
+		.flags = IORESOURCE_MEM,
+	},
+	{
+		.name = KGSL_3D0_IRQ,
+		.start = INT_GRP_3D,
+		.end = INT_GRP_3D,
+		.flags = IORESOURCE_IRQ,
+	},
 };
 
 static struct kgsl_device_platform_data kgsl_3d0_pdata = {
@@ -3941,6 +4160,32 @@ static struct kgsl_device_platform_data kgsl_3d0_pdata = {
 	},
 };
 
+static struct platform_device msm_kgsl_3d0 = {
+	.name = "kgsl-3d0",
+	.id = 0,
+	.num_resources = ARRAY_SIZE(kgsl_3d0_resources),
+	.resource = kgsl_3d0_resources,
+	.dev = {
+		.platform_data = &kgsl_3d0_pdata,
+	},
+};
+
+#ifdef CONFIG_MSM_KGSL_2D
+static struct resource kgsl_2d0_resources[] = {
+	{
+		.name = KGSL_2D0_REG_MEMORY,
+		.start = 0xA3900000, /* Z180 base address */
+		.end = 0xA3900FFF,
+		.flags = IORESOURCE_MEM,
+	},
+	{
+		.name = KGSL_2D0_IRQ,
+		.start = INT_GRP_2D,
+		.end = INT_GRP_2D,
+		.flags = IORESOURCE_IRQ,
+	},
+};
+
 static struct kgsl_device_platform_data kgsl_2d0_pdata = {
 	.pwr_data = {
 		.pwrlevel = {
@@ -3958,61 +4203,22 @@ static struct kgsl_device_platform_data kgsl_2d0_pdata = {
 	},
 	.clk = {
 		.name = {
-#ifdef CONFIG_MSM_KGSL_2D
 			.clk = "grp_2d_clk",
 			.pclk = "grp_2d_pclk",
-#else
-			.clk = NULL,
-#endif
 		},
 	},
 };
 
-static struct kgsl_device_platform_data kgsl_2d1_pdata;
-
-static struct kgsl_platform_data kgsl_pdata = {
-	.core = &kgsl_core_pdata,
-	.dev_3d0 = &kgsl_3d0_pdata,
-	.dev_2d0 = &kgsl_2d0_pdata,
-	.dev_2d1 = &kgsl_2d1_pdata,
-};
-
-static struct resource kgsl_resources[] = {
-	{
-		.name = "kgsl_reg_memory",
-		.start = 0xA3500000, /* 3D GRP address */
-		.end = 0xA351ffff,
-		.flags = IORESOURCE_MEM,
-	},
-	{
-		.name = "kgsl_yamato_irq",
-		.start = INT_GRP_3D,
-		.end = INT_GRP_3D,
-		.flags = IORESOURCE_IRQ,
-	},
-	{
-		.name = "kgsl_2d0_reg_memory",
-		.start = 0xA3900000, /* Z180 base address */
-		.end = 0xA3900FFF,
-		.flags = IORESOURCE_MEM,
-	},
-	{
-		.name  = "kgsl_2d0_irq",
-		.start = INT_GRP_2D,
-		.end = INT_GRP_2D,
-		.flags = IORESOURCE_IRQ,
-	},
-};
-
-static struct platform_device msm_device_kgsl = {
-	.name = "kgsl",
-	.id = -1,
-	.num_resources = ARRAY_SIZE(kgsl_resources),
-	.resource = kgsl_resources,
+static struct platform_device msm_kgsl_2d0 = {
+	.name = "kgsl-2d0",
+	.id = 0,
+	.num_resources = ARRAY_SIZE(kgsl_2d0_resources),
+	.resource = kgsl_2d0_resources,
 	.dev = {
-		.platform_data = &kgsl_pdata,
+		.platform_data = &kgsl_2d0_pdata,
 	},
 };
+#endif
 
 #if defined(CONFIG_CRYPTO_DEV_QCRYPTO) || \
 		defined(CONFIG_CRYPTO_DEV_QCRYPTO_MODULE) || \
@@ -4023,7 +4229,7 @@ static struct platform_device msm_device_kgsl = {
 #define QCE_0_BASE		0xA8400000
 
 #define QCE_HW_KEY_SUPPORT	1
-
+#define QCE_SHA_HMAC_SUPPORT	0
 #define QCE_SHARE_CE_RESOURCE	0
 #define QCE_CE_SHARED		0
 
@@ -4100,6 +4306,7 @@ static struct msm_ce_hw_support qcrypto_ce_hw_suppport = {
 	.ce_shared = QCE_CE_SHARED,
 	.shared_ce_resource = QCE_SHARE_CE_RESOURCE,
 	.hw_key_support = QCE_HW_KEY_SUPPORT,
+	.sha_hmac = QCE_SHA_HMAC_SUPPORT,
 };
 
 static struct platform_device qcrypto_device = {
@@ -4121,6 +4328,7 @@ static struct msm_ce_hw_support qcedev_ce_hw_suppport = {
 	.ce_shared = QCE_CE_SHARED,
 	.shared_ce_resource = QCE_SHARE_CE_RESOURCE,
 	.hw_key_support = QCE_HW_KEY_SUPPORT,
+	.sha_hmac = QCE_SHA_HMAC_SUPPORT,
 };
 static struct platform_device qcedev_device = {
 	.name		= "qce",
@@ -4580,7 +4788,6 @@ int mdp_core_clk_rate_table[] = {
 	122880000,
 	122880000,
 	122880000,
-	192000000,
 	192000000,
 };
 
@@ -5405,6 +5612,11 @@ static int get_mdm2ap_status(void)
 static struct sdio_al_platform_data sdio_al_pdata = {
 	.config_mdm2ap_status = configure_mdm2ap_status,
 	.get_mdm2ap_status = get_mdm2ap_status,
+	.allow_sdioc_version_major_2 = 1,
+	.peer_sdioc_version_minor = 0x0001,
+	.peer_sdioc_version_major = 0x0003,
+	.peer_sdioc_boot_version_minor = 0x0001,
+	.peer_sdioc_boot_version_major = 0x0002,
 };
 
 struct platform_device msm_device_sdio_al = {
@@ -5480,7 +5692,10 @@ static struct platform_device *devices[] __initdata = {
    (defined(CONFIG_MSM_BT_POWER) || defined(CONFIG_MSM_BT_POWER_MODULE))
 	&msm_bt_power_device,
 #endif
-	&msm_device_kgsl,
+	&msm_kgsl_3d0,
+#ifdef CONFIG_MSM_KGSL_2D
+	&msm_kgsl_2d0,
+#endif
 #ifdef CONFIG_MT9T013
 	&msm_camera_sensor_mt9t013,
 #endif
@@ -5656,12 +5871,12 @@ static void __init qup_device_i2c_init(void)
 }
 
 #ifdef CONFIG_I2C_SSBI
-static struct msm_ssbi_platform_data msm_i2c_ssbi6_pdata = {
+static struct msm_i2c_ssbi_platform_data msm_i2c_ssbi6_pdata = {
 	.rsl_id = "D:PMIC_SSBI",
 	.controller_type = MSM_SBI_CTRL_SSBI2,
 };
 
-static struct msm_ssbi_platform_data msm_i2c_ssbi7_pdata = {
+static struct msm_i2c_ssbi_platform_data msm_i2c_ssbi7_pdata = {
 	.rsl_id = "D:CODEC_SSBI",
 	.controller_type = MSM_SBI_CTRL_SSBI,
 };
@@ -6440,7 +6655,7 @@ static struct mmc_platform_data msm7x30_sdc3_data = {
 	.msmsdcc_fmin	= 144000,
 	.msmsdcc_fmid	= 24576000,
 	.msmsdcc_fmax	= 49152000,
-	.nonremovable	= 1,
+	.nonremovable	= 0,
 };
 #endif
 
@@ -6834,6 +7049,16 @@ static int isa1200_power(int vreg_on)
 			goto vreg_fail;
 		}
 	}
+
+	/* vote for DO buffer */
+	rc = pmapp_clock_vote("VIBR", PMAPP_CLOCK_ID_DO,
+		vreg_on ? PMAPP_CLOCK_VOTE_ON : PMAPP_CLOCK_VOTE_OFF);
+	if (rc)	{
+		pr_err("%s: unable to %svote for d0 clk\n",
+			__func__, vreg_on ? "" : "de-");
+		goto vreg_fail;
+	}
+
 	return 0;
 
 vreg_fail:
@@ -7156,7 +7381,7 @@ static void __init msm7x30_init(void)
 #endif
 
 	platform_add_devices(devices, ARRAY_SIZE(devices));
-#ifdef CONFIG_USB_EHCI_MSM
+#ifdef CONFIG_USB_EHCI_MSM_72K
 	msm_add_host(0, &msm_usb_host_pdata);
 #endif
 	msm7x30_init_mmc();
@@ -7193,6 +7418,11 @@ static void __init msm7x30_init(void)
 	if (machine_is_msm7x30_fluid())
 		i2c_register_board_info(0, cy8info,
 					ARRAY_SIZE(cy8info));
+#ifdef CONFIG_BOSCH_BMA150
+	if (machine_is_msm7x30_fluid())
+		i2c_register_board_info(0, bma150_board_info,
+					ARRAY_SIZE(bma150_board_info));
+#endif
 
 	i2c_register_board_info(2, msm_marimba_board_info,
 			ARRAY_SIZE(msm_marimba_board_info));

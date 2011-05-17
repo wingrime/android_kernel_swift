@@ -326,10 +326,6 @@ static ssize_t mdp_stat_read(
 					mdp4_stat.kickoff_mddi);
 	bp += len;
 	dlen -= len;
-	len = snprintf(bp, dlen, "kickoff_piggyback: %08lu\n",
-					mdp4_stat.kickoff_piggy);
-	bp += len;
-	dlen -= len;
 	len = snprintf(bp, dlen, "kickoff_lcdc:      %08lu\n",
 					mdp4_stat.kickoff_lcdc);
 	bp += len;
@@ -345,6 +341,10 @@ static ssize_t mdp_stat_read(
 	dlen -= len;
 	len = snprintf(bp, dlen, "kickoff_dsi:       %08lu\n\n",
 					mdp4_stat.kickoff_dsi);
+	bp += len;
+	dlen -= len;
+	len = snprintf(bp, dlen, "writeback:      %08lu\n",
+					mdp4_stat.writeback);
 	bp += len;
 	dlen -= len;
 	len = snprintf(bp, dlen, "overlay0_set:   %08lu\n",
@@ -382,6 +382,11 @@ static ssize_t mdp_stat_read(
 	bp += len;
 	dlen -= len;
 	len = snprintf(bp, dlen, "pipe_vg2:   %08lu\n\n", mdp4_stat.pipe[3]);
+
+	bp += len;
+	dlen -= len;
+	len = snprintf(bp, dlen, "dsi_clkoff: %08lu\n\n", mdp4_stat.dsi_clkoff);
+
 	bp += len;
 	dlen -= len;
 	len = snprintf(bp, dlen, "err_mixer:  %08lu\n", mdp4_stat.err_mixer);

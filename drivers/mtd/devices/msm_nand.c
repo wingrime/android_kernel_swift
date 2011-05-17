@@ -40,14 +40,12 @@ unsigned long msm_nandc11_phys;
 unsigned long ebi2_register_base;
 uint32_t dual_nand_ctlr_present;
 uint32_t interleave_enable;
+uint32_t enable_bch_ecc;
 unsigned crci_mask;
 
 #define MSM_NAND_DMA_BUFFER_SIZE SZ_8K
 #define MSM_NAND_DMA_BUFFER_SLOTS \
 	(MSM_NAND_DMA_BUFFER_SIZE / (sizeof(((atomic_t *)0)->counter) * 8))
-
-#define MSM_NAND_CFG0_RAW 0xA80420C0
-#define MSM_NAND_CFG1_RAW 0x5045D
 
 #define MSM_NAND_CFG0_RAW_ONFI_IDENTIFIER 0x88000800
 #define MSM_NAND_CFG0_RAW_ONFI_PARAM_INFO 0x88040000
@@ -74,8 +72,9 @@ struct msm_nand_chip {
 	unsigned dma_channel;
 	uint8_t *dma_buffer;
 	dma_addr_t dma_addr;
-	unsigned CFG0, CFG1;
+	unsigned CFG0, CFG1, CFG0_RAW, CFG1_RAW;
 	uint32_t ecc_buf_cfg;
+	uint32_t ecc_bch_cfg;
 };
 
 #define CFG1_WIDE_FLASH (1U << 1)
@@ -126,6 +125,48 @@ static struct nand_ecclayout msm_nand_oob_128 = {
 	.oobavail	= 32,
 	.oobfree	= {
 		{70, 32},
+	}
+};
+
+/**
+ * msm_nand_oob_224 - oob info for 4KB page 8Bit interface
+ */
+static struct nand_ecclayout msm_nand_oob_224_x8 = {
+	.eccbytes	= 104,
+	.eccpos		= {
+		  0,   1,   2,   3,   4,   5,   6,   7,   8,   9,  10,  11,  12,
+		 13,  14,  15,  16,  17,  18,  19,  20,  21,  22,  23,  24,  25,
+		 26,  27,  28,  29,  30,  31,  32,  33,  34,  35,  36,  37,  38,
+		 39,  40,  41,  42,  43,  44,  45,  46,  47,  48,  49,  50,  51,
+		 52,  53,  54,  55,  56,  57,  58,  59,	 60,  61,  62,  63,  64,
+		 65,  66,  67,  68,  69,  70,  71,  72,  73,  74,  75,  76,  77,
+		 78,  79,  80,  81,  82,  83,  84,  85,  86,  87,  88,  89,  90,
+		123, 124, 125, 126, 127, 128, 129, 130, 131, 132, 133, 134, 135,
+		},
+	.oobavail	= 32,
+	.oobfree	= {
+		{91, 32},
+	}
+};
+
+/**
+ * msm_nand_oob_224 - oob info for 4KB page 16Bit interface
+ */
+static struct nand_ecclayout msm_nand_oob_224_x16 = {
+	.eccbytes	= 112,
+	.eccpos		= {
+	  0,   1,   2,   3,   4,   5,   6,   7,   8,   9,  10,  11,  12,  13,
+	 14,  15,  16,  17,  18,  19,  20,  21,  22,  23,  24,  25,  26,  27,
+	 28,  29,  30,  31,  32,  33,  34,  35,  36,  37,  38,  39,  40,  41,
+	 42,  43,  44,  45,  46,  47,  48,  49,  50,  51,  52,  53,  54,  55,
+	 56,  57,  58,  59,  60,  61,  62,  63,  64,  65,  66,  67,  68,  69,
+	 70,  71,  72,  73,  74,  75,  76,  77,  78,  79,  80,  81,  82,  83,
+	 84,  85,  86,  87,  88,  89,  90,  91,  92,  93,  94,  95,  96,  97,
+	130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143,
+	},
+	.oobavail	= 32,
+	.oobfree	= {
+		{98, 32},
 	}
 };
 
@@ -390,6 +431,7 @@ struct flash_identification {
 	uint32_t pagesize;
 	uint32_t blksize;
 	uint32_t oobsize;
+	uint32_t ecc_correctability;
 } supported_flash;
 
 uint16_t flash_onfi_crc_check(uint8_t *buffer, uint16_t count)
@@ -437,7 +479,7 @@ uint32_t flash_onfi_probe(struct msm_nand_chip *chip)
 		uint16_t guaranteed_valid_begin_blocks_endurance;
 		uint8_t  number_of_programs_per_page;
 		uint8_t  partial_program_attributes;
-		uint8_t  number_of_bits_ecc_correctaility;
+		uint8_t  number_of_bits_ecc_correctability;
 		uint8_t  number_of_interleaved_address_bits;
 		uint8_t  interleaved_operation_attributes;
 		uint8_t  reserved2[13];
@@ -702,6 +744,9 @@ uint32_t flash_onfi_probe(struct msm_nand_chip *chip)
 					onfi_param_page_ptr->
 					number_of_blocks_per_logical_unit
 					* supported_flash.blksize;
+				supported_flash.ecc_correctability =
+					onfi_param_page_ptr->
+					number_of_bits_ecc_correctability;
 
 				pr_info("ONFI probe : Found an ONFI "
 					"compliant device %s\n",
@@ -743,6 +788,7 @@ static int msm_nand_read_oob(struct mtd_info *mtd, loff_t from,
 			uint32_t chipsel;
 			uint32_t cfg0;
 			uint32_t cfg1;
+			uint32_t eccbchcfg;
 			uint32_t exec;
 			uint32_t ecccfg;
 			struct {
@@ -854,7 +900,7 @@ static int msm_nand_read_oob(struct mtd_info *mtd, loff_t from,
 		   (dma_buffer = msm_nand_get_dma_buffer(
 			    chip, sizeof(*dma_buffer))));
 
-	oob_col = start_sector * 0x210;
+	oob_col = start_sector * (enable_bch_ecc ? 0x214 : 0x210);
 	if (chip->CFG1 & CFG1_WIDE_FLASH)
 		oob_col >>= 1;
 
@@ -869,11 +915,13 @@ static int msm_nand_read_oob(struct mtd_info *mtd, loff_t from,
 			(chip->CFG0 & ~(7U << 6))
 				| (((cwperpage-1) - start_sector) << 6);
 			dma_buffer->data.cfg1 = chip->CFG1;
+			if (enable_bch_ecc)
+				dma_buffer->data.eccbchcfg = chip->ecc_bch_cfg;
 		} else {
 			dma_buffer->data.cmd = MSM_NAND_CMD_PAGE_READ;
-			dma_buffer->data.cfg0 = (MSM_NAND_CFG0_RAW
+			dma_buffer->data.cfg0 = (chip->CFG0_RAW
 					& ~(7U << 6)) | ((cwperpage-1) << 6);
-			dma_buffer->data.cfg1 = MSM_NAND_CFG1_RAW |
+			dma_buffer->data.cfg1 = chip->CFG1_RAW |
 					(chip->CFG1 & CFG1_WIDE_FLASH);
 		}
 
@@ -912,7 +960,10 @@ static int msm_nand_read_oob(struct mtd_info *mtd, loff_t from,
 				cmd->src = msm_virt_to_dma(chip,
 							&dma_buffer->data.cfg0);
 				cmd->dst = MSM_NAND_DEV0_CFG0;
-				cmd->len = 8;
+				if (enable_bch_ecc)
+					cmd->len = 12;
+				else
+					cmd->len = 8;
 				cmd++;
 
 				dma_buffer->data.ecccfg = chip->ecc_buf_cfg;
@@ -1025,7 +1076,8 @@ static int msm_nand_read_oob(struct mtd_info *mtd, loff_t from,
 					/* empty blocks read 0x54 at
 					 * these offsets
 					 */
-					if (n % 516 == 3 && datbuf[n] == 0x54)
+					if ((n % 516 == 3 || n % 516 == 175)
+							&& datbuf[n] == 0x54)
 						datbuf[n] = 0xff;
 					if (datbuf[n] != 0xff) {
 						pageerr = rawerr;
@@ -1049,8 +1101,9 @@ static int msm_nand_read_oob(struct mtd_info *mtd, loff_t from,
 		}
 		if (pageerr) {
 			for (n = start_sector; n < cwperpage; n++) {
-				if (dma_buffer->data.result[n].buffer_status
-						& 0x8) {
+				if (enable_bch_ecc ?
+			(dma_buffer->data.result[n].buffer_status & 0x10) :
+			(dma_buffer->data.result[n].buffer_status & 0x8)) {
 					/* not thread safe */
 					mtd->ecc_stats.failed++;
 					pageerr = -EBADMSG;
@@ -1060,8 +1113,9 @@ static int msm_nand_read_oob(struct mtd_info *mtd, loff_t from,
 		}
 		if (!rawerr) { /* check for corretable errors */
 			for (n = start_sector; n < cwperpage; n++) {
-				ecc_errors = dma_buffer->data.
-					result[n].buffer_status & 0x7;
+				ecc_errors = enable_bch_ecc ?
+			(dma_buffer->data.result[n].buffer_status & 0xF) :
+			(dma_buffer->data.result[n].buffer_status & 0x7);
 				if (ecc_errors) {
 					total_ecc_errors += ecc_errors;
 					/* not thread safe */
@@ -1288,9 +1342,9 @@ static int msm_nand_read_oob_dualnandc(struct mtd_info *mtd, loff_t from,
 			dma_buffer->data.cfg1 = chip->CFG1;
 		} else {
 			dma_buffer->data.cmd = MSM_NAND_CMD_PAGE_READ;
-			dma_buffer->data.cfg0 = ((MSM_NAND_CFG0_RAW &
+			dma_buffer->data.cfg0 = ((chip->CFG0_RAW &
 				~(7U << 6)) | ((((cwperpage >> 1)-1) << 6)));
-			dma_buffer->data.cfg1 = MSM_NAND_CFG1_RAW |
+			dma_buffer->data.cfg1 = chip->CFG1_RAW |
 					(chip->CFG1 & CFG1_WIDE_FLASH);
 		}
 
@@ -1938,6 +1992,7 @@ msm_nand_write_oob(struct mtd_info *mtd, loff_t to, struct mtd_oob_ops *ops)
 			uint32_t chipsel;
 			uint32_t cfg0;
 			uint32_t cfg1;
+			uint32_t eccbchcfg;
 			uint32_t exec;
 			uint32_t ecccfg;
 			uint32_t clrfstatus;
@@ -2046,10 +2101,12 @@ msm_nand_write_oob(struct mtd_info *mtd, loff_t to, struct mtd_oob_ops *ops)
 		if (ops->mode != MTD_OOB_RAW) {
 			dma_buffer->data.cfg0 = chip->CFG0;
 			dma_buffer->data.cfg1 = chip->CFG1;
+			if (enable_bch_ecc)
+				dma_buffer->data.eccbchcfg = chip->ecc_bch_cfg;
 		} else {
-			dma_buffer->data.cfg0 = (MSM_NAND_CFG0_RAW &
+			dma_buffer->data.cfg0 = (chip->CFG0_RAW &
 					~(7U << 6)) | ((cwperpage-1) << 6);
-			dma_buffer->data.cfg1 = MSM_NAND_CFG1_RAW |
+			dma_buffer->data.cfg1 = chip->CFG1_RAW |
 						(chip->CFG1 & CFG1_WIDE_FLASH);
 		}
 
@@ -2089,7 +2146,10 @@ msm_nand_write_oob(struct mtd_info *mtd, loff_t to, struct mtd_oob_ops *ops)
 				cmd->src = msm_virt_to_dma(chip,
 							&dma_buffer->data.cfg0);
 				cmd->dst = MSM_NAND_DEV0_CFG0;
-				cmd->len = 8;
+				if (enable_bch_ecc)
+					cmd->len = 12;
+				else
+					cmd->len = 8;
 				cmd++;
 
 				dma_buffer->data.ecccfg = chip->ecc_buf_cfg;
@@ -2406,9 +2466,9 @@ msm_nand_write_oob_dualnandc(struct mtd_info *mtd, loff_t to,
 				& ~(1 << 4)) | ((((cwperpage >> 1)-1)) << 6);
 			dma_buffer->data.cfg1 = chip->CFG1;
 		} else {
-			dma_buffer->data.cfg0 = ((MSM_NAND_CFG0_RAW &
+			dma_buffer->data.cfg0 = ((chip->CFG0_RAW &
 			~(7U << 6)) & ~(1 << 4)) | (((cwperpage >> 1)-1) << 6);
-			dma_buffer->data.cfg1 = MSM_NAND_CFG1_RAW |
+			dma_buffer->data.cfg1 = chip->CFG1_RAW |
 					(chip->CFG1 & CFG1_WIDE_FLASH);
 		}
 
@@ -3257,6 +3317,7 @@ msm_nand_block_isbad(struct mtd_info *mtd, loff_t ofs)
 			uint32_t chipsel;
 			uint32_t cfg0;
 			uint32_t cfg1;
+			uint32_t eccbchcfg;
 			uint32_t exec;
 			uint32_t ecccfg;
 			struct {
@@ -3299,16 +3360,20 @@ msm_nand_block_isbad(struct mtd_info *mtd, loff_t ofs)
 	cmd = dma_buffer->cmd;
 
 	dma_buffer->data.cmd = MSM_NAND_CMD_PAGE_READ;
-	dma_buffer->data.cfg0 = MSM_NAND_CFG0_RAW & ~(7U << 6);
-	dma_buffer->data.cfg1 = MSM_NAND_CFG1_RAW |
+	dma_buffer->data.cfg0 = chip->CFG0_RAW & ~(7U << 6);
+	dma_buffer->data.cfg1 = chip->CFG1_RAW |
 				(chip->CFG1 & CFG1_WIDE_FLASH);
+	if (enable_bch_ecc)
+		dma_buffer->data.eccbchcfg = chip->ecc_bch_cfg;
 
 	if (chip->CFG1 & CFG1_WIDE_FLASH)
-		dma_buffer->data.addr0 = (page << 16) |
-			((528*(cwperpage-1)) >> 1);
+		dma_buffer->data.addr0 = enable_bch_ecc ?
+			(page << 16) | ((532*(cwperpage-1)) >> 1) :
+			(page << 16) | ((528*(cwperpage-1)) >> 1);
 	else
-		dma_buffer->data.addr0 = (page << 16) |
-			(528*(cwperpage-1));
+		dma_buffer->data.addr0 = enable_bch_ecc ?
+			(page << 16) | (532*(cwperpage-1)) :
+			(page << 16) | (528*(cwperpage-1));
 
 	dma_buffer->data.addr1 = (page >> 16) & 0xff;
 	dma_buffer->data.chipsel = 0 | 4;
@@ -3327,7 +3392,10 @@ msm_nand_block_isbad(struct mtd_info *mtd, loff_t ofs)
 	cmd->cmd = 0;
 	cmd->src = msm_virt_to_dma(chip, &dma_buffer->data.cfg0);
 	cmd->dst = MSM_NAND_DEV0_CFG0;
-	cmd->len = 8;
+	if (enable_bch_ecc)
+		cmd->len = 12;
+	else
+		cmd->len = 8;
 	cmd++;
 
 	cmd->cmd = 0;
@@ -3344,7 +3412,8 @@ msm_nand_block_isbad(struct mtd_info *mtd, loff_t ofs)
 
 	cmd->cmd = 0;
 	cmd->src = MSM_NAND_FLASH_BUFFER +
-			(mtd->writesize - (528*(cwperpage-1)));
+	(mtd->writesize - (enable_bch_ecc ?
+			   (532*(cwperpage-1)) : (528*(cwperpage-1))));
 	cmd->dst = msm_virt_to_dma(chip, buf);
 	cmd->len = 4;
 	cmd++;
@@ -3450,8 +3519,8 @@ msm_nand_block_isbad_dualnandc(struct mtd_info *mtd, loff_t ofs)
 	cmd = dma_buffer->cmd;
 
 	dma_buffer->data.cmd = MSM_NAND_CMD_PAGE_READ;
-	dma_buffer->data.cfg0 = MSM_NAND_CFG0_RAW & ~(7U << 6);
-	dma_buffer->data.cfg1 = MSM_NAND_CFG1_RAW |
+	dma_buffer->data.cfg0 = chip->CFG0_RAW & ~(7U << 6);
+	dma_buffer->data.cfg1 = chip->CFG1_RAW |
 				(chip->CFG1 & CFG1_WIDE_FLASH);
 
 	if (chip->CFG1 & CFG1_WIDE_FLASH)
@@ -6634,7 +6703,15 @@ int msm_nand_scan(struct mtd_info *mtd, int maxchips)
 		else
 			mtd_writesize = mtd->writesize >> 1;
 
-		pr_info("Found a supported NAND device\n");
+		/* Check whether controller and NAND device support 8bit ECC*/
+		if ((flash_rd_reg(chip, MSM_NAND_HW_INFO) == 0x307)
+				&& (supported_flash.ecc_correctability >= 8)) {
+			pr_info("Found supported NAND device for %dbit ECC\n",
+					supported_flash.ecc_correctability);
+			enable_bch_ecc = 1;
+		} else {
+			pr_info("Found a supported NAND device\n");
+		}
 		pr_info("NAND Id  : 0x%x\n", supported_flash.flash_id);
 		pr_info("Buswidth : %d Bits\n", (wide_bus) ? 16 : 8);
 		pr_info("Density  : %lld MByte\n", (mtd->size>>20));
@@ -6658,17 +6735,31 @@ int msm_nand_scan(struct mtd_info *mtd, int maxchips)
 	chip->CFG1 = (0 <<  0)  /* Enable ecc */
 		|    (7 <<  2)  /* 8 recovery cycles */
 		|    (0 <<  5)  /* Allow CS deassertion */
-		|  ((mtd_writesize - (528 * ((mtd_writesize >> 9) - 1)) + 1)
-				<<  6)  /* Bad block marker location */
+		/* Bad block marker location */
+		|  ((mtd_writesize - ((enable_bch_ecc ? (wide_bus ? 532 : 531)
+		: 528) * ((mtd_writesize >> 9) - 1)) + 1) <<  6)
 		|    (0 << 16)  /* Bad block in user data area */
 		|    (2 << 17)  /* 6 cycle tWB/tRB */
 		| ((wide_bus) ? CFG1_WIDE_FLASH : 0); /* Wide flash bit */
 
 	chip->ecc_buf_cfg = 0x203;
+	chip->CFG0_RAW = 0xA80420C0;
+	chip->CFG1_RAW = 0x5045D;
 
-	pr_info("CFG0 Init  : 0x%08x \n", chip->CFG0);
-	pr_info("CFG1 Init  : 0x%08x \n", chip->CFG1);
-	pr_info("ECCBUFCFG  : 0x%08x \n", chip->ecc_buf_cfg);
+	if (enable_bch_ecc) {
+		chip->CFG1 |= (1 << 27); /* Enable BCH engine */
+		chip->ecc_bch_cfg = (0 << 0) /* Enable ECC*/
+			|   (0 << 1) /* Enable/Disable SW reset of ECC engine */
+			|   (1 << 4) /* 8bit ecc*/
+			|   ((wide_bus) ? (14 << 8) : (13 << 8))/*parity bytes*/
+			|   (516 << 16) /* 516 user data bytes */
+			|   (1 << 30); /* Turn on ECC engine clocks always */
+		chip->CFG0_RAW = 0xA80428C0; /* CW size is increased to 532B */
+	}
+
+	pr_info("CFG0 Init  : 0x%08x\n", chip->CFG0);
+	pr_info("CFG1 Init  : 0x%08x\n", chip->CFG1);
+	pr_info("ECCBUFCFG  : 0x%08x\n", chip->ecc_buf_cfg);
 
 	if (mtd->oobsize == 64) {
 		mtd->oobavail = msm_nand_oob_64.oobavail;
@@ -6676,6 +6767,11 @@ int msm_nand_scan(struct mtd_info *mtd, int maxchips)
 	} else if (mtd->oobsize == 128) {
 		mtd->oobavail = msm_nand_oob_128.oobavail;
 		mtd->ecclayout = &msm_nand_oob_128;
+	} else if (mtd->oobsize == 224) {
+		mtd->oobavail = wide_bus ? msm_nand_oob_224_x16.oobavail :
+			msm_nand_oob_224_x8.oobavail;
+		mtd->ecclayout = wide_bus ? &msm_nand_oob_224_x16 :
+			&msm_nand_oob_224_x8;
 	} else if (mtd->oobsize == 256) {
 		mtd->oobavail = msm_nand_oob_256.oobavail;
 		mtd->ecclayout = &msm_nand_oob_256;
@@ -6868,7 +6964,6 @@ static int __devinit msm_nand_probe(struct platform_device *pdev)
 		interleave_enable = plat_data->interleave;
 	else
 		interleave_enable = 0;
-
 
 	if (!interleave_enable)
 		pr_info("%s: Dual Nand Ctrl in ping-pong mode\n", __func__);

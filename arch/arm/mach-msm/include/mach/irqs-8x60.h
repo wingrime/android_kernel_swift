@@ -1,4 +1,4 @@
-/* Copyright (c) 2010 Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2010-2011 Code Aurora Forum. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -58,19 +58,19 @@
 #define SC_SICL2IRPTREQ				(GIC_SPI_START + 1)
 #define SC_SICL2PERFMONIRPTREQ			(GIC_SPI_START + 2)
 #define NC					(GIC_SPI_START + 3)
-#define TLMM_SCSS_DIR_CONN_IRQ_0		(GIC_SPI_START + 4)
-#define TLMM_SCSS_DIR_CONN_IRQ_1		(GIC_SPI_START + 5)
-#define TLMM_SCSS_DIR_CONN_IRQ_2		(GIC_SPI_START + 6)
-#define TLMM_SCSS_DIR_CONN_IRQ_3		(GIC_SPI_START + 7)
-#define TLMM_SCSS_DIR_CONN_IRQ_4		(GIC_SPI_START + 8)
-#define TLMM_SCSS_DIR_CONN_IRQ_5		(GIC_SPI_START + 9)
-#define TLMM_SCSS_DIR_CONN_IRQ_6		(GIC_SPI_START + 10)
-#define TLMM_SCSS_DIR_CONN_IRQ_7		(GIC_SPI_START + 11)
-#define TLMM_SCSS_DIR_CONN_IRQ_8		(GIC_SPI_START + 12)
-#define TLMM_SCSS_DIR_CONN_IRQ_9		(GIC_SPI_START + 13)
+#define TLMM_MSM_DIR_CONN_IRQ_0			(GIC_SPI_START + 4)
+#define TLMM_MSM_DIR_CONN_IRQ_1			(GIC_SPI_START + 5)
+#define TLMM_MSM_DIR_CONN_IRQ_2			(GIC_SPI_START + 6)
+#define TLMM_MSM_DIR_CONN_IRQ_3			(GIC_SPI_START + 7)
+#define TLMM_MSM_DIR_CONN_IRQ_4			(GIC_SPI_START + 8)
+#define TLMM_MSM_DIR_CONN_IRQ_5			(GIC_SPI_START + 9)
+#define TLMM_MSM_DIR_CONN_IRQ_6			(GIC_SPI_START + 10)
+#define TLMM_MSM_DIR_CONN_IRQ_7			(GIC_SPI_START + 11)
+#define TLMM_MSM_DIR_CONN_IRQ_8			(GIC_SPI_START + 12)
+#define TLMM_MSM_DIR_CONN_IRQ_9			(GIC_SPI_START + 13)
 #define PM8058_SEC_IRQ_N			(GIC_SPI_START + 14)
 #define PM8901_SEC_IRQ_N			(GIC_SPI_START + 15)
-#define TLMM_SCSS_SUMMARY_IRQ			(GIC_SPI_START + 16)
+#define TLMM_MSM_SUMMARY_IRQ			(GIC_SPI_START + 16)
 #define SPDM_RT_1_IRQ				(GIC_SPI_START + 17)
 #define SPDM_DIAG_IRQ				(GIC_SPI_START + 18)
 #define RPM_SCSS_CPU0_GP_HIGH_IRQ		(GIC_SPI_START + 19)
@@ -264,7 +264,7 @@
 #define SMPSS_SPARE_6				(GIC_SPI_START + 222)
 #define SMPSS_SPARE_7				(GIC_SPI_START + 223)
 
-#define NR_TLMM_SCSS_DIR_CONN_IRQ 10
+#define NR_TLMM_MSM_DIR_CONN_IRQ 10
 #define NR_GPIO_IRQS 173
 #define NR_MSM_GPIOS NR_GPIO_IRQS
 #define NR_MSM_IRQS 256

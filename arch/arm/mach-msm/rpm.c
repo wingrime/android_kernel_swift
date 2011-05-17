@@ -61,121 +61,12 @@ struct msm_rpm_request {
 	struct completion *done;
 };
 
-struct msm_rpm_map_data {
-	uint32_t id;
-	uint32_t sel;
-	uint32_t count;
-};
-
-#define MSM_RPM_MAP(i, s, c) { \
-	.id = MSM_RPM_ID_##i, .sel = MSM_RPM_SEL_##s, .count = c }
-
 struct msm_rpm_notif_config {
 	struct msm_rpm_iv_pair iv[MSM_RPM_SEL_MASK_SIZE * 2];
 };
 
 #define configured_iv(notif_cfg) ((notif_cfg)->iv)
 #define registered_iv(notif_cfg) ((notif_cfg)->iv + MSM_RPM_SEL_MASK_SIZE)
-
-#define APPS_IPC (MSM_GCC_BASE + 0x008)
-#define APPS_IPC_RPM 4
-
-/******************************************************************************
- * Internal variables
- *****************************************************************************/
-
-static struct msm_rpm_map_data msm_rpm_raw_map[] __initdata = {
-	MSM_RPM_MAP(TRIGGER_TIMED_TO, TRIGGER_TIMED, 1),
-	MSM_RPM_MAP(TRIGGER_TIMED_SCLK_COUNT, TRIGGER_TIMED, 1),
-	MSM_RPM_MAP(TRIGGER_SET_FROM, TRIGGER_SET, 1),
-	MSM_RPM_MAP(TRIGGER_SET_TO, TRIGGER_SET, 1),
-	MSM_RPM_MAP(TRIGGER_SET_TRIGGER, TRIGGER_SET, 1),
-	MSM_RPM_MAP(TRIGGER_CLEAR_FROM, TRIGGER_CLEAR, 1),
-	MSM_RPM_MAP(TRIGGER_CLEAR_TO, TRIGGER_CLEAR, 1),
-	MSM_RPM_MAP(TRIGGER_CLEAR_TRIGGER, TRIGGER_CLEAR, 1),
-
-	MSM_RPM_MAP(CXO_CLK, CXO_CLK, 1),
-	MSM_RPM_MAP(PXO_CLK, PXO_CLK, 1),
-	MSM_RPM_MAP(PLL_4, PLL_4, 1),
-	MSM_RPM_MAP(APPS_FABRIC_CLK, APPS_FABRIC_CLK, 1),
-	MSM_RPM_MAP(SYSTEM_FABRIC_CLK, SYSTEM_FABRIC_CLK, 1),
-	MSM_RPM_MAP(MM_FABRIC_CLK, MM_FABRIC_CLK, 1),
-	MSM_RPM_MAP(DAYTONA_FABRIC_CLK, DAYTONA_FABRIC_CLK, 1),
-	MSM_RPM_MAP(SFPB_CLK, SFPB_CLK, 1),
-	MSM_RPM_MAP(CFPB_CLK, CFPB_CLK, 1),
-	MSM_RPM_MAP(MMFPB_CLK, MMFPB_CLK, 1),
-	MSM_RPM_MAP(SMI_CLK, SMI_CLK, 1),
-	MSM_RPM_MAP(EBI1_CLK, EBI1_CLK, 1),
-
-	MSM_RPM_MAP(APPS_L2_CACHE_CTL, APPS_L2_CACHE_CTL, 1),
-
-	MSM_RPM_MAP(APPS_FABRIC_HALT_0, APPS_FABRIC_HALT, 2),
-	MSM_RPM_MAP(APPS_FABRIC_CLOCK_MODE_0, APPS_FABRIC_CLOCK_MODE, 3),
-	MSM_RPM_MAP(APPS_FABRIC_ARB_0, APPS_FABRIC_ARB, 6),
-
-	MSM_RPM_MAP(SYSTEM_FABRIC_HALT_0, SYSTEM_FABRIC_HALT, 2),
-	MSM_RPM_MAP(SYSTEM_FABRIC_CLOCK_MODE_0, SYSTEM_FABRIC_CLOCK_MODE, 3),
-	MSM_RPM_MAP(SYSTEM_FABRIC_ARB_0, SYSTEM_FABRIC_ARB, 22),
-
-	MSM_RPM_MAP(MM_FABRIC_HALT_0, MM_FABRIC_HALT, 2),
-	MSM_RPM_MAP(MM_FABRIC_CLOCK_MODE_0, MM_FABRIC_CLOCK_MODE, 3),
-	MSM_RPM_MAP(MM_FABRIC_ARB_0, MM_FABRIC_ARB, 23),
-
-	MSM_RPM_MAP(SMPS0B_0, SMPS0B, 2),
-	MSM_RPM_MAP(SMPS1B_0, SMPS1B, 2),
-	MSM_RPM_MAP(SMPS2B_0, SMPS2B, 2),
-	MSM_RPM_MAP(SMPS3B_0, SMPS3B, 2),
-	MSM_RPM_MAP(SMPS4B_0, SMPS4B, 2),
-	MSM_RPM_MAP(LDO0B_0, LDO0B, 2),
-	MSM_RPM_MAP(LDO1B_0, LDO1B, 2),
-	MSM_RPM_MAP(LDO2B_0, LDO2B, 2),
-	MSM_RPM_MAP(LDO3B_0, LDO3B, 2),
-	MSM_RPM_MAP(LDO4B_0, LDO4B, 2),
-	MSM_RPM_MAP(LDO5B_0, LDO5B, 2),
-	MSM_RPM_MAP(LDO6B_0, LDO6B, 2),
-	MSM_RPM_MAP(LVS0B, LVS0B, 1),
-	MSM_RPM_MAP(LVS1B, LVS1B, 1),
-	MSM_RPM_MAP(LVS2B, LVS2B, 1),
-	MSM_RPM_MAP(LVS3B, LVS3B, 1),
-	MSM_RPM_MAP(MVS, MVS, 1),
-
-	MSM_RPM_MAP(SMPS0_0, SMPS0, 2),
-	MSM_RPM_MAP(SMPS1_0, SMPS1, 2),
-	MSM_RPM_MAP(SMPS2_0, SMPS2, 2),
-	MSM_RPM_MAP(SMPS3_0, SMPS3, 2),
-	MSM_RPM_MAP(SMPS4_0, SMPS4, 2),
-	MSM_RPM_MAP(LDO0_0, LDO0, 2),
-	MSM_RPM_MAP(LDO1_0, LDO1, 2),
-	MSM_RPM_MAP(LDO2_0, LDO2, 2),
-	MSM_RPM_MAP(LDO3_0, LDO3, 2),
-	MSM_RPM_MAP(LDO4_0, LDO4, 2),
-	MSM_RPM_MAP(LDO5_0, LDO5, 2),
-	MSM_RPM_MAP(LDO6_0, LDO6, 2),
-	MSM_RPM_MAP(LDO7_0, LDO7, 2),
-	MSM_RPM_MAP(LDO8_0, LDO8, 2),
-	MSM_RPM_MAP(LDO9_0, LDO9, 2),
-	MSM_RPM_MAP(LDO10_0, LDO10, 2),
-	MSM_RPM_MAP(LDO11_0, LDO11, 2),
-	MSM_RPM_MAP(LDO12_0, LDO12, 2),
-	MSM_RPM_MAP(LDO13_0, LDO13, 2),
-	MSM_RPM_MAP(LDO14_0, LDO14, 2),
-	MSM_RPM_MAP(LDO15_0, LDO15, 2),
-	MSM_RPM_MAP(LDO16_0, LDO16, 2),
-	MSM_RPM_MAP(LDO17_0, LDO17, 2),
-	MSM_RPM_MAP(LDO18_0, LDO18, 2),
-	MSM_RPM_MAP(LDO19_0, LDO19, 2),
-	MSM_RPM_MAP(LDO20_0, LDO20, 2),
-	MSM_RPM_MAP(LDO21_0, LDO21, 2),
-	MSM_RPM_MAP(LDO22_0, LDO22, 2),
-	MSM_RPM_MAP(LDO23_0, LDO23, 2),
-	MSM_RPM_MAP(LDO24_0, LDO24, 2),
-	MSM_RPM_MAP(LDO25_0, LDO25, 2),
-	MSM_RPM_MAP(LVS0, LVS0, 1),
-	MSM_RPM_MAP(LVS1, LVS1, 1),
-	MSM_RPM_MAP(NCP_0, NCP, 2),
-
-	MSM_RPM_MAP(CXO_BUFFERS, CXO_BUFFERS, 1),
-};
 
 static struct msm_rpm_platform_data *msm_rpm_platform;
 static uint32_t msm_rpm_map[MSM_RPM_ID_LAST + 1];
@@ -198,13 +89,13 @@ static bool msm_rpm_init_notif_done;
 
 static inline uint32_t msm_rpm_read(unsigned int page, unsigned int reg)
 {
-	return readl(msm_rpm_platform->reg_base_addrs[page] + reg * 4);
+	return __raw_readl(msm_rpm_platform->reg_base_addrs[page] + reg * 4);
 }
 
 static inline void msm_rpm_write(
 	unsigned int page, unsigned int reg, uint32_t value)
 {
-	writel(value, msm_rpm_platform->reg_base_addrs[page] + reg * 4);
+	__raw_writel(value, msm_rpm_platform->reg_base_addrs[page] + reg * 4);
 }
 
 static inline void msm_rpm_read_contiguous(
@@ -265,35 +156,10 @@ static int msm_rpm_fill_sel_masks(
 	return 0;
 }
 
-static void __init msm_rpm_populate_map(void)
-{
-	int i, k;
-
-	for (i = 0; i < ARRAY_SIZE(msm_rpm_map); i++)
-		msm_rpm_map[i] = MSM_RPM_SEL_LAST + 1;
-
-	for (i = 0; i < ARRAY_SIZE(msm_rpm_raw_map); i++) {
-		struct msm_rpm_map_data *raw_data = &msm_rpm_raw_map[i];
-
-		for (k = 0; k < raw_data->count; k++)
-			msm_rpm_map[raw_data->id + k] = raw_data->sel;
-	}
-}
-
-static inline void msm_rpm_write_barrier(void)
-{
-	mb();
-
-	/*
-	 * By the time the read from RPM memory returns, all previous
-	 * writes are guaranteed visible to RPM.
-	 */
-	msm_rpm_read(MSM_RPM_PAGE_STATUS, MSM_RPM_STATUS_ID_VERSION_MAJOR);
-}
-
 static inline void msm_rpm_send_req_interrupt(void)
 {
-	writel(APPS_IPC_RPM, APPS_IPC);
+	__raw_writel(msm_rpm_platform->msm_apps_ipc_rpm_val,
+			msm_rpm_platform->msm_apps_ipc_rpm_reg);
 }
 
 /*
@@ -326,8 +192,9 @@ static int msm_rpm_process_ack_interrupt(void)
 
 		msm_rpm_write_contiguous_zeros(MSM_RPM_PAGE_CTRL,
 			MSM_RPM_CTRL_ACK_SEL_0, MSM_RPM_SEL_MASK_SIZE);
-		mb();
 		msm_rpm_write(MSM_RPM_PAGE_CTRL, MSM_RPM_CTRL_ACK_CTX_0, 0);
+		/* Ensure the write is complete before return */
+		dsb();
 
 		return 1;
 	}
@@ -346,8 +213,9 @@ static int msm_rpm_process_ack_interrupt(void)
 
 		msm_rpm_write_contiguous_zeros(MSM_RPM_PAGE_CTRL,
 			MSM_RPM_CTRL_ACK_SEL_0, MSM_RPM_SEL_MASK_SIZE);
-		mb();
 		msm_rpm_write(MSM_RPM_PAGE_CTRL, MSM_RPM_CTRL_ACK_CTX_0, 0);
+		/* Ensure the write is complete before return */
+		dsb();
 
 		if (msm_rpm_request->done)
 			complete_all(msm_rpm_request->done);
@@ -439,7 +307,8 @@ static int msm_rpm_set_exclusive(int ctx,
 		MSM_RPM_CTRL_REQ_SEL_0, sel_masks, MSM_RPM_SEL_MASK_SIZE);
 	msm_rpm_write(MSM_RPM_PAGE_CTRL, MSM_RPM_CTRL_REQ_CTX_0, ctx_mask);
 
-	msm_rpm_write_barrier();
+	/* Ensure RPM data is written before sending the interrupt */
+	dsb();
 	msm_rpm_send_req_interrupt();
 
 	spin_unlock(&msm_rpm_irq_lock);
@@ -498,7 +367,8 @@ static int msm_rpm_set_exclusive_noirq(int ctx,
 		MSM_RPM_CTRL_REQ_SEL_0, sel_masks, MSM_RPM_SEL_MASK_SIZE);
 	msm_rpm_write(MSM_RPM_PAGE_CTRL, MSM_RPM_CTRL_REQ_CTX_0, ctx_mask);
 
-	msm_rpm_write_barrier();
+	/* Ensure RPM data is written before sending the interrupt */
+	dsb();
 	msm_rpm_send_req_interrupt();
 
 	msm_rpm_busy_wait_for_request_completion(false);
@@ -920,6 +790,21 @@ unregister_notification_exit:
 	return rc;
 }
 EXPORT_SYMBOL(msm_rpm_unregister_notification);
+
+static void __init msm_rpm_populate_map(void)
+{
+	int i, k;
+
+	for (i = 0; i < ARRAY_SIZE(msm_rpm_map); i++)
+		msm_rpm_map[i] = MSM_RPM_SEL_LAST + 1;
+
+	for (i = 0; i < rpm_map_data_size; i++) {
+		struct msm_rpm_map_data *raw_data = &rpm_map_data[i];
+
+		for (k = 0; k < raw_data->count; k++)
+			msm_rpm_map[raw_data->id + k] = raw_data->sel;
+	}
+}
 
 int __init msm_rpm_init(struct msm_rpm_platform_data *data)
 {

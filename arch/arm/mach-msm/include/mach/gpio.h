@@ -209,7 +209,7 @@ void msm_tlmm_set_pull(enum msm_tlmm_pull_tgt tgt, int pull);
  * The irq passed to this function is the DC IRQ number, not the
  * irq number seen by the scorpion when the interrupt triggers.  For example,
  * if 0 is specified, then when DC IRQ 0 triggers, the scorpion will see
- * interrupt TLMM_SCSS_DIR_CONN_IRQ_0.
+ * interrupt TLMM_MSM_DIR_CONN_IRQ_0.
  *
  * input_polarity parameter specifies when the gpio should raise the direct
  * interrupt. A value of 0 means that it is active low, anything else means

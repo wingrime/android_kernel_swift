@@ -618,8 +618,10 @@ static void get_dec_status(struct vidc_1080p_dec_disp_info *dec_disp_info,
 static u32 ddl_decoder_frame_run_callback(struct ddl_client_context *ddl)
 {
 	struct ddl_context *ddl_context = ddl->ddl_context;
+	struct ddl_decoder_data *decoder = &ddl->codec_data.decoder;
 	u32 callback_end = false, ret_status = false;
 	u32 eos_present = false, rsl_chg;
+	u32 more_field_needed, extended_rsl_chg;
 	enum vidc_1080p_display_status disp_status;
 	DDL_MSG_MED("ddl_decoder_frame_run_callback");
 	if (!DDLCLIENT_STATE_IS(ddl, DDL_CLIENT_WAIT_FOR_FRAME_DONE)) {
@@ -632,6 +634,16 @@ static u32 ddl_decoder_frame_run_callback(struct ddl_client_context *ddl)
 		get_dec_status(&ddl->codec_data.decoder.dec_disp_info,
 			ddl->codec_data.decoder.output_order,
 			&disp_status, &rsl_chg);
+
+		vidc_sm_get_extended_decode_status(
+			&ddl->shared_mem[ddl->command_channel],
+			&more_field_needed,
+			&extended_rsl_chg);
+		decoder->field_needed_for_prev_ip =
+			more_field_needed;
+		decoder->prev_ip_frm_tag =
+			ddl->input_frame.vcd_frm.ip_frm_tag;
+
 		ddl_vidc_decode_dynamic_property(ddl, false);
 		if (rsl_chg) {
 			DDL_MSG_HIGH("DEC_FRM_RUN_DONE: DEC_RECONFIG");
@@ -696,7 +708,7 @@ static u32 ddl_eos_frame_done_callback(
 	struct ddl_context *ddl_context = ddl->ddl_context;
 	struct ddl_decoder_data *decoder = &ddl->codec_data.decoder;
 	struct ddl_mask *dpb_mask = &decoder->dpb_mask;
-	u32 ret_status = true, rsl_chg;
+	u32 ret_status = true, rsl_chg, more_field_needed;
 	enum vidc_1080p_display_status disp_status;
 
 	if (!DDLCLIENT_STATE_IS(ddl, DDL_CLIENT_WAIT_FOR_EOS_DONE)) {
@@ -709,7 +721,13 @@ static u32 ddl_eos_frame_done_callback(
 			ddl->codec_data.decoder.output_order,
 			&disp_status, &rsl_chg);
 		vidc_sm_get_extended_decode_status(
-			&ddl->shared_mem[ddl->command_channel], &rsl_chg);
+			&ddl->shared_mem[ddl->command_channel],
+			&more_field_needed, &rsl_chg);
+
+		decoder->field_needed_for_prev_ip =
+			more_field_needed;
+		decoder->prev_ip_frm_tag =
+			ddl->input_frame.vcd_frm.ip_frm_tag;
 		ddl_vidc_decode_dynamic_property(ddl, false);
 		if (disp_status ==
 			VIDC_1080P_DISPLAY_STATUS_DPB_EMPTY) {

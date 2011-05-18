@@ -385,6 +385,8 @@ uint32 mdp4_overlay_format(struct mdp4_overlay_pipe *pipe);
 uint32 mdp4_overlay_unpack_pattern(struct mdp4_overlay_pipe *pipe);
 uint32 mdp4_overlay_op_mode(struct mdp4_overlay_pipe *pipe);
 void mdp4_lcdc_overlay(struct msm_fb_data_type *mfd);
+void mdp4_overlay_dtv_ov_done_push(struct msm_fb_data_type *mfd,
+			struct mdp4_overlay_pipe *pipe);
 void mdp4_overlay_dtv_vsync_push(struct msm_fb_data_type *mfd,
 			struct mdp4_overlay_pipe *pipe);
 void mdp4_dtv_overlay(struct msm_fb_data_type *mfd);
@@ -434,6 +436,7 @@ void mdp4_dma_p_done_dsi(struct mdp_dma_data *dma);
 void mdp4_overlay1_done_dtv(void);
 void mdp4_overlay1_done_atv(void);
 void mdp4_primary_vsync_lcdc(void);
+void mdp4_external_vsync_dtv(void);
 void mdp4_mddi_overlay_restore(void);
 void mdp4_overlay_lcdc_wait4vsync(struct msm_fb_data_type *mfd);
 void mdp4_overlay_vsync_push(struct msm_fb_data_type *mfd,

@@ -126,6 +126,7 @@ static void sdio_mux_write_data(struct work_struct *work);
 static DEFINE_MUTEX(sdio_mux_lock);
 static DECLARE_WORK(work_sdio_mux_read, sdio_mux_read_data);
 static DECLARE_WORK(work_sdio_mux_write, sdio_mux_write_data);
+static DECLARE_DELAYED_WORK(delayed_work_sdio_mux_write, sdio_mux_write_data);
 
 static struct workqueue_struct *sdio_mux_workqueue;
 static struct sdio_partial_pkt_info sdio_partial_pkt;
@@ -434,6 +435,9 @@ static void sdio_mux_write_data(struct work_struct *work)
 			/* we may have to wait for write avail
 			 * notification from sdio al
 			 */
+			DBG("%s: sdio_write_avail(%d) < skb->len(%d)\n",
+					__func__, avail, skb->len);
+
 			reschedule = 1;
 			break;
 		}
@@ -468,7 +472,10 @@ static void sdio_mux_write_data(struct work_struct *work)
 			notify = 1;
 		} else {
 			__skb_queue_head(&sdio_mux_write_pool, skb);
-			queue_work(sdio_mux_workqueue, &work_sdio_mux_write);
+			queue_delayed_work(sdio_mux_workqueue,
+					&delayed_work_sdio_mux_write,
+					msecs_to_jiffies(250)
+					);
 		}
 	}
 

@@ -98,6 +98,8 @@ struct qs_s5k4e1_reg {
 	const unsigned short reg_snap_size;
 	const struct qs_s5k4e1_i2c_reg_conf (*reg_lens)[LENS_SHADE_TABLE];
 	const unsigned short reg_lens_size;
+	const struct qs_s5k4e1_i2c_reg_conf *reg_default_lens;
+	const unsigned short reg_default_lens_size;
 	const struct qs_s5k4e1_i2c_conf_array *conf_array;
 };
 #endif /* QS_S5K4E1_H */

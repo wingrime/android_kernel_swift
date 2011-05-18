@@ -89,6 +89,7 @@
 #include <linux/regulator/machine.h>
 #include <mach/sdio_al.h>
 #include <mach/rpm.h>
+#include <mach/rpm-regulator.h>
 
 #include "devices.h"
 #include "devices-msm8x60.h"
@@ -99,7 +100,6 @@
 #include "rpm_log.h"
 #include "timer.h"
 #include "saw-regulator.h"
-#include "rpm-regulator.h"
 #include "gpiomux.h"
 #include "gpiomux-8x60.h"
 #include "rpm_stats.h"
@@ -3563,7 +3563,8 @@ static struct rpm_vreg_pdata rpm_vreg_init_pdata[RPM_VREG_ID_MAX] = {
 	RPM_VREG_INIT_LDO(PM8058_L5,  0, 1, 0, 2850000, 2850000, LDO300HMIN, 0),
 	RPM_VREG_INIT_LDO(PM8058_L6,  0, 1, 0, 3000000, 3600000,  LDO50HMIN, 0),
 	RPM_VREG_INIT_LDO(PM8058_L7,  0, 1, 0, 1800000, 1800000,  LDO50HMIN, 0),
-	RPM_VREG_INIT_LDO(PM8058_L8,  0, 1, 0, 2900000, 3050000, LDO300HMIN, 0),
+	RPM_VREG_INIT_LDO_PF(PM8058_L8,  0, 1, 0, 2900000, 3050000, LDO300HMIN,
+		RPM_VREG_PIN_CTRL_NONE, RPM_VREG_PIN_FN_SLEEP_B),
 	RPM_VREG_INIT_LDO(PM8058_L9,  0, 1, 0, 1800000, 1800000, LDO300HMIN, 0),
 	RPM_VREG_INIT_LDO(PM8058_L10, 0, 1, 0, 2600000, 2600000, LDO300HMIN, 0),
 	RPM_VREG_INIT_LDO(PM8058_L11, 0, 1, 0, 1500000, 1500000, LDO150HMIN, 0),
@@ -3575,7 +3576,8 @@ static struct rpm_vreg_pdata rpm_vreg_init_pdata[RPM_VREG_ID_MAX] = {
 	RPM_VREG_INIT_LDO(PM8058_L17, 0, 1, 0, 2600000, 2600000, LDO150HMIN, 0),
 	RPM_VREG_INIT_LDO(PM8058_L18, 0, 1, 1, 2200000, 2200000, LDO150HMIN, 0),
 	RPM_VREG_INIT_LDO(PM8058_L19, 0, 1, 0, 2500000, 2500000, LDO150HMIN, 0),
-	RPM_VREG_INIT_LDO(PM8058_L20, 0, 1, 0, 1800000, 1800000, LDO150HMIN, 0),
+	RPM_VREG_INIT_LDO_PF(PM8058_L20, 0, 1, 0, 1800000, 1800000, LDO150HMIN,
+		RPM_VREG_PIN_CTRL_NONE, RPM_VREG_PIN_FN_SLEEP_B),
 	RPM_VREG_INIT_LDO_PF(PM8058_L21, 1, 1, 0, 1200000, 1200000, LDO150HMIN,
 		RPM_VREG_PIN_CTRL_NONE, RPM_VREG_PIN_FN_SLEEP_B),
 	RPM_VREG_INIT_LDO(PM8058_L22, 0, 1, 0, 1200000, 1200000, LDO300HMIN, 0),
@@ -3587,7 +3589,7 @@ static struct rpm_vreg_pdata rpm_vreg_init_pdata[RPM_VREG_ID_MAX] = {
 		RPM_VREG_FREQ_1p60),
 	RPM_VREG_INIT_SMPS(PM8058_S1, 0, 1, 1,  500000, 1250000,  SMPS_HMIN, 0,
 		RPM_VREG_FREQ_1p60),
-	RPM_VREG_INIT_SMPS(PM8058_S2, 0, 1, 0, 1200000, 1400000,  SMPS_HMIN,
+	RPM_VREG_INIT_SMPS(PM8058_S2, 0, 1, 1, 1200000, 1400000,  SMPS_HMIN,
 		RPM_VREG_PIN_CTRL_A0, RPM_VREG_FREQ_1p60),
 	RPM_VREG_INIT_SMPS(PM8058_S3, 1, 1, 0, 1800000, 1800000,  SMPS_HMIN, 0,
 		RPM_VREG_FREQ_1p60),
@@ -4524,7 +4526,7 @@ static struct sdio_al_platform_data sdio_al_pdata = {
 	.config_mdm2ap_status = configure_mdm2ap_status,
 	.get_mdm2ap_status = get_mdm2ap_status,
 	.allow_sdioc_version_major_2 = 0,
-	.peer_sdioc_version_minor = 0x0001,
+	.peer_sdioc_version_minor = 0x0101,
 	.peer_sdioc_version_major = 0x0004,
 	.peer_sdioc_boot_version_minor = 0x0001,
 	.peer_sdioc_boot_version_major = 0x0002,
@@ -9033,9 +9035,6 @@ static int bahama_bt(int on)
 
 	u8 offset = 0; /* index into bahama configs */
 
-	/* Init mutex to get/set FM/BT status respectively */
-	mutex_init(&config.xfer_lock);
-
 	on = on ? 1 : 0;
 	version = read_bahama_ver();
 
@@ -9095,9 +9094,6 @@ static int bahama_bt(int on)
 		marimba_set_bt_status(&config, true);
 	else
 		marimba_set_bt_status(&config, false);
-
-	/* Destroy mutex */
-	mutex_destroy(&config.xfer_lock);
 
 	return 0;
 }
@@ -9362,6 +9358,18 @@ static void __init msm8x60_init(struct msm_board_data *board_data)
 		msm_spm_init(msm_spm_data_v1, ARRAY_SIZE(msm_spm_data_v1));
 
 	/*
+	 * Set regulators 8901_l4 and 8901_l6 to be always on in HPM for SURF
+	 * devices so that the RPM doesn't drop into a low power mode that an
+	 * un-reworked SURF cannot resume from.
+	 */
+	if (machine_is_msm8x60_surf()) {
+		rpm_vreg_init_pdata[RPM_VREG_ID_PM8901_L4]
+			.init_data.constraints.always_on = 1;
+		rpm_vreg_init_pdata[RPM_VREG_ID_PM8901_L6]
+			.init_data.constraints.always_on = 1;
+	}
+
+	/*
 	 * Disable regulator info printing so that regulator registration
 	 * messages do not enter the kmsg log.
 	 */
@@ -9521,6 +9529,10 @@ static void __init msm8x60_init(struct msm_board_data *board_data)
 	if (machine_is_msm8x60_fluid()) {
 		msm_adc_pdata.dev_names = msm_adc_fluid_device_names;
 		msm_adc_pdata.num_adc = ARRAY_SIZE(msm_adc_fluid_device_names);
+		if (SOCINFO_VERSION_MAJOR(soc_platform_version) < 3)
+			msm_adc_pdata.gpio_config = APROC_CONFIG;
+		else
+			msm_adc_pdata.gpio_config = MPROC_CONFIG;
 	}
 	msm_adc_pdata.target_hw = MSM_8x60;
 #endif

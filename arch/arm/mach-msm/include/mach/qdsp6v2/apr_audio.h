@@ -320,14 +320,24 @@ struct adm_get_copp_handles_command {
 struct adm_routings_session {
 	u16 id;
 	u16 num_copps;
-	u16 copp_id[ADM_MAX_COPPS];
+	u16 copp_id[ADM_MAX_COPPS+1]; /*Padding if numCopps is odd */
+} __packed;
+
+struct adm_routings_multi_session {
+	u16 id;
+	u16 num_copps;
+	u16 copp_id;
+	u16 pad; /* Padding if numCopps is odd */
 } __attribute__ ((packed));
 
 struct adm_routings_command {
 	struct apr_hdr hdr;
 	u32 path; /* 0 = Rx, 1 Tx */
 	u32 num_sessions;
-	struct adm_routings_session sessions[8];
+	union {
+		struct adm_routings_session session[8];
+		struct adm_routings_multi_session sessions[8];
+	} r;
 } __attribute__ ((packed));
 
 

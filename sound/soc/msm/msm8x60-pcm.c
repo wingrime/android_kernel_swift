@@ -253,6 +253,7 @@ static int msm_pcm_playback_prepare(struct snd_pcm_substream *substream)
 	struct msm_audio *prtd = runtime->private_data;
 	int ret;
 	int dev_rate = 48000;
+	int i = 0;
 
 	pr_debug("%s\n", __func__);
 	prtd->pcm_size = snd_pcm_lib_buffer_bytes(substream);
@@ -271,17 +272,17 @@ static int msm_pcm_playback_prepare(struct snd_pcm_substream *substream)
 
 	atomic_set(&prtd->out_count, runtime->periods);
 	atomic_set(&prtd->in_count, 0);
-	pr_debug("prtd->session_id = %d, copp_id= %d",
-			prtd->session_id,
-			session_route.playback_session[substream->number]);
-	if (session_route.playback_session[substream->number]
+	for (i = 0; i < MAX_COPP; i++) {
+		pr_debug("prtd->session_id = %d, copp_id= %d",
+				prtd->session_id, i);
+		if (session_route.playback_session[substream->number][i]
 			!= DEVICE_IGNORE) {
-		if (session_route.playback_session[substream->number]
-				== PCM_RX)
-			dev_rate = 8000;
-		msm_snddev_set_dec(prtd->session_id,
-			session_route.playback_session[substream->number],
-			1, dev_rate, runtime->channels);
+			pr_err("Device active\n");
+			if (i == PCM_RX)
+				dev_rate = 8000;
+			msm_snddev_set_dec(prtd->session_id,
+					i, 1, dev_rate, runtime->channels);
+		}
 	}
 	prtd->enabled = 1;
 	prtd->cmd_ack = 0;
@@ -317,17 +318,17 @@ static int msm_pcm_capture_prepare(struct snd_pcm_substream *substream)
 	for (i = 0; i < runtime->periods; i++)
 		q6asm_read_nolock(prtd->audio_client);
 	prtd->periods = runtime->periods;
-	pr_debug("prtd->session_id = %d, copp_id= %d",
+
+	for (i = 0; i < MAX_COPP; i++) {
+		pr_debug("prtd->session_id = %d, copp_id= %d",
 			prtd->session_id,
-			session_route.capture_session[substream->number]);
-	if (session_route.capture_session[substream->number]
-			!= DEVICE_IGNORE) {
-		if (session_route.capture_session[substream->number]
-				== PCM_TX)
-			dev_rate = 8000;
-		msm_snddev_set_enc(prtd->session_id,
-			session_route.capture_session[substream->number],
-			1, dev_rate, 1);
+			session_route.capture_session[prtd->session_id][i]);
+		if (session_route.capture_session[prtd->session_id][i]
+					!= DEVICE_IGNORE) {
+			if (i == PCM_RX)
+				dev_rate = 8000;
+			msm_snddev_set_enc(prtd->session_id, i, 1, dev_rate, 1);
+		}
 	}
 	prtd->enabled = 1;
 

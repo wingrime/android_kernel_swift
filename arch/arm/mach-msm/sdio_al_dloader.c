@@ -31,7 +31,7 @@
 #include <linux/dma-mapping.h>
 #include <mach/dma.h>
 #include <linux/mmc/sdio_func.h>
-#include <mach/sdio_al.h>
+#include <sdio_al_private.h>
 #include <linux/tty.h>
 #include <linux/tty_flip.h>
 #include <linux/kthread.h>
@@ -83,6 +83,7 @@ static int sdio_dld_open(struct tty_struct *tty, struct file *file);
 static void sdio_dld_close(struct tty_struct *tty, struct file *file);
 static int sdio_dld_write_callback(struct tty_struct *tty,
 				   const unsigned char *buf, int count);
+static int sdio_dld_write_room(struct tty_struct *tty);
 static int sdio_dld_main_task(void *card);
 static void sdio_dld_print_info(void);
 #ifdef CONFIG_DEBUG_FS
@@ -215,6 +216,7 @@ static const struct tty_operations sdio_dloader_tty_ops = {
 	.open = sdio_dld_open,
 	.close = sdio_dld_close,
 	.write = sdio_dld_write_callback,
+	.write_room = sdio_dld_write_room,
 };
 
 /* GLOBAL VARIABLES */
@@ -499,7 +501,7 @@ static void update_gd(int code)
 		break;
 
 	case SDIO_DLD_DEBUGFS_CASE_8_CODE:
-		gd.ptr_array[index].code = SDIO_DLD_DEBUGFS_CASE_8_CODE;;
+		gd.ptr_array[index].code = SDIO_DLD_DEBUGFS_CASE_8_CODE;
 		gd.ptr_array[index].cb_wait_wake = 3;
 		break;
 
@@ -1416,6 +1418,20 @@ static int sdioc_bytes_free_in_buffer(int write_ptr,
 	*free_bytes = total_size - *bytes_in_use - 1;
 
 	return 0;
+}
+
+/*
+* sdio_dld_write_room
+*
+* This is the write_room function of the tty driver.
+*
+* @tty: pointer to tty struct.
+* @return free bytes for write.
+*
+*/
+static int sdio_dld_write_room(struct tty_struct *tty)
+{
+	return sdio_dld->sdio_dloader_data.outgoing_data.buffer_size;
 }
 
 /**

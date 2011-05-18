@@ -23,6 +23,7 @@
 
 #define MAX_PLAYBACK_SESSIONS	2
 #define MAX_CAPTURE_SESSIONS	1
+#define MAX_COPP               12
 
 extern int copy_count;
 
@@ -80,8 +81,8 @@ struct msm_audio {
 };
 
 struct pcm_session {
-	unsigned short playback_session[MAX_PLAYBACK_SESSIONS];
-	unsigned short capture_session[MAX_CAPTURE_SESSIONS];
+	unsigned short playback_session[MAX_PLAYBACK_SESSIONS][MAX_COPP];
+	unsigned short capture_session[MAX_CAPTURE_SESSIONS][MAX_COPP];
 };
 
 /* platform data */

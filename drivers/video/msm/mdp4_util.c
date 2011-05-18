@@ -412,6 +412,12 @@ irqreturn_t mdp4_isr(int irq, void *ptr)
 			if (panel & MDP4_PANEL_LCDC)
 				mdp4_primary_vsync_lcdc();
 		}
+#ifdef CONFIG_FB_MSM_DTV
+		if (isr & INTR_EXTERNAL_VSYNC) {
+			if (panel & MDP4_PANEL_DTV)
+				mdp4_external_vsync_dtv();
+		}
+#endif
 		if (isr & INTR_DMA_P_DONE) {
 			mdp4_stat.intr_dma_p++;
 			dma = &dma2_data;

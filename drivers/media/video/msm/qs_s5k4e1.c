@@ -103,7 +103,7 @@ static uint16_t prev_frame_length_lines;
 static uint16_t snap_line_length_pck;
 static uint16_t snap_frame_length_lines;
 
-static bool CSI_CONFIG, LENS_SHADE_CONFIG;
+static bool CSI_CONFIG, LENS_SHADE_CONFIG, default_lens_shade;
 static struct qs_s5k4e1_ctrl_t *qs_s5k4e1_ctrl;
 static DECLARE_WAIT_QUEUE_HEAD(qs_s5k4e1_wait_queue);
 DEFINE_MUTEX(qs_s5k4e1_mut);
@@ -424,9 +424,15 @@ static int32_t qs_s5k4e1_write_left_lsc(char *left_lsc, int rt)
 	if (!LENS_SHADE_CONFIG) {
 		qs_s5k4e1_i2c_write_b_sensor(0x3096, 0x40);
 		qs_s5k4e1_i2c_write_b_table(ptr, qs_s5k4e1_regs.reg_lens_size);
-
-		qs_s5k4e1_i2c_write_seq_sensor(0x3200, &left_lsc[0], 216);
-		qs_s5k4e1_i2c_write_seq_sensor(0x32D8, &left_lsc[216], 216);
+		if (default_lens_shade)
+			qs_s5k4e1_i2c_write_b_table(qs_s5k4e1_regs.
+			reg_default_lens, qs_s5k4e1_regs.reg_default_lens_size);
+		else {
+			qs_s5k4e1_i2c_write_seq_sensor(0x3200,
+				&left_lsc[0], 216);
+			qs_s5k4e1_i2c_write_seq_sensor(0x32D8,
+				&left_lsc[216], 216);
+		}
 		qs_s5k4e1_i2c_write_b_sensor(0x3096, 0x60);
 		qs_s5k4e1_i2c_write_b_sensor(0x3096, 0x40);
 	} else
@@ -442,9 +448,15 @@ static int32_t qs_s5k4e1_write_right_lsc(char *right_lsc, int rt)
 	if (!LENS_SHADE_CONFIG) {
 		qs_s5k4e1_i2c_write_b_sensor(0x3096, 0x40);
 		qs_s5k4e1_i2c_write_b_table(ptr, qs_s5k4e1_regs.reg_lens_size);
-
-		qs_s5k4e1_i2c_write_seq_sensor(0x3200, &right_lsc[0], 216);
-		qs_s5k4e1_i2c_write_seq_sensor(0x32D8, &right_lsc[216], 216);
+		if (default_lens_shade)
+			qs_s5k4e1_i2c_write_b_table(qs_s5k4e1_regs.
+			reg_default_lens, qs_s5k4e1_regs.reg_default_lens_size);
+		else {
+			qs_s5k4e1_i2c_write_seq_sensor(0x3200,
+				&right_lsc[0], 216);
+			qs_s5k4e1_i2c_write_seq_sensor(0x32D8,
+				&right_lsc[216], 216);
+		}
 		qs_s5k4e1_i2c_write_b_sensor(0x3096, 0x60);
 		qs_s5k4e1_i2c_write_b_sensor(0x3096, 0x40);
 	} else
@@ -462,7 +474,6 @@ static int32_t qs_s5k4e1_write_lsc(char *lsc, int rt)
 		qs_s5k4e1_write_left_lsc(&lsc[0], rt);
 	else if (qs_s5k4e1_ctrl->cam_mode == MODE_2D_RIGHT)
 		qs_s5k4e1_write_right_lsc(&lsc[432], rt);
-	LENS_SHADE_CONFIG = 1;
 	return 0;
 }
 
@@ -487,38 +498,85 @@ static int32_t qs_s5k4e1_read_lsc(char *lsc)
 	return 0;
 }
 
-static void qs_s5k4e1_bridge_reset(void){
+static int32_t qs_s5k4e1_bridge_reset(void){
 	unsigned short RegData = 0, GPIOInState = 0;
-	bridge_i2c_write_w(0x50, 0x00);
-	bridge_i2c_write_w(0x53, 0x00);
+	int32_t rc = 0;
+	rc = bridge_i2c_write_w(0x50, 0x00);
+	if (rc < 0)
+		goto bridge_fail;
+	rc = bridge_i2c_write_w(0x53, 0x00);
+	if (rc < 0)
+		goto bridge_fail;
 	msleep(30);
-	bridge_i2c_write_w(0x53, 0x01);
+	rc = bridge_i2c_write_w(0x53, 0x01);
+	if (rc < 0)
+		goto bridge_fail;
 	msleep(30);
-	bridge_i2c_write_w(0x14, 0x0C);
-	bridge_i2c_write_w(0x0E, 0xFFFF);
-
-	bridge_i2c_read(0x54, &RegData, 2);
-	bridge_i2c_write_w(0x54, (RegData | 0x1));
+	rc = bridge_i2c_write_w(0x14, 0x0C);
+	if (rc < 0)
+		goto err;
+	rc = bridge_i2c_write_w(0x0E, 0xFFFF);
+	if (rc < 0)
+		goto err;
+	rc = bridge_i2c_read(0x54, &RegData, 2);
+	if (rc < 0)
+		goto err;
+	rc = bridge_i2c_write_w(0x54, (RegData | 0x1));
+	if (rc < 0)
+		goto err;
 	msleep(30);
-	bridge_i2c_write_w(0x54, (RegData | 0x3));
-	bridge_i2c_read(0x54, &RegData, 2);
-	bridge_i2c_write_w(0x54, (RegData | 0x4));
-	bridge_i2c_write_w(0x54, (RegData | 0xC));
-
-	bridge_i2c_read(0x55, &GPIOInState, 2);
-	bridge_i2c_write_w(0x55, (GPIOInState | 0x1));
+	rc = bridge_i2c_write_w(0x54, (RegData | 0x3));
+	if (rc < 0)
+		goto err;
+	rc = bridge_i2c_read(0x54, &RegData, 2);
+	if (rc < 0)
+		goto err;
+	rc = bridge_i2c_write_w(0x54, (RegData | 0x4));
+	if (rc < 0)
+		goto err;
+	rc = bridge_i2c_write_w(0x54, (RegData | 0xC));
+	if (rc < 0)
+		goto err;
+	rc = bridge_i2c_read(0x55, &GPIOInState, 2);
+	if (rc < 0)
+		goto err;
+	rc = bridge_i2c_write_w(0x55, (GPIOInState | 0x1));
+	if (rc < 0)
+		goto err;
 	msleep(30);
-	bridge_i2c_write_w(0x55, (GPIOInState | 0x3));
-
-	bridge_i2c_read(0x55, &GPIOInState, 2);
-	bridge_i2c_write_w(0x55, (GPIOInState | 0x4));
+	rc = bridge_i2c_write_w(0x55, (GPIOInState | 0x3));
+	if (rc < 0)
+		goto err;
+	rc = bridge_i2c_read(0x55, &GPIOInState, 2);
+	if (rc < 0)
+		goto err;
+	rc = bridge_i2c_write_w(0x55, (GPIOInState | 0x4));
+	if (rc < 0)
+		goto err;
 	msleep(30);
-	bridge_i2c_write_w(0x55, (GPIOInState | 0xC));
-	bridge_i2c_read(0x55, &GPIOInState, 2);
+	rc = bridge_i2c_write_w(0x55, (GPIOInState | 0xC));
+	if (rc < 0)
+		goto err;
+	rc = bridge_i2c_read(0x55, &GPIOInState, 2);
+	if (rc < 0)
+		goto err;
 	GPIOInState = ((GPIOInState >> 4) & 0x1);
 
-	bridge_i2c_read(0x08, &GPIOInState, 2);
-	bridge_i2c_write_w(0x08, GPIOInState | 0x4000);
+	rc = bridge_i2c_read(0x08, &GPIOInState, 2);
+	if (rc < 0)
+		goto err;
+	rc = bridge_i2c_write_w(0x08, GPIOInState | 0x4000);
+	if (rc < 0)
+		goto err;
+	return rc;
+
+err:
+	bridge_i2c_write_w(0x53, 0x00);
+	msleep(30);
+
+bridge_fail:
+	return rc;
+
 }
 
 static void qs_s5k4e1_bridge_config(int mode, int rt)
@@ -792,6 +850,7 @@ static int32_t qs_s5k4e1_sensor_setting(int update_type, int rt)
 	if (update_type == REG_INIT) {
 		CSI_CONFIG = 0;
 		LENS_SHADE_CONFIG = 0;
+		default_lens_shade = 1;
 		bridge_i2c_write_w(0x53, 0x01);
 		msleep(30);
 		qs_s5k4e1_bridge_config(qs_s5k4e1_ctrl->cam_mode, rt);
@@ -799,17 +858,17 @@ static int32_t qs_s5k4e1_sensor_setting(int update_type, int rt)
 		qs_s5k4e1_i2c_write_b_table(qs_s5k4e1_regs.rec_settings,
 				qs_s5k4e1_regs.rec_size);
 		msleep(30);
-		qs_s5k4e1_write_lsc(lens_eeprom_data, rt);
-		msleep(60);
 	} else if (update_type == UPDATE_PERIODIC) {
 		qs_s5k4e1_write_lsc(lens_eeprom_data, rt);
-		msleep(20);
+		msleep(100);
 		if (!CSI_CONFIG) {
-			if (qs_s5k4e1_ctrl->cam_mode == MODE_3D)
+			if (qs_s5k4e1_ctrl->cam_mode == MODE_3D) {
 				qs_s5k4e1_csi_params.lane_cnt = 4;
-			else
+				qs_s5k4e1_csi_params.data_format = CSI_8BIT;
+			} else {
 				qs_s5k4e1_csi_params.lane_cnt = 2;
-			qs_s5k4e1_csi_params.data_format = CSI_10BIT;
+				qs_s5k4e1_csi_params.data_format = CSI_10BIT;
+			}
 			qs_s5k4e1_csi_params.lane_assign = 0xe4;
 			qs_s5k4e1_csi_params.dpcm_scheme = 0;
 			qs_s5k4e1_csi_params.settle_cnt = 24;
@@ -817,7 +876,6 @@ static int32_t qs_s5k4e1_sensor_setting(int update_type, int rt)
 			msleep(10);
 			cam_debug_init();
 			CSI_CONFIG = 1;
-
 		}
 		bridge_i2c_write_w(0x53, 0x01);
 		msleep(50);
@@ -966,7 +1024,9 @@ static int
 		goto init_probe_done;
 	}
 	msleep(70);
-	qs_s5k4e1_bridge_reset();
+	rc = qs_s5k4e1_bridge_reset();
+	if (rc < 0)
+		goto init_probe_fail;
 	qs_s5k4e1_bridge_config(MODE_3D, RES_PREVIEW);
 	msleep(30);
 

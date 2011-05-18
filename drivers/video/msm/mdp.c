@@ -53,8 +53,7 @@ struct completion mdp_ppp_comp;
 struct semaphore mdp_ppp_mutex;
 struct semaphore mdp_pipe_ctrl_mutex;
 
-unsigned long mdp_timer_duration = (HZ);   /* 1 sec */
-/* unsigned long mdp_mdp_timer_duration=0; */
+unsigned long mdp_timer_duration = (HZ);   /* 1 second */
 
 boolean mdp_ppp_waiting = FALSE;
 uint32 mdp_tv_underflow_cnt;
@@ -521,7 +520,7 @@ void mdp_pipe_kickoff(uint32 term, struct msm_fb_data_type *mfd)
 	}
 #endif
 }
-
+static int mdp_clk_rate;
 static struct platform_device *pdev_list[MSM_FB_MAX_DEV_LIST];
 static int pdev_list_cnt;
 
@@ -626,8 +625,7 @@ void mdp_pipe_ctrl(MDP_BLOCK_TYPE block, MDP_BLOCK_POWER_STATE state,
 		if ((mdp_all_blocks_off) && (mdp_current_clk_on)) {
 			if (block == MDP_MASTER_BLOCK) {
 				mdp_current_clk_on = FALSE;
-				if (footswitch != NULL)
-					regulator_disable(footswitch);
+				dsb();
 				/* turn off MDP clks */
 				mdp_vsync_clk_disable();
 				for (i = 0; i < pdev_list_cnt; i++) {
@@ -637,7 +635,14 @@ void mdp_pipe_ctrl(MDP_BLOCK_TYPE block, MDP_BLOCK_POWER_STATE state,
 						pdata->clk_func(0);
 				}
 				if (mdp_clk != NULL) {
+					mdp_clk_rate = clk_get_rate(mdp_clk);
 					clk_disable(mdp_clk);
+					if (mdp_hw_revision <=
+						MDP4_REVISION_V2_1 &&
+						mdp_clk_rate > 122880000) {
+						clk_set_rate(mdp_clk,
+							 122880000);
+					}
 					MSM_FB_DEBUG("MDP CLK OFF\n");
 				}
 				if (mdp_pclk != NULL) {
@@ -660,6 +665,12 @@ void mdp_pipe_ctrl(MDP_BLOCK_TYPE block, MDP_BLOCK_POWER_STATE state,
 					pdata->clk_func(1);
 			}
 			if (mdp_clk != NULL) {
+				if (mdp_hw_revision <=
+					MDP4_REVISION_V2_1 &&
+					mdp_clk_rate > 122880000) {
+					clk_set_rate(mdp_clk,
+						 mdp_clk_rate);
+				}
 				clk_enable(mdp_clk);
 				MSM_FB_DEBUG("MDP CLK ON\n");
 			}
@@ -668,8 +679,6 @@ void mdp_pipe_ctrl(MDP_BLOCK_TYPE block, MDP_BLOCK_POWER_STATE state,
 				MSM_FB_DEBUG("MDP PCLK ON\n");
 			}
 			mdp_vsync_clk_enable();
-			if (footswitch != NULL)
-				regulator_enable(footswitch);
 		}
 		up(&mdp_pipe_ctrl_mutex);
 	}
@@ -1142,6 +1151,8 @@ static int mdp_irq_clk_setup(void)
 	footswitch = regulator_get(NULL, "fs_mdp");
 	if (IS_ERR(footswitch))
 		footswitch = NULL;
+	else
+		regulator_enable(footswitch);
 
 	mdp_clk = clk_get(NULL, "mdp_clk");
 	if (IS_ERR(mdp_clk)) {
@@ -1316,6 +1327,9 @@ static int mdp_probe(struct platform_device *pdev)
 
 #ifdef CONFIG_FB_MSM_MIPI_DSI
 	case MIPI_VIDEO_PANEL:
+#ifdef CONFIG_FB_MSM_MDP40
+		mdp_timer_duration = 0;
+#endif
 		pdata->on = mdp4_dsi_video_on;
 		pdata->off = mdp4_dsi_video_off;
 		mfd->hw_refresh = TRUE;
@@ -1328,20 +1342,12 @@ static int mdp_probe(struct platform_device *pdev)
 			mfd->dma = &dma_e_data;
 		}
 		mdp4_display_intf_sel(if_no, DSI_VIDEO_INTF);
-
-		/* Enable MDP Footswitch for MIPI DSI Video mode
-		 * Disabling footswitch on suspend resets the MDP
-		 * hardware and DSI Video mode initialization is
-		 * affected during resume. Hence Footswitch is
-		 * enabled by default for Video Mode DSI panels
-		 */
-		if (footswitch != NULL)
-			regulator_enable(footswitch);
 		break;
 
 	case MIPI_CMD_PANEL:
 		mfd->dma_fnc = mdp4_dsi_cmd_overlay;
 #ifdef CONFIG_FB_MSM_MDP40
+		mdp_timer_duration = 0;
 		mipi = &mfd->panel_info.mipi;
 		configure_mdp_core_clk_table((mipi->dsi_pclk_rate) * 3 / 2);
 #endif

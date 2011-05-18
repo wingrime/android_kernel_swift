@@ -27,6 +27,15 @@
 #include <linux/platform_device.h>
 #include <linux/slab.h>
 #include <linux/mfd/pmic8058.h>
+#include <linux/pmic8058-misc.h>
+
+/* VIB_DRV register */
+#define SSBI_REG_ADDR_DRV_VIB		0x4A
+
+#define PM8058_VIB_DRIVE_SHIFT		3
+#define PM8058_VIB_LOGIC_SHIFT		2
+#define PM8058_VIB_MIN_LEVEL_mV		1200
+#define PM8058_VIB_MAX_LEVEL_mV		3100
 
 /* Resource offsets. */
 enum PM8058_MISC_IRQ {
@@ -39,6 +48,40 @@ struct pm8058_misc_device {
 	unsigned int		osc_halt_irq;
 	u64			osc_halt_count;
 };
+
+static struct pm8058_misc_device *misc_dev;
+
+int pm8058_vibrator_config(struct pm8058_vib_config *vib_config)
+{
+	u8 reg = 0;
+	int rc;
+
+	if (misc_dev == NULL) {
+		pr_info("misc_device is NULL\n");
+		return -EINVAL;
+	}
+
+	if (vib_config->drive_mV) {
+		if (vib_config->drive_mV < PM8058_VIB_MIN_LEVEL_mV ||
+			vib_config->drive_mV > PM8058_VIB_MAX_LEVEL_mV) {
+			pr_err("Invalid vibrator drive strength\n");
+			return -EINVAL;
+		}
+	}
+
+	reg = (vib_config->drive_mV / 100) << PM8058_VIB_DRIVE_SHIFT;
+
+	reg |= (!!vib_config->active_low) << PM8058_VIB_LOGIC_SHIFT;
+
+	reg |= vib_config->enable_mode;
+
+	rc = pm8058_write(misc_dev->pm_chip, SSBI_REG_ADDR_DRV_VIB, &reg, 1);
+	if (rc)
+		pr_err("%s: pm8058 write failed: rc=%d\n", __func__, rc);
+
+	return rc;
+}
+EXPORT_SYMBOL(pm8058_vibrator_config);
 
 /* Handle the OSC_HALT interrupt: 32 kHz XTAL oscillator has stopped. */
 static irqreturn_t pm8058_osc_halt_isr(int irq, void *data)
@@ -176,6 +219,8 @@ static int __devinit pmic8058_misc_probe(struct platform_device *pdev)
 	rc = pmic8058_misc_dbg_probe(miscdev);
 	if (rc)
 		return rc;
+
+	misc_dev = miscdev;
 
 	pr_notice("%s: OK\n", __func__);
 	return 0;

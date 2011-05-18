@@ -439,6 +439,8 @@ void mdp4_dma_p_done_dsi(struct mdp_dma_data *dma)
 	pr_debug("%s: ov_cnt=%d dmap_cnt=%d\n",
 			__func__, dsi_pipe->ov_cnt, dsi_pipe->dmap_cnt);
 
+	mdp_pipe_ctrl(MDP_OVERLAY0_BLOCK, MDP_BLOCK_POWER_OFF, TRUE);
+
 	if (diff <= 0) {
 		spin_lock(&mdp_spin_lock);
 		dma->dmap_busy = FALSE;
@@ -451,8 +453,8 @@ void mdp4_dma_p_done_dsi(struct mdp_dma_data *dma)
 				__func__, dsi_pipe->ov_cnt, dsi_pipe->dmap_cnt);
 			mdp_intr_mask &= ~INTR_DMA_P_DONE;
 			outp32(MDP_INTR_ENABLE, mdp_intr_mask);
-
 		}
+		mdp_pipe_ctrl(MDP_OVERLAY0_BLOCK, MDP_BLOCK_POWER_OFF, TRUE);
 		return;
 	}
 
@@ -471,6 +473,8 @@ void mdp4_dma_p_done_dsi(struct mdp_dma_data *dma)
 	outpdw(MDP_BASE + 0x000c, 0x0);
 	/* trigger dsi cmd engine */
 	mipi_dsi_cmd_mdp_sw_trigger();
+
+	mdp_pipe_ctrl(MDP_OVERLAY0_BLOCK, MDP_BLOCK_POWER_OFF, TRUE);
 }
 
 
@@ -482,15 +486,18 @@ void mdp4_overlay0_done_dsi_cmd(struct mdp_dma_data *dma)
 
 	int diff;
 
+
 	mdp_disable_irq_nosync(MDP_OVERLAY0_TERM);
 
 	if (dsi_pipe->blt_addr == 0) {
+		mdp_pipe_ctrl(MDP_OVERLAY0_BLOCK, MDP_BLOCK_POWER_OFF, TRUE);
 		spin_lock(&mdp_spin_lock);
 		dma->busy = FALSE;
 		spin_unlock(&mdp_spin_lock);
 		complete(&dma->comp);
 		if (busy_wait_cnt)
 			busy_wait_cnt--;
+		mdp_pipe_ctrl(MDP_OVERLAY0_BLOCK, MDP_BLOCK_POWER_OFF, TRUE);
 		return;
 	}
 
@@ -528,8 +535,6 @@ void mdp4_overlay0_done_dsi_cmd(struct mdp_dma_data *dma)
 	outpdw(MDP_BASE + 0x000c, 0x0);
 	/* trigger dsi cmd engine */
 	mipi_dsi_cmd_mdp_sw_trigger();
-
-	mdp_pipe_ctrl(MDP_OVERLAY0_BLOCK, MDP_BLOCK_POWER_OFF, TRUE);
 }
 
 void mdp4_dsi_cmd_overlay_restore(void)
@@ -538,8 +543,10 @@ void mdp4_dsi_cmd_overlay_restore(void)
 	if (dsi_mfd && dsi_pipe) {
 		mdp4_dsi_cmd_dma_busy_wait(dsi_mfd);
 		mdp4_overlay_update_dsi_cmd(dsi_mfd);
+
+		if (dsi_pipe->blt_addr)
+			mdp4_dsi_blt_dmap_busy_wait(dsi_mfd);
 		mdp4_dsi_cmd_overlay_kickoff(dsi_mfd, dsi_pipe);
-		dsi_mfd->dma_update_flag = 1;
 	}
 }
 
@@ -618,6 +625,10 @@ void mdp4_dsi_cmd_kickoff_video(struct msm_fb_data_type *mfd,
 		mdp4_overlay_update_dsi_cmd(mfd);
 
 	pr_debug("%s: pid=%d\n", __func__, current->pid);
+
+	if (dsi_pipe->blt_addr)
+		mdp4_dsi_blt_dmap_busy_wait(dsi_mfd);
+
 	mdp4_dsi_cmd_overlay_kickoff(mfd, pipe);
 }
 

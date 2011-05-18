@@ -53,7 +53,7 @@ uint32 mdp_total_vdopkts;
 
 extern u32 msm_fb_debug_enabled;
 extern struct workqueue_struct *mdp_dma_wq;
-extern void mddi_ss_driveric_innotek_position();
+int mddi_ss_driveric_innotek_position();
 int vsync_start_y_adjust = 4;
 
 static void mdp_dma2_update_lcd(struct msm_fb_data_type *mfd)

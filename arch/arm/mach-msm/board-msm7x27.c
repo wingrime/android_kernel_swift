@@ -55,6 +55,7 @@
 #include <linux/mtd/nand.h>
 #include <linux/mtd/partitions.h>
 #include <linux/i2c.h>
+#include <linux/i2c-gpio.h>
 #include <linux/android_pmem.h>
 #include <mach/camera.h>
 
@@ -69,6 +70,8 @@
 #ifdef CONFIG_USB_ANDROID
 #include <linux/usb/android_composite.h>
 #endif
+
+#include <linux/bma150.h>
 
 #ifdef CONFIG_ARCH_MSM7X25
 #define MSM_PMEM_MDP_SIZE	0xb21000
@@ -447,8 +450,9 @@ static struct msm_hsusb_gadget_platform_data msm_gadget_pdata;
 
 #define SND(desc, num) { .name = #desc, .id = num }
 static struct snd_endpoint snd_endpoints_list[] = {
-	SND(HANDSET, 0),
-	SND(MONO_HEADSET, 2),
+	SND(HANDSET, 0), 	
+	SND(HEADSET, 1),
+	SND(HEADSET, 2),
 	SND(HEADSET, 3),
 	SND(SPEAKER, 6),
 	SND(TTY_HEADSET, 8),
@@ -700,9 +704,9 @@ static struct msm_tsif_platform_data tsif_platform_data = {
 #define GPIO_OUT_102    102
 #define GPIO_OUT_88     88
 
-static struct msm_rpc_endpoint *lcdc_ep;
+//static struct msm_rpc_endpoint *lcdc_ep;
 
-static int msm_fb_lcdc_config(int on)
+/*static int msm_fb_lcdc_config(int on)
 {
 	int rc = 0;
 	struct rpc_request_hdr hdr;
@@ -729,17 +733,18 @@ static int msm_fb_lcdc_config(int on)
 
 	msm_rpc_close(lcdc_ep);
 	return rc;
-}
+	}*/
 
-static int gpio_array_num[] = {
-				GPIO_OUT_132, /* spi_clk */
-				GPIO_OUT_131, /* spi_cs  */
-				GPIO_OUT_103, /* spi_sdi */
-				GPIO_OUT_102, /* spi_sdoi */
-				GPIO_OUT_88
+ /*static int gpio_array_num[] = {
+				GPIO_OUT_132, // spi_clk 
+				GPIO_OUT_131, // spi_cs  
+				GPIO_OUT_103, // spi_sdi 
+				GPIO_OUT_102, // spi_sdoi 
+			       	GPIO_OUT_88
 				};
 
-static void lcdc_gordon_gpio_init(void)
+*/
+/*static void lcdc_gordon_gpio_init(void)
 {
 	if (gpio_request(GPIO_OUT_132, "spi_clk"))
 		pr_err("failed to request gpio spi_clk\n");
@@ -751,9 +756,9 @@ static void lcdc_gordon_gpio_init(void)
 		pr_err("failed to request gpio spi_sdoi\n");
 	if (gpio_request(GPIO_OUT_88, "gpio_dac"))
 		pr_err("failed to request gpio_dac\n");
-}
+		}*/
 
-static uint32_t lcdc_gpio_table[] = {
+ /*static uint32_t lcdc_gpio_table[] = {
 	GPIO_CFG(GPIO_OUT_132, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),
 	GPIO_CFG(GPIO_OUT_131, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),
 	GPIO_CFG(GPIO_OUT_103, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),
@@ -774,18 +779,18 @@ static void config_lcdc_gpio_table(uint32_t *table, int len, unsigned enable)
 		}
 	}
 }
-
-static void lcdc_gordon_config_gpios(int enable)
+ */
+/*static void lcdc_gordon_config_gpios(int enable)
 {
 	config_lcdc_gpio_table(lcdc_gpio_table,
 		ARRAY_SIZE(lcdc_gpio_table), enable);
 }
-
-static char *msm_fb_lcdc_vreg[] = {
+ */
+/*static char *msm_fb_lcdc_vreg[] = {
 	"gp5"
-};
+	};*/
 
-static int msm_fb_lcdc_power_save(int on)
+/*static int msm_fb_lcdc_power_save(int on)
 {
 	struct vreg *vreg[ARRAY_SIZE(msm_fb_lcdc_vreg)];
 	int i, rc = 0;
@@ -835,24 +840,24 @@ bail:
 	}
 
 	return rc;
-}
-static struct lcdc_platform_data lcdc_pdata = {
+}*/
+/*static struct lcdc_platform_data lcdc_pdata = {
 	.lcdc_gpio_config = msm_fb_lcdc_config,
 	.lcdc_power_save   = msm_fb_lcdc_power_save,
-};
+	};*/
 
-static struct msm_panel_common_pdata lcdc_gordon_panel_data = {
+ /*static struct msm_panel_common_pdata lcdc_gordon_panel_data = {
 	.panel_config_gpio = lcdc_gordon_config_gpios,
 	.gpio_num          = gpio_array_num,
-};
+	};*/
 
-static struct platform_device lcdc_gordon_panel_device = {
+/*static struct platform_device lcdc_gordon_panel_device = {
 	.name   = "lcdc_gordon_vga",
 	.id     = 0,
 	.dev    = {
 		.platform_data = &lcdc_gordon_panel_data,
 	}
-};
+	};*/
 
 static struct resource msm_fb_resources[] = {
 	{
@@ -918,10 +923,10 @@ static struct platform_device msm_fb_device = {
 };
 
 #ifdef CONFIG_BT
-static struct platform_device msm_bt_power_device = {
+/*static struct platform_device msm_bt_power_device = {
 	.name = "bt_power",
-};
-
+	};*/
+/*
 enum {
 	BT_WAKE,
 	BT_RFR,
@@ -934,32 +939,32 @@ enum {
 	BT_PCM_CLK,
 	BT_HOST_WAKE,
 };
-
-static unsigned bt_config_power_on[] = {
-	GPIO_CFG(42, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),	/* WAKE */
-	GPIO_CFG(43, 2, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),	/* RFR */
-	GPIO_CFG(44, 2, GPIO_CFG_INPUT,  GPIO_CFG_NO_PULL, GPIO_CFG_2MA),	/* CTS */
-	GPIO_CFG(45, 2, GPIO_CFG_INPUT,  GPIO_CFG_NO_PULL, GPIO_CFG_2MA),	/* Rx */
-	GPIO_CFG(46, 3, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),	/* Tx */
-	GPIO_CFG(68, 1, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),	/* PCM_DOUT */
-	GPIO_CFG(69, 1, GPIO_CFG_INPUT,  GPIO_CFG_NO_PULL, GPIO_CFG_2MA),	/* PCM_DIN */
-	GPIO_CFG(70, 2, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),	/* PCM_SYNC */
-	GPIO_CFG(71, 2, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),	/* PCM_CLK */
-	GPIO_CFG(83, 0, GPIO_CFG_INPUT,  GPIO_CFG_NO_PULL, GPIO_CFG_2MA),	/* HOST_WAKE */
-};
-static unsigned bt_config_power_off[] = {
-	GPIO_CFG(42, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),	/* WAKE */
-	GPIO_CFG(43, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),	/* RFR */
-	GPIO_CFG(44, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),	/* CTS */
-	GPIO_CFG(45, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),	/* Rx */
-	GPIO_CFG(46, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),	/* Tx */
-	GPIO_CFG(68, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),	/* PCM_DOUT */
-	GPIO_CFG(69, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),	/* PCM_DIN */
-	GPIO_CFG(70, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),	/* PCM_SYNC */
-	GPIO_CFG(71, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),	/* PCM_CLK */
-	GPIO_CFG(83, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),	/* HOST_WAKE */
-};
-
+*/
+/*static unsigned bt_config_power_on[] = {
+  GPIO_CFG(42, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),// WAKE //
+  GPIO_CFG(43, 2, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),// RFR //
+  GPIO_CFG(44, 2, GPIO_CFG_INPUT,  GPIO_CFG_NO_PULL, GPIO_CFG_2MA),// CTS //
+  GPIO_CFG(45, 2, GPIO_CFG_INPUT,  GPIO_CFG_NO_PULL, GPIO_CFG_2MA),// Rx //
+  GPIO_CFG(46, 3, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),// Tx //
+  GPIO_CFG(68, 1, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),// PCM_DOUT //
+  GPIO_CFG(69, 1, GPIO_CFG_INPUT,  GPIO_CFG_NO_PULL, GPIO_CFG_2MA),// PCM_DIN //
+  GPIO_CFG(70, 2, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),// PCM_SYNC //
+  GPIO_CFG(71, 2, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),// PCM_CLK //
+  GPIO_CFG(83, 0, GPIO_CFG_INPUT,  GPIO_CFG_NO_PULL, GPIO_CFG_2MA),// HOST_WAKE //
+};*/
+/*static unsigned bt_config_power_off[] = {
+	GPIO_CFG(42, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),	//WAKE 
+	GPIO_CFG(43, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),	//RFR 
+	GPIO_CFG(44, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),	//CTS 
+	GPIO_CFG(45, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),	//Rx 
+	GPIO_CFG(46, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),	//Tx 
+	GPIO_CFG(68, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),	//PCM_DOUT 
+	GPIO_CFG(69, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),	//PCM_DIN 
+	GPIO_CFG(70, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),	//PCM_SYNC 
+	GPIO_CFG(71, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),	//PCM_CLK 
+	GPIO_CFG(83, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),	/// HOST_WAKE 
+	};*/
+/*
 static int bluetooth_power(int on)
 {
 	struct vreg *vreg_bt;
@@ -967,8 +972,8 @@ static int bluetooth_power(int on)
 
 	printk(KERN_DEBUG "%s\n", __func__);
 
-	/* do not have vreg bt defined, gp6 is the same */
-	/* vreg_get parameter 1 (struct device *) is ignored */
+	// do not have vreg bt defined, gp6 is the same 
+	// vreg_get parameter 1 (struct device *) is ignored 
 	vreg_bt = vreg_get(NULL, "gp6");
 
 	if (IS_ERR(vreg_bt)) {
@@ -989,7 +994,7 @@ static int bluetooth_power(int on)
 			}
 		}
 
-		/* units of mV, steps of 50 mV */
+		// units of mV, steps of 50 mV 
 		rc = vreg_set_level(vreg_bt, 2600);
 		if (rc) {
 			printk(KERN_ERR "%s: vreg set level failed (%d)\n",
@@ -1022,13 +1027,13 @@ static int bluetooth_power(int on)
 	}
 	return 0;
 }
-
-static void __init bt_power_init(void)
+*/
+/*static void __init bt_power_init(void)
 {
 	msm_bt_power_device.dev.platform_data = &bluetooth_power;
-}
+	}*/
 #else
-#define bt_power_init(x) do {} while (0)
+ //#define bt_power_init(x) do {} while (0)
 #endif
 
 #ifdef CONFIG_ARCH_MSM7X27
@@ -1067,11 +1072,11 @@ static struct platform_device msm_device_kgsl = {
 };
 #endif
 
-static struct platform_device msm_device_pmic_leds = {
-	.name   = "pmic-leds",
-	.id = -1,
-};
-
+//static struct platform_device msm_device_pmic_leds = {
+//	.name   = "pmic-leds",
+//	.id = -1,
+//};
+/*
 static struct resource bluesleep_resources[] = {
 	{
 		.name	= "gpio_host_wake",
@@ -1099,7 +1104,7 @@ static struct platform_device msm_bluesleep_device = {
 	.num_resources	= ARRAY_SIZE(bluesleep_resources),
 	.resource	= bluesleep_resources,
 };
-
+*/
 static struct i2c_board_info i2c_devices[] = {
 //#ifdef CONFIG_MT9D112
 //	{
@@ -1538,6 +1543,179 @@ static struct platform_device msm_camera_sensor_isx005 = {
 	},
 };
 #endif /*CONFIG_ISX005*/
+
+//BMA150 Support code
+/* MOTION : BMA150  */
+#define GPIO_BMA150_INT             (33)	
+#define GPIO_BMA150_I2C_SDA			(41)
+#define GPIO_BMA150_I2C_SCL			(40)
+#define BMA150_I2C_ADDR             (0x38)
+
+
+	/* GPIO TLMM (Top Level Multiplexing) Definitions */
+
+	/* GPIO TLMM: Function -- GPIO specific */
+	
+	/* GPIO TLMM: Direction */
+	enum {
+		GPIO_INPUT,
+		GPIO_OUTPUT,
+	};
+
+	/* GPIO TLMM: Pullup/Pulldown */
+	enum {
+		GPIO_NO_PULL,
+		GPIO_PULL_DOWN,
+		GPIO_KEEPER,
+		GPIO_PULL_UP,
+	};
+	
+	/* GPIO TLMM: Drive Strength */
+	enum {
+		GPIO_2MA,
+		GPIO_4MA,
+		GPIO_6MA,
+		GPIO_8MA,
+		GPIO_10MA,
+		GPIO_12MA,
+		GPIO_14MA,
+		GPIO_16MA,
+	};
+	
+	enum {
+		GPIO_ENABLE,
+		GPIO_DISABLE,
+	};
+	
+
+static int swift_msensor_poweron()
+{
+  printk("[Swift] poweron sensor\n");
+  return 0;
+}
+static void swift_msensor_powerdown()
+{
+  printk("[Swift] powerdown sensor\n");
+}
+static int swift_msensor_setup()
+{
+  printk("[Swift] msensor setup");
+  return 0;
+}
+
+static struct bma150_platform_data bma_pdata = {
+	.power_on    = swift_msensor_poweron,
+	.power_off =  swift_msensor_powerdown,
+        .setup = swift_msensor_setup,
+};
+
+static struct i2c_gpio_platform_data motion_i2c_gpio_pdata = {
+        .sda_pin = GPIO_BMA150_I2C_SDA,
+	.scl_pin = GPIO_BMA150_I2C_SCL,
+	.sda_is_open_drain = 0,
+	.scl_is_open_drain = 0,
+	.udelay = 2,
+};
+
+#define I2C_BUS_NUM_MOTION              3 
+#define I2C_BUS_NUM_ECOMPASS 		2 
+
+static struct i2c_board_info bma150_board_info[] __initdata = {
+	{
+		I2C_BOARD_INFO("bma150", BMA150_I2C_ADDR),
+		.flags = I2C_CLIENT_WAKE,
+		.irq = MSM_GPIO_TO_INT(GPIO_BMA150_INT),
+		.platform_data = &bma_pdata,
+	},
+	};
+static struct platform_device motion_pdevice = {
+	.name = "i2c-gpio", 
+	.id =  I2C_BUS_NUM_MOTION,
+	.dev.platform_data = &motion_i2c_gpio_pdata,
+};
+void  __init swift_msensor(void)
+{
+	int rc = 0;
+	
+	gpio_tlmm_config(GPIO_CFG(GPIO_BMA150_I2C_SDA,0,GPIO_OUTPUT, GPIO_NO_PULL,GPIO_16MA),GPIO_ENABLE);
+	gpio_tlmm_config(GPIO_CFG(GPIO_BMA150_I2C_SCL,0,GPIO_OUTPUT,GPIO_NO_PULL,GPIO_16MA),GPIO_ENABLE);
+
+	rc = gpio_request(GPIO_BMA150_INT, "motion_int");
+   if (rc < 0) {
+      printk("[swift]failed to gpio %d request(ret=%d)\n", GPIO_BMA150_INT, rc);
+      return;
+   }
+	gpio_direction_input(GPIO_BMA150_INT);
+                
+ rc = i2c_register_board_info(I2C_BUS_NUM_MOTION, bma150_board_info, 1);
+	  if (rc < 0) {
+	 printk("[swift]failed to i2c register board info(busnum=%d, ret=%d)\n",0, rc);
+	  }
+   	rc = platform_device_register(&motion_pdevice);
+        if (rc != 0) {
+            printk("[swift]bma150 register device failed  \n");
+
+	 return;
+       }
+
+}
+// AK8976A - 3 -axos accel
+#define GPIO_ECOMPASS_INT			   (18)	
+#define GPIO_ECOMPASS_I2C_SDA 		(31)
+#define GPIO_ECOMPASS_I2C_SCL 		(30)
+#define ECOMPASS_I2C_ADDR           (0x1C)
+
+
+static struct i2c_gpio_platform_data ecompass_i2c_gpio_pdata = {
+	.sda_pin = GPIO_ECOMPASS_I2C_SDA,
+	.scl_pin = GPIO_ECOMPASS_I2C_SCL,
+	.sda_is_open_drain = 0,
+	.scl_is_open_drain = 0,
+	.udelay = 2,
+};
+
+static struct platform_device ecompass_pdevice = {
+	.name = "i2c-gpio", 
+	.id = I2C_BUS_NUM_ECOMPASS,
+	.dev.platform_data = &ecompass_i2c_gpio_pdata,
+};
+
+static struct i2c_board_info ecompass_i2c_bdinfo[] = {
+	{
+		I2C_BOARD_INFO("akm8973", ECOMPASS_I2C_ADDR),
+		.irq = MSM_GPIO_TO_INT(GPIO_ECOMPASS_INT),
+		.flags = I2C_CLIENT_WAKE,
+	},
+};
+
+void __init swift_accel(void)
+{
+	int rc = 0;
+
+   	gpio_tlmm_config(GPIO_CFG(GPIO_ECOMPASS_I2C_SDA,0,GPIO_OUTPUT, GPIO_NO_PULL,GPIO_16MA),GPIO_ENABLE);
+	gpio_tlmm_config(GPIO_CFG(GPIO_ECOMPASS_I2C_SCL,0,GPIO_OUTPUT,GPIO_NO_PULL,GPIO_16MA),GPIO_ENABLE);
+
+	rc = gpio_request(GPIO_ECOMPASS_INT, "compass_int");
+   if (rc < 0) {
+      printk("[swift] compas,failed to gpio %d request(ret=%d)\n", GPIO_ECOMPASS_INT, rc);
+      return;
+   }
+	gpio_direction_input(GPIO_ECOMPASS_INT);
+
+	rc = i2c_register_board_info(I2C_BUS_NUM_ECOMPASS, ecompass_i2c_bdinfo, 1);
+   if (rc < 0) {
+      printk("[swfit] compas,failed to i2c register board info(busnum=%d, ret=%d)\n", I2C_BUS_NUM_ECOMPASS, rc);
+      return;
+   }
+
+	rc = platform_device_register(&ecompass_pdevice);
+   if (rc != 0) {
+      printk("[swift] compas,failed to register motion platform device(ret=%d)\n", rc);
+   }
+}
+
+
+
 static struct platform_device *devices[] __initdata = {
 	&msm_device_uart3,
 	&msm_device_smd,
@@ -1584,24 +1762,24 @@ static struct platform_device *devices[] __initdata = {
 //	&msm_device_pmic_leds,
 	&msm_device_snd,
 	&msm_device_adspdec,
-//#ifdef CONFIG_MT9T013
-//	&msm_camera_sensor_mt9t013,
-//#endif
-//#ifdef CONFIG_MT9D112
-//	&msm_camera_sensor_mt9d112,
-//#endif
-//#ifdef CONFIG_S5K3E2FX
-//	&msm_camera_sensor_s5k3e2fx,
-//#endif
-//#ifdef CONFIG_MT9P012
-//	&msm_camera_sensor_mt9p012,
-//#endif
-//#ifdef CONFIG_MT9P012_KM
-//	&msm_camera_sensor_mt9p012_km,
-//#endif
-//#ifdef CONFIG_VB6801
-//	&msm_camera_sensor_vb6801,
-//#endif
+#ifdef CONFIG_MT9T013
+	&msm_camera_sensor_mt9t013,
+#endif
+#ifdef CONFIG_MT9D112
+	&msm_camera_sensor_mt9d112,
+#endif
+#ifdef CONFIG_S5K3E2FX
+	&msm_camera_sensor_s5k3e2fx,
+#endif
+#ifdef CONFIG_MT9P012
+	&msm_camera_sensor_mt9p012,
+#endif
+#ifdef CONFIG_MT9P012_KM
+	&msm_camera_sensor_mt9p012_km,
+#endif
+#ifdef CONFIG_VB6801
+	&msm_camera_sensor_vb6801,
+#endif
 	//&msm_bluesleep_device,
 //#ifdef CONFIG_ARCH_MSM7X27
 	/*HW 3D Suppot*/
@@ -2162,9 +2340,13 @@ static void __init msm7x2x_init(void)
 	msm7x27_wlan_init();
 	printk(KERN_INFO "Init swift btpower...\n");
 	swift_add_btpower_devices();
-	printk(KERN_INFO "Init swift timed vibrator ...\n");
+	printk(KERN_INFO "Init swift timed vibrator...\n");
 	swift_init_timed_vibrator();
-	
+	printk(KERN_INFO "Init swift montion sensor BOSCH BMA150....\n");
+        swift_msensor();
+	printk(KERN_INFO "Init swift accel...\n");
+	swift_accel();
+
 	
 }
 

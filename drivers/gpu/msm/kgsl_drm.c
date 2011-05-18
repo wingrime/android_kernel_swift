@@ -138,11 +138,12 @@ void kgsl_gpu_mem_flush(void)
 
 /* TODO:
  * Add vsync wait */
-
-static int kgsl_library_name(struct drm_device *dev, char *buf)
+//Obsolute
+/*static int kgsl_library_name(struct drm_device *dev, char *buf)
 {
 	return snprintf(buf, PAGE_SIZE, "yamato");
 }
+*/
 
 static int kgsl_drm_load(struct drm_device *dev, unsigned long flags)
 {
@@ -783,7 +784,7 @@ int msm_drm_gem_mmap(struct file *filp, struct vm_area_struct *vma)
 		return drm_mmap(filp, vma);
 	}
 
-	map = drm_hash_entry(hash, struct drm_map_list, hash)->map;
+	map = (struct drm_map *) drm_hash_entry(hash, struct drm_map_list, hash)->map;
 	if (!map ||
 	    ((map->flags & _DRM_RESTRICTED) && !capable(CAP_SYS_ADMIN))) {
 		ret =  -EPERM;
@@ -873,7 +874,7 @@ static struct drm_driver driver = {
 		 .owner = THIS_MODULE,
 		 .open = drm_open,
 		 .release = drm_release,
-		 .ioctl = drm_ioctl,
+		 .unlocked_ioctl =  drm_ioctl,
 		 .mmap = msm_drm_gem_mmap,
 		 .poll = drm_poll,
 		 .fasync = drm_fasync,

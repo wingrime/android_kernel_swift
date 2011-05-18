@@ -127,7 +127,7 @@ static struct hsd_info *hi;
 
 enum {
    NO_DEVICE   = 0,
-   LGE_HEADSET = 1,
+   LGE_HEADSET = 1, 
 };
 
 #define LGE_HEADSET_DETECT_GPIO  29

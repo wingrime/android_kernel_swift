@@ -41,12 +41,12 @@ static const unsigned short keypad_virtual_keys[] = {
 	KEY_POWER
 };
 
-static int keypad_gpio_event_matrix_func(struct input_dev *input_dev,
-					  struct gpio_event_info *info,
-					  void **data, int func);
+//static int keypad_gpio_event_matrix_func(struct input_dev *input_dev,
+//					  struct gpio_event_info *info,
+//					  void **data, int func);
 
 struct gpio_event_matrix_info swift_keypad_matrix_info = {
-	.info.func	= keypad_gpio_event_matrix_func,
+	.info.func	= gpio_event_matrix_func,
 	.keymap		= keypad_keymap_swift,
 	.output_gpios	= keypad_col_gpios_swift,
 	.input_gpios	= keypad_row_gpios_swift,
@@ -84,6 +84,8 @@ struct platform_device keypad_device_swift = {
 
 static struct input_dev *keypad_dev;
 
+/*
+SET TO DEFAULT
 static int keypad_gpio_event_matrix_func(struct input_dev *input_dev,
 					  struct gpio_event_info *info,
 					  void **data, int func)
@@ -104,6 +106,7 @@ static int keypad_gpio_event_matrix_func(struct input_dev *input_dev,
 
 	return err;
 }
+*/
 
 struct input_dev *msm_keypad_get_input_dev(void)
 {

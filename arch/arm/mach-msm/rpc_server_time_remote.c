@@ -14,7 +14,6 @@
  * GNU General Public License for more details.
  *
  */
-
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/err.h>
@@ -43,7 +42,7 @@ static int read_rtc0_time(struct msm_rpc_server *server,
 		   struct rpc_request_hdr *req,
 		   unsigned len)
 {
-	int err;
+ 	int  err;
 	unsigned long tm_sec;
 	uint32_t size = 0;
 	void *reply;
@@ -101,7 +100,7 @@ send_reply:
 static int handle_rpc_call(struct msm_rpc_server *server,
 			   struct rpc_request_hdr *req, unsigned len)
 {
-	struct timespec ts, tv;
+  //  struct timespec ts;//, tv;
 
 	switch (req->procedure) {
 	case RPC_TIME_REMOTE_MTOA_NULL:

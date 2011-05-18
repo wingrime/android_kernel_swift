@@ -82,6 +82,7 @@ struct display_table {
 	unsigned int val_list[5];
 };
 
+/*
 static struct display_table mddi_innotek_display_on[] = {
 #if 1
 	{0x29, 1, {0x00000000}},
@@ -93,7 +94,9 @@ static struct display_table mddi_innotek_display_on[] = {
 //	{REGFLAG_END_OF_TABLE, 0x00, {}}
 #endif
 };
+*/
 
+/*
 static struct display_table mddi_innotek_display_off[] = {
 #if 1
 	{0x28, 1, {0x00000000}},
@@ -106,7 +109,7 @@ static struct display_table mddi_innotek_display_off[] = {
 //	{REGFLAG_END_OF_TABLE, 0x00, {}}
 #endif
 };
-
+*/
 static struct display_table mddi_innotek_power_on[] = {
 #if 1
 	/* Power on Sequence */
@@ -287,10 +290,8 @@ static void display_table(struct display_table *table, unsigned int count)
 		//case REGFLAG_END_OF_TABLE :
 			//break;
 		default:
-			mddi_host_register_cmd_write(reg, table[i].count, table[i].val_list,
-					0, 0, 0);
-		       printk(KERN_INFO, "reg : %x, val : 0x%X.\n",
-					reg, table[i].val_list[0]);
+			mddi_host_register_cmd_write(reg, table[i].count, 
+					   table[i].val_list,0, 0, 0);
                break;
        	}
     }
@@ -428,14 +429,16 @@ static int innotek_panel_hw_reset(void)
 	return 0;
 }
 
-static int mddi_ss_driveric_display_on(struct msm_fb_data_type *mfd)
+/*static int mddi_ss_driveric_display_on(struct msm_fb_data_type *mfd)
 {
 	ss_driveric_state = SS_POWER_ON;
 	display_table(mddi_innotek_display_on, ARRAY_SIZE(mddi_innotek_display_on));
 
 	return 0;
 }
+*/
 
+ /*
 static int mddi_ss_driveric_display_off(struct msm_fb_data_type *mfd)
 {
 	ss_driveric_state = SS_POWER_OFF;
@@ -443,7 +446,7 @@ static int mddi_ss_driveric_display_off(struct msm_fb_data_type *mfd)
 
 	return 0;
 }
-
+ */
 static int mddi_ss_driveric_innotek_powerdown(struct msm_fb_data_type *mfd)
 {
 
@@ -462,7 +465,7 @@ static int mddi_ss_driveric_innotek_poweron(struct msm_fb_data_type *mfd)
 	return 0;
 }
 
-int mddi_ss_driveric_innotek_position(void)
+extern int mddi_ss_driveric_innotek_position(void)
 {
 	display_table(mddi_innotek_position, ARRAY_SIZE(mddi_innotek_position));
 	return 0;
@@ -529,8 +532,8 @@ static int mddi_ss_driveric_on(struct platform_device *pdev)
 
 static int mddi_ss_driveric_off(struct platform_device *pdev)
 {
-	struct vreg *vreg;
-	unsigned int ret=0;
+  //struct vreg *vreg;
+	//unsigned int ret=0;
 
 	printk(KERN_INFO  "%s\n", __func__);
 	mddi_ss_driveric_powerdown(platform_get_drvdata(pdev));
@@ -559,19 +562,17 @@ static int mddi_ss_driveric_off(struct platform_device *pdev)
 }
 
 #ifdef CONFIG_FB_BACKLIGHT
-int rt9393_set_intensity(struct backlight_device * bd);
+extern   int rt9393_set_intensity(struct backlight_device * bd);
 
-static int
-mddi_ss_driveric_set_backlight(struct msm_fb_data_type * mfd)
+static void  mddi_ss_driveric_set_backlight(struct msm_fb_data_type * mfd)
 {
-        struct backlight_device *bd;
+  struct backlight_device *bd = NULL;;
         bd->props.brightness = mfd->bl_level;
 
-        printk(KERN_INFO  "[sungwoo] bl_level : %d \n", mfd->bl_level);
+        printk(KERN_INFO  "[swift] Backlight  Set level %d \n", mfd->bl_level);
         
         rt9393_set_intensity(bd);
         
-        return 0;
 }
 #endif
 

@@ -671,15 +671,15 @@ void mddi_host_register_cmd_write(unsigned reg_addr, unsigned count, unsigned in
 	regacc_pkt_ptr->register_address = reg_addr;
 //	regacc_pkt_ptr->register_data_list = reg_val;
 		
-	data_list = &regacc_pkt_ptr->register_data_list;
+	data_list = (unsigned *)  &regacc_pkt_ptr->register_data_list;
 	
    for (i = 0; i < count; i++) {
       data_list[i] = reg_val[i];
    }
-	
-	MDDI_MSG_DEBUG("Reg Access write reg=0x%x, value=0x%x\n",
-		       regacc_pkt_ptr->register_address,
-		       regacc_pkt_ptr->register_data_list);
+    	
+   	MDDI_MSG_DEBUG("Reg Access write reg=0x%x, value=0x%x\n",
+   		       regacc_pkt_ptr->register_address,
+   		       (unsigned int)  regacc_pkt_ptr->register_data_list);
 
 	
 	regacc_pkt_ptr = &curr_llist_dma_ptr->packet_header.register_pkt;

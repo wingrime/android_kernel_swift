@@ -350,7 +350,7 @@ static int isx005_pwdn(const struct msm_camera_sensor_info *dev, int value)
 static long isx005_snapshot_config(int mode)
 {
 	int32_t rc;
-	unsigned short picture_width, picture_height;
+	//	unsigned short picture_width, picture_height;
 	//TODO FIX ME
 	
 	printk("TODO: Add snapsnop config params\n");
@@ -1233,7 +1233,7 @@ static int32_t isx005_set_wb(int8_t wb)
 
 	return 0;
 }
-
+/*
 static int32_t isx005_set_iso_indoor_50hz(int8_t iso){
 	
 	int32_t rc;
@@ -1335,8 +1335,9 @@ static int32_t isx005_set_iso_indoor_60hz(int8_t iso){
 	}
 	return rc;
 }
+*/
 
-static int32_t isx005_set_iso(int8_t iso)
+/*static int32_t isx005_set_iso(int8_t iso)
 {
 	int32_t rc;
 	
@@ -1441,6 +1442,7 @@ static int32_t isx005_set_iso(int8_t iso)
 		
 	return rc;
 }
+*/
 
 static int32_t isx005_set_scene_mode(int8_t mode)
 {
@@ -2097,12 +2099,12 @@ static void isx005_sysfs_add(struct kobject* kobj)
 /*  end :  sysf                                                                         */
 /*======================================================================================*/
 
-int isx005_sensor_release(const struct msm_camera_sensor_info *info)
+int isx005_sensor_release(void)
 {
 	if(isx005_ctrl)
 		kfree(isx005_ctrl);
 	isx005_ctrl=NULL;
-	
+	//todo add powerdown routine
 	return 0;
 }
 
@@ -2159,8 +2161,9 @@ static struct i2c_driver isx005_i2c_driver = {
 static int isx005_sensor_probe(const struct msm_camera_sensor_info *info,
 				struct msm_sensor_ctrl *s)
 {
+        int rc;
 	isx005_sensor_power_enable();
-	int rc = i2c_add_driver(&isx005_i2c_driver);
+	rc = i2c_add_driver(&isx005_i2c_driver);
 	
 	if (rc < 0 || isx005_client == NULL) {
 		rc = -ENOTSUPP;

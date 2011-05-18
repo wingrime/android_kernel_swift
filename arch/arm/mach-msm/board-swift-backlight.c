@@ -24,7 +24,7 @@
 #include <linux/delay.h>
 //#include <linux/fs.h>
 
-#if defined(CONFIG_RT9393_MSG_DEBUG)
+#if 0 // defined(CONFIG_RT9393_MSG_DEBUG)
 enum {
 	BL_DEBUG_DATA = 1U << 6,
 	BL_DEBUG_FUNC = 1U << 7, /* function debug*/
@@ -37,8 +37,7 @@ module_param_named(debug_mask, lge_bl_debug_mask, int,
 
 #define KNIGHT_DBG(mask, fmt, args...) \
 	do {\
-		if ((mask) & lge_bl_debug_mask) \
-				printk(KERN_INFO "[MC] [%-18s:%5d] " \
+		printk(KERN_INFO "[MC] [%-18s:%5d] " \
 					fmt, __func__, __LINE__, ## args);\
 		} while (0)
 #else
@@ -102,7 +101,8 @@ static void bl_timer(unsigned long arg)
 static int rt9393_send_intensity(struct backlight_device *bd)
 {
 	int i, circular;
-	int next_intensity = bd->props.brightness;
+	int next_intensity;
+	next_intensity = bd->props.brightness;
 
 	KNIGHT_DBG(lge_bl_debug_mask, "set value = %d, current value = %d \n",
 			next_intensity, current_intensity);
@@ -172,11 +172,13 @@ static int rt9393_get_intensity(struct backlight_device *bd)
 	return current_intensity;
 }
 
-static int rt9393_set_intensity(struct backlight_device *bd)
+extern int rt9393_set_intensity(struct backlight_device *bd)
 {
-	rt9393_send_intensity(bd);
+	rt9393_send_intensity( bd   );
 	return 0;
 }
+
+EXPORT_SYMBOL(rt9393_set_intensity);
 
 static struct backlight_ops rt9393_ops = {
 	.get_brightness = rt9393_get_intensity,
@@ -185,14 +187,14 @@ static struct backlight_ops rt9393_ops = {
 
 #if defined(CONFIG_RT9393_SYS_DEBUG)
 ssize_t brightness_show(struct device *dev, struct device_attribute *attr, char *buf)
-{
-	return sprintf(buf, "%d", current_intensity);
+{       
+      return sprintf(buf, "%d", current_intensity);
 }
 
 ssize_t brightness_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
 {
 	int value=0;
-
+	printl("[Swift] store brigtness \n");
 	sscanf(buf, "%d\n", &value);
 	KNIGHT_DBG(lge_bl_debug_mask, "set value from sysfile system %d\n", value);
 	bd->props.brightness = value;
@@ -227,9 +229,10 @@ DEVICE_ATTR(gpio, 0664, gpio_no_show, NULL);
 
 static int rt9393_probe(struct platform_device *pdev)
 {
-  printk("PROBING BACKLIGHT\n");
+ 
 	int err;
 	struct backlight_properties props;
+	printk("[swift] probing bl\n");
 	err = gpio_request(GPIO_BL_EN, 0);
 
 	if (err < 0 ) {

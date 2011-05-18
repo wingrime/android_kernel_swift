@@ -3612,7 +3612,7 @@ EXPORT_SYMBOL(sub_preempt_count);
 /*
  * Print scheduling while atomic bug:
  */
-static noinline void __schedule_bug(struct task_struct *prev)
+/*static noinline void __schedule_bug(struct task_struct *prev)
 {
 	struct pt_regs *regs = get_irq_regs();
 
@@ -3629,7 +3629,7 @@ static noinline void __schedule_bug(struct task_struct *prev)
 	else
 		dump_stack();
 }
-
+*/
 /*
  * Various schedule()-time debugging checks and statistics:
  */

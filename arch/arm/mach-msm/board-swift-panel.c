@@ -218,7 +218,7 @@ err_close_file:
 #define TOUCH_CAL_SET_DATA   	   _IOWR(TOUCH_CAL_IOC_MAGIC, 0x01, int[8])
 #define TOUCH_CAL_TOUCH_KEY_MODE   _IOWR(TOUCH_CAL_IOC_MAGIC, 0x02, int)
 
-static int touch_cal_open(struct inode *inode, struct file *file)
+/*static int touch_cal_open(struct inode *inode, struct file *file)
 {	   
 	 int status = 0;
 
@@ -234,9 +234,9 @@ static int touch_cal_release(struct inode *inode, struct file *file)
 
 static int touch_cal_ioctl(struct inode *inode, struct file *file, unsigned int cmd,unsigned long arg)
 {
-	void __user *argp = (void __user *)arg;
+  //void __user *argp = (void __user *)arg;
 	int cal_data[8] = {0,};
-	int current_cal_mode = 0;
+	//int current_cal_mode = 0;
 	int i;
 	int x1 = 0, y1 = 0, x2 = 0, y2 = 0, x3 = 0, y3 = 0, x4 = 0, y4 = 0;
 
@@ -249,11 +249,11 @@ static int touch_cal_ioctl(struct inode *inode, struct file *file, unsigned int 
 
 		ts_calibration_for_touch_key_region(TOUCH_KEY_FILENAME, cal_data);
 
-		/*
-		if (copy_from_user(&cal_data[0], argp, sizeof(cal_data))){
-			return -ENODEV;
-		}
-		*/
+		//
+		//if (copy_from_user(&cal_data[0], argp, sizeof(cal_data))){
+		//	return -ENODEV;
+			//}
+		
 
 		for(i=0 ; i < 8 ; i++)
 			printk("[SWIFT TOUCH CAL](%d) cal_data:%d\n", i, cal_data[i]);  
@@ -291,9 +291,9 @@ static int touch_cal_ioctl(struct inode *inode, struct file *file, unsigned int 
 		}
 
 		menu_x = x1 - ((x4 - x1) * 100 / 541);
-		menu_y = y2 + ((y2 - y1) * 100 / 841); /* 567 */
+		menu_y = y2 + ((y2 - y1) * 100 / 841); // 567 
 		back_x = x4 + ((x4 - x1) * 100 / 541);
-		back_y = y3 + ((y3 - y4) * 100 / 841); /* 567 */
+		back_y = y3 + ((y3 - y4) * 100 / 841); // 567 
 	
 		if (!menu_x || !menu_y || !back_x || !back_y) {
 			menu_x = MENU_KEY_X;
@@ -314,19 +314,19 @@ static int touch_cal_ioctl(struct inode *inode, struct file *file, unsigned int 
 
 	return 0;
 }
-
-static struct file_operations touch_cal_fops = {
+*/
+/*static struct file_operations touch_cal_fops = {
 	.owner	  = THIS_MODULE,
 	.open	  = touch_cal_open,
 	.release  = touch_cal_release,
 	.ioctl	  = touch_cal_ioctl,
-};
+	};*/
 
-static struct miscdevice touch_cal_misc_device = {
+/*static struct miscdevice touch_cal_misc_device = {
 	.minor	  = MISC_DYNAMIC_MINOR,
 	.name	  = "swift_tssc_cal",
 	.fops	  = &touch_cal_fops,
-};
+	};*/
 #endif
 
 static int ts_check_region(struct ts *ts, int x, int y, int pressure)
@@ -693,7 +693,7 @@ fail_ioremap:
 	release_mem_region(res->start, resource_size(res));
 fail_alloc_mem:
 #if defined(TS_KEY_CALMODE)
-fail_misc_device_register_failed:
+	//fail_misc_device_register_failed:
 #endif
 	input_free_device(input_dev);
 	kfree(ts);

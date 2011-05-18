@@ -418,7 +418,7 @@ static struct rtc_class_ops msm_rtc_ops_secure = {
 static void process_cb_request(void *buffer)
 {
 	struct rtc_cb_recv *rtc_cb = buffer;
-	struct timespec ts, tv;
+	//	struct timespec ts, tv;
 
 	rtc_cb->client_cb_id = be32_to_cpu(rtc_cb->client_cb_id);
 	rtc_cb->event = be32_to_cpu(rtc_cb->event);

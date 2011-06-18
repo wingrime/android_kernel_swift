@@ -42,7 +42,8 @@ static int bluetooth_toggle_radio(void *data, bool blocked)
 	power_control = data;
 	if (previous != blocked)
 		ret = (*power_control)(!blocked);
-	previous = blocked;
+	if (!ret)
+		previous = blocked;
 	return ret;
 }
 

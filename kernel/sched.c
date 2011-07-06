@@ -7562,9 +7562,6 @@ static int update_sched_domains(struct notifier_block *nfb,
 {
 	switch (action) {
 	case CPU_ONLINE:
-	case CPU_ONLINE_FROZEN:
-	case CPU_DOWN_PREPARE:
-	case CPU_DOWN_PREPARE_FROZEN:
 	case CPU_DOWN_FAILED:
 	case CPU_DOWN_FAILED_FROZEN:
 		partition_sched_domains(1, NULL, NULL);

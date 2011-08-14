@@ -186,6 +186,9 @@ obj-$(CONFIG_MACH_MSM7X27_SWIFT)  += board-swift-vibrator.o
 obj-$(CONFIG_MACH_MSM7X27_SWIFT)  += board-swift-ec-ak8973.o
 #
 #aobj-$(CONFIG_MACH_MSM7X27_SWIFT)  += 
+#lge ats kernel module stud
+obj-$(CONFIG_MACH_MSM7X27_SWIFT) += board-swift-lge-ats.o
+
 
 
 obj-$(CONFIG_TROUT_BATTCHG) += htc_battery.o

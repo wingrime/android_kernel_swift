@@ -1542,6 +1542,10 @@ static struct platform_device msm_camera_sensor_isx005 = {
 		.platform_data = &msm_camera_sensor_isx005_data,
 	},
 };
+
+static struct platform_device swift_atcmd = {
+    .name = "alohag_atcmd",
+};
 #endif /*CONFIG_ISX005*/
 
 //BMA150 Support code
@@ -1803,6 +1807,7 @@ static struct platform_device *devices[] __initdata = {
 	&mddi_ss_driveric_device,	
 	&swift_backlight_device,
 	&swift_keyled_device,
+	&swift_atcmd,
 };
 
 static struct msm_panel_common_pdata mdp_pdata = {

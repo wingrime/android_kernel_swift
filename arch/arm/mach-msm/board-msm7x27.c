@@ -1682,7 +1682,7 @@ static struct platform_device ecompass_pdevice = {
 
 static struct i2c_board_info ecompass_i2c_bdinfo[] = {
 	{
-		I2C_BOARD_INFO("akm8973", ECOMPASS_I2C_ADDR),
+		I2C_BOARD_INFO("swift-akm8973", ECOMPASS_I2C_ADDR),
 		.irq = MSM_GPIO_TO_INT(GPIO_ECOMPASS_INT),
 		.flags = I2C_CLIENT_WAKE,
 	},
@@ -1691,7 +1691,7 @@ static struct i2c_board_info ecompass_i2c_bdinfo[] = {
 void __init swift_accel(void)
 {
 	int rc = 0;
-
+     
    	gpio_tlmm_config(GPIO_CFG(GPIO_ECOMPASS_I2C_SDA,0,GPIO_OUTPUT, GPIO_NO_PULL,GPIO_16MA),GPIO_ENABLE);
 	gpio_tlmm_config(GPIO_CFG(GPIO_ECOMPASS_I2C_SCL,0,GPIO_OUTPUT,GPIO_NO_PULL,GPIO_16MA),GPIO_ENABLE);
 
@@ -1747,44 +1747,50 @@ static struct platform_device *devices[] __initdata = {
 #endif
 	&msm_device_i2c,
 	&smc91x_device,
+	
 	&msm_device_swift_touchscreen, 
 	&android_pmem_kernel_ebi1_device,
 	&android_pmem_device,
+	// Swift shared dsp with radio
 	&android_pmem_adsp_device,
+	// Swift shared audio mem with radio
 	&android_pmem_audio_device,
+	// Swift framebuffer 
 	&msm_fb_device,
-
 	//&lcdc_gordon_panel_device,
+	// Swift ??
 	&msm_device_uart_dm1,
 	//#ifdef CONFIG_BT
 	//	&msm_bt_power_device,
 	//#endif
 //	&msm_device_pmic_leds,
+	//Swift AUDIO
 	&msm_device_snd,
+	// Swift  DSP
 	&msm_device_adspdec,
 #ifdef CONFIG_MT9T013
-	&msm_camera_sensor_mt9t013,
+	//	&msm_camera_sensor_mt9t013,
 #endif
 #ifdef CONFIG_MT9D112
-	&msm_camera_sensor_mt9d112,
+	//	&msm_camera_sensor_mt9d112,
 #endif
 #ifdef CONFIG_S5K3E2FX
-	&msm_camera_sensor_s5k3e2fx,
+	//	&msm_camera_sensor_s5k3e2fx,
 #endif
 #ifdef CONFIG_MT9P012
-	&msm_camera_sensor_mt9p012,
+	//	&msm_camera_sensor_mt9p012,
 #endif
 #ifdef CONFIG_MT9P012_KM
-	&msm_camera_sensor_mt9p012_km,
+	//	&msm_camera_sensor_mt9p012_km,
 #endif
 #ifdef CONFIG_VB6801
-	&msm_camera_sensor_vb6801,
+	//	&msm_camera_sensor_vb6801,
 #endif
 	//&msm_bluesleep_device,
 //#ifdef CONFIG_ARCH_MSM7X27
 	/*HW 3D Suppot*/
 	&msm_device_kgsl,
-	/*ISX005 Camera*/
+	/*Swift Camera*/
 #ifdef CONFIG_ISX005
 	&msm_camera_sensor_isx005,
 #endif /*CONFIG_ISX005*/	

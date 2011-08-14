@@ -182,6 +182,10 @@ obj-$(CONFIG_MACH_SAPPHIRE) += board-sapphire-rfkill.o msm_vibrator.o
 obj-$(CONFIG_MACH_MSM7X27_SWIFT)  += keypad-swift.o board-swift-panel.o board-swift-backlight.o
 obj-$(CONFIG_MACH_MSM7X27_SWIFT)  += board-swift-bt.o board-swift-keylight.o board-swift-headset.o
 obj-$(CONFIG_MACH_MSM7X27_SWIFT)  += board-swift-vibrator.o
+# ec sensor
+obj-$(CONFIG_MACH_MSM7X27_SWIFT)  += board-swift-ec-ak8973.o
+#
+#aobj-$(CONFIG_MACH_MSM7X27_SWIFT)  += 
 
 
 obj-$(CONFIG_TROUT_BATTCHG) += htc_battery.o

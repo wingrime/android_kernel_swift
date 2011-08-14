@@ -26,7 +26,7 @@
 #include <sound/pcm.h>
 #include <sound/initval.h>
 #include <sound/soc.h>
-#include "dai.h"
+#include <sound/dai.h>
 
 static int msm_cpu_dai_startup(struct snd_pcm_substream *substream,
 				struct snd_soc_dai *dai)

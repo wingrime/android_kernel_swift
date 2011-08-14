@@ -29,11 +29,10 @@
 #include <sound/core.h>
 #include <sound/soc.h>
 #include <sound/soc-dapm.h>
-
 #include <sound/pcm.h>
-#include "msm8660-pcm.h"
-#include "dai.h"
+#include <sound/dai.h>
 #include "../codecs/wm8994.h"
+#include "msm8660-pcm.h"
 
 #define PM8058_GPIO_BASE			NR_MSM_GPIOS
 #define PM8901_GPIO_BASE			(PM8058_GPIO_BASE + \

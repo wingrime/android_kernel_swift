@@ -313,7 +313,7 @@ static int msm_strobe_flash_xenon_init(
 			goto go_out;
 		}
 		rc = request_irq(sfdata->irq, strobe_flash_charge_ready_irq,
-			IRQF_TRIGGER_FALLING, "charge_ready", sfdata);
+			IRQF_TRIGGER_RISING, "charge_ready", sfdata);
 		if (rc < 0) {
 			pr_err("%s: request_irq failed %d\n", __func__, rc);
 			goto go_out;

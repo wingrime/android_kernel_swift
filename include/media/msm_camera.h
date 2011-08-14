@@ -439,6 +439,8 @@ struct msm_frame {
 	uint32_t error_code;
 	struct fd_roi_info roi_info;
 	uint32_t frame_id;
+	int stcam_quality_ind;
+	uint32_t stcam_conv_value;
 };
 
 enum msm_st_frame_packing {
@@ -476,8 +478,21 @@ struct msm_st_frame {
 
 #define MSM_CAMERA_ERR_MASK (0xFFFFFFFF & 1)
 
+struct stats_buff {
+	unsigned long buff;
+	int fd;
+};
+
 struct msm_stats_buf {
+	struct stats_buff aec;
+	struct stats_buff awb;
+	struct stats_buff af;
+	struct stats_buff ihist;
+	struct stats_buff rs;
+	struct stats_buff cs;
+	struct stats_buff skin;
 	int type;
+	uint32_t status_bits;
 	unsigned long buffer;
 	int fd;
 	uint32_t frame_id;

@@ -320,6 +320,8 @@ struct audio_mvs_info_type {
 
 struct audio_voip_info_type {
 	enum audio_mvs_state_type state;
+	enum audio_mvs_state_type playback_state;
+	enum audio_mvs_state_type capture_state;
 
 	unsigned int pcm_playback_size;
 	unsigned int pcm_count;

@@ -80,8 +80,10 @@ int boot_secondary(unsigned int cpu, struct task_struct *idle)
 			sc1_base_ptr = ioremap_nocache(0x00902000, SZ_4K*2);
 			if (sc1_base_ptr) {
 				writel(0x0, sc1_base_ptr+0x15A0);
+				dmb();
 				writel(0x0, sc1_base_ptr+0xD80);
 				writel(0x3, sc1_base_ptr+0xE64);
+				dsb();
 				iounmap(sc1_base_ptr);
 			}
 		} else
@@ -133,6 +135,8 @@ void platform_secondary_init(unsigned int cpu)
 	 */
 	if (!machine_is_msm8x60_sim())
 		writel(0x0000FFFF, MSM_QGIC_DIST_BASE + GIC_DIST_ENABLE_SET);
+
+	dsb();
 
 	/*
 	 * setup GIC (GIC number NOT CPU number and the base address of the

@@ -39,7 +39,6 @@
 #define RPCROUTER_ROUTER_ADDRESS		0xfffffffe
 
 #define RPCROUTER_PID_LOCAL			1
-#define RPCROUTER_PID_REMOTE			0
 
 #define RPCROUTER_CTRL_CMD_DATA			1
 #define RPCROUTER_CTRL_CMD_HELLO		2
@@ -227,7 +226,6 @@ enum write_data_type {
 struct rpcrouter_xprt {
 	char *name;
 	void *priv;
-	int closed_for_reset;
 
 	int (*read_avail)(void);
 	int (*read)(void *data, uint32_t len);

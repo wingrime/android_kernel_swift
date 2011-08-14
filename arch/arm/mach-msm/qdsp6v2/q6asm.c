@@ -93,6 +93,7 @@ static void q6asm_session_free(struct audio_client *ac)
 	mutex_lock(&session_lock);
 	session[ac->session] = 0;
 	mutex_unlock(&session_lock);
+	ac->session = 0;
 	return;
 }
 
@@ -160,7 +161,7 @@ int q6asm_audio_client_buf_free_contiguous(unsigned int dir,
 		cnt = port->max_buf_cnt - 1;
 
 		if (cnt >= 0) {
-			rc = q6asm_memory_unmap(ac, port->buf[0].size, dir);
+			rc = q6asm_memory_unmap(ac, port->buf[0].phys, dir);
 			if (rc < 0)
 				pr_err("%s CMD Memory_unmap_regions failed\n",
 								__func__);
@@ -463,8 +464,11 @@ static int32_t q6asm_mmapcallback(struct apr_client_data *data, void *priv)
 	uint32_t *payload = data->payload;
 
 	if (data->opcode == RESET_EVENTS) {
-		pr_debug("q6asm_mmapcallback: Reset event is received: %d %d\n",
-				data->reset_event, data->reset_proc);
+		pr_debug("%s: Reset event is received: %d %d apr[%p]\n",
+				__func__,
+				data->reset_event,
+				data->reset_proc,
+				this_mmap.apr);
 		apr_reset(this_mmap.apr);
 		this_mmap.apr = NULL;
 		atomic_set(&this_mmap.cmd_state, 0);
@@ -513,13 +517,18 @@ static int32_t q6asm_callback(struct apr_client_data *data, void *priv)
 		pr_err("ac or priv NULL\n");
 		return -EINVAL;
 	}
+	if (ac->session <= 0 || ac->session > 8) {
+		pr_err("%s:Session ID is invalid, session = %d\n", __func__,
+			ac->session);
+		return -EINVAL;
+	}
+
 	payload = data->payload;
 
 	if (data->opcode == RESET_EVENTS) {
+		pr_debug("q6asm_callback: Reset event is received: %d %d apr[%p]\n",
+				data->reset_event, data->reset_proc, ac->apr);
 		apr_reset(ac->apr);
-		q6asm_session_free(ac);
-		pr_debug("q6asm_callback: Reset event is received: %d %d\n",
-				data->reset_event, data->reset_proc);
 		return 0;
 	}
 
@@ -548,7 +557,7 @@ static int32_t q6asm_callback(struct apr_client_data *data, void *priv)
 		if (token != ac->session) {
 			pr_err("%s:Invalid session[%d] rxed expected[%d]",
 					__func__, token, ac->session);
-			break;
+			return -EINVAL;
 		}
 		case ASM_STREAM_CMD_OPEN_READ:
 		case ASM_STREAM_CMD_OPEN_WRITE:
@@ -1037,7 +1046,7 @@ int q6asm_run_nowait(struct audio_client *ac, uint32_t flags,
 		return -EINVAL;
 	}
 	pr_debug("session[%d]", ac->session);
-	q6asm_add_hdr(ac, &run.hdr, sizeof(run), TRUE);
+	q6asm_add_hdr_async(ac, &run.hdr, sizeof(run), TRUE);
 
 	run.hdr.opcode = ASM_SESSION_CMD_RUN;
 	run.flags    = flags;
@@ -1851,6 +1860,66 @@ fail_cmd:
 	return rc;
 }
 
+int q6asm_set_softpause(struct audio_client *ac,
+			struct asm_softpause_params *pause_param)
+{
+	void *vol_cmd = NULL;
+	void *payload = NULL;
+	struct asm_pp_params_command *cmd = NULL;
+	struct asm_softpause_params *params = NULL;
+	int sz = 0;
+	int rc  = 0;
+
+	sz = sizeof(struct asm_pp_params_command) +
+		+ sizeof(struct asm_softpause_params);
+	vol_cmd = kzalloc(sz, GFP_KERNEL);
+	if (vol_cmd == NULL) {
+		pr_err("%s[%d]: Mem alloc failed\n", __func__, ac->session);
+		rc = -EINVAL;
+		return rc;
+	}
+	cmd = (struct asm_pp_params_command *)vol_cmd;
+	q6asm_add_hdr_async(ac, &cmd->hdr, sz, TRUE);
+	cmd->hdr.opcode = ASM_STREAM_CMD_SET_PP_PARAMS;
+	cmd->payload = NULL;
+	cmd->payload_size = sizeof(struct  asm_pp_param_data_hdr) +
+				sizeof(struct asm_softpause_params);
+	cmd->params.module_id = VOLUME_CONTROL_MODULE_ID;
+	cmd->params.param_id = SOFT_PAUSE_PARAM_ID;
+	cmd->params.param_size = sizeof(struct asm_softpause_params);
+	cmd->params.reserved = 0;
+
+	payload = (u8 *)(vol_cmd + sizeof(struct asm_pp_params_command));
+	params = (struct asm_softpause_params *)payload;
+
+	params->enable = pause_param->enable;
+	params->period = pause_param->period;
+	params->step = pause_param->step;
+	params->rampingcurve = pause_param->rampingcurve;
+	pr_debug("%s: soft Pause Command: enable = %d, period = %d,"
+			 "step = %d, curve = %d\n", __func__, params->enable,
+			 params->period, params->step, params->rampingcurve);
+	rc = apr_send_pkt(ac->apr, (uint32_t *) vol_cmd);
+	if (rc < 0) {
+		pr_err("%s: Volume Command(soft_pause) failed\n", __func__);
+		rc = -EINVAL;
+		goto fail_cmd;
+	}
+
+	rc = wait_event_timeout(ac->cmd_wait,
+			(atomic_read(&ac->cmd_state) == 0), 5*HZ);
+	if (!rc) {
+		pr_err("%s: timeout in sending volume command(soft_pause)"
+		       "to apr\n", __func__);
+		rc = -EINVAL;
+		goto fail_cmd;
+	}
+	rc = 0;
+fail_cmd:
+	kfree(vol_cmd);
+	return rc;
+}
+
 int q6asm_equalizer(struct audio_client *ac, void *eq)
 {
 	void *eq_cmd = NULL;
@@ -2365,7 +2434,7 @@ int q6asm_cmd_nowait(struct audio_client *ac, int cmd)
 		pr_err("%s:APR handle NULL\n", __func__);
 		return -EINVAL;
 	}
-	q6asm_add_hdr(ac, &hdr, sizeof(hdr), TRUE);
+	q6asm_add_hdr_async(ac, &hdr, sizeof(hdr), TRUE);
 	switch (cmd) {
 	case CMD_PAUSE:
 		pr_debug("%s:CMD_PAUSE\n", __func__);

@@ -415,8 +415,15 @@ static int32_t imx074_set_fps(struct fps_cfg	*fps)
 	int32_t rc = 0;
 	imx074_ctrl->fps_divider = fps->fps_div;
 	imx074_ctrl->pict_fps_divider = fps->pict_fps_div;
-	total_lines_per_frame = (uint16_t)(((IMX074_QTR_SIZE_HEIGHT +
-		IMX074_VER_QTR_BLK_LINES) * imx074_ctrl->fps_divider) / 0x400);
+	if (imx074_ctrl->curr_res  == QTR_SIZE) {
+		total_lines_per_frame = (uint16_t)(((IMX074_QTR_SIZE_HEIGHT +
+			IMX074_VER_QTR_BLK_LINES) *
+			imx074_ctrl->fps_divider) / 0x400);
+	} else {
+		total_lines_per_frame = (uint16_t)(((IMX074_FULL_SIZE_HEIGHT +
+			IMX074_VER_FULL_BLK_LINES) *
+			imx074_ctrl->pict_fps_divider) / 0x400);
+	}
 	if (imx074_i2c_write_b_sensor(REG_FRAME_LENGTH_LINES_HI,
 		((total_lines_per_frame & 0xFF00) >> 8)) < 0)
 		return rc;

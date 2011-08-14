@@ -121,7 +121,7 @@ struct msm_adc_aio_result {
  * modem driver.
  */
 #define MSM_ADC_AIO_READ		_IOR(MSM_ADC_IOCTL_CODE, 5,	\
-					     struct msm_adc_aio_result)
+					     struct adc_chan_result)
 
 struct msm_adc_lookup {
 	/* channel name (input) */

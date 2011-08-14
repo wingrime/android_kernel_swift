@@ -112,6 +112,7 @@ struct msm_gemini_buf {
 	uint32_t cbcr_len;
 
 	uint32_t num_of_mcu_rows;
+	uint32_t offset;
 };
 
 #define MSM_GEMINI_HW_CMD_TYPE_READ      0

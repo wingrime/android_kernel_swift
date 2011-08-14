@@ -45,7 +45,7 @@
 #define MND		1 /* Integer predivider and fractional MN:D divider. */
 #define BASIC		2 /* Integer divider. */
 #define NORATE		3 /* Just on/off. */
-#define RESET		4 /* Reset only. */
+#define NOENABLE	4 /* No branch to enable (reset or measurement only). */
 
 /*
  * IDs for invalid sources, source selects, and XOs

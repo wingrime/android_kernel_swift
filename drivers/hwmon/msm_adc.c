@@ -185,9 +185,11 @@ static int data_avail(struct msm_client_data *client, uint32_t *pending)
 static int msm_adc_release(struct inode *inode, struct file *file)
 {
 	struct msm_client_data *client = file->private_data;
-	struct dal_conv_slot *slot, *tmp;
-	struct dal_conv_state *conv_s;
+	struct adc_conv_slot *slot, *tmp;
 	int rc;
+	struct msm_adc_platform_data *pdata =
+					msm_adc_drv->pdev->dev.platform_data;
+	struct msm_adc_channels *channel = pdata->channel;
 
 	module_put(THIS_MODULE);
 
@@ -216,11 +218,10 @@ static int msm_adc_release(struct inode *inode, struct file *file)
 	 * appropriate devices.
 	 */
 	list_for_each_entry_safe(slot, tmp, &client->complete_list, list) {
-		conv_s = container_of(slot, struct dal_conv_state,
-					      context[slot->idx]);
 		slot->client = NULL;
 		list_del(&slot->list);
-		msm_adc_restore_slot(conv_s, slot);
+		channel[slot->conv.result.chan].adc_access_fn->adc_restore_slot(
+		channel[slot->conv.result.chan].adc_dev_instance, slot);
 	}
 
 	kfree(client);
@@ -292,21 +293,37 @@ static int msm_adc_getinputproperties(struct msm_adc_drv *msm_adc,
 static int msm_adc_lookup(struct msm_adc_drv *msm_adc,
 			  struct msm_adc_lookup *lookup)
 {
-	struct platform_device *pdev = msm_adc->pdev;
+	struct msm_adc_platform_data *pdata = msm_adc->pdev->dev.platform_data;
 	struct adc_dev_spec target;
-	int rc;
+	int rc = 0, i = 0;
+	uint32_t len = 0;
 
-	rc = msm_adc_getinputproperties(msm_adc, lookup->name, &target);
-	if (rc) {
-		dev_err(&pdev->dev, "Lookup failed for %s\n", lookup->name);
-		return rc;
+	len = strnlen(lookup->name, MSM_ADC_MAX_CHAN_STR);
+	while (i < pdata->num_chan_supported) {
+		if (strncmp(lookup->name, pdata->channel[i].name, len))
+			i++;
+		else
+			break;
 	}
 
-	rc = msm_adc_translate_hwmon_to_dal(msm_adc, &target,
+	if (pdata->num_chan_supported > 0 && i < pdata->num_chan_supported) {
+		lookup->chan_idx = i;
+	} else if (msm_adc->dev_h) {
+		rc = msm_adc_getinputproperties(msm_adc, lookup->name, &target);
+		if (rc) {
+			pr_err("%s: Lookup failed for %s\n", __func__,
+				lookup->name);
+			return rc;
+		}
+		rc = msm_adc_translate_hwmon_to_dal(msm_adc, &target,
 						&lookup->chan_idx);
-	if (rc)
-		dev_err(&pdev->dev, "Translation failed for %s\n",
+		if (rc)
+			pr_err("%s: Translation failed for %s\n", __func__,
 						lookup->name);
+	} else {
+		pr_err("%s: Lookup failed for %s\n", __func__, lookup->name);
+		rc = -EINVAL;
+	}
 	return rc;
 }
 
@@ -367,10 +384,12 @@ static int msm_adc_fluid_hw_init(struct msm_adc_drv *msm_adc)
 	if (!epm_init)
 		return -EINVAL;
 
+	if (!pdata->adc_fluid_enable)
+		return -ENODEV;
+
 	printk(KERN_DEBUG "msm_adc_fluid_hw_init: Calling adc_fluid_enable.\n");
 
-	if (pdata->gpio_config == APROC_CONFIG &&
-		!epm_fluid_enabled && pdata->adc_fluid_enable != NULL) {
+	if (pdata->gpio_config == APROC_CONFIG && !epm_fluid_enabled) {
 		pdata->adc_fluid_enable();
 		epm_fluid_enabled = true;
 	}
@@ -388,7 +407,7 @@ static int msm_adc_poll_complete(struct msm_adc_drv *msm_adc,
 	 * Don't proceed if there there's nothing queued on this client.
 	 * We could deadlock otherwise in a single threaded scenario.
 	 */
-	if (no_pending_client_requests(client))
+	if (no_pending_client_requests(client) && !data_avail(client, pending))
 		return -EDEADLK;
 
 	rc = wait_event_interruptible(client->data_wait,
@@ -401,18 +420,21 @@ static int msm_adc_poll_complete(struct msm_adc_drv *msm_adc,
 
 static int msm_adc_read_result(struct msm_adc_drv *msm_adc,
 			       struct msm_client_data *client,
-			       struct msm_adc_aio_result *result)
+			       struct adc_chan_result *result)
 {
-	struct dal_conv_slot *slot;
-	struct dal_conv_state *conv_s;
+	struct msm_adc_platform_data *pdata = msm_adc->pdev->dev.platform_data;
+	struct msm_adc_channels *channel = pdata->channel;
+	struct adc_conv_slot *slot;
 	int rc = 0;
 
 	mutex_lock(&client->lock);
 
 	slot = list_first_entry(&client->complete_list,
-				struct dal_conv_slot, list);
-	if (!slot)
+				struct adc_conv_slot, list);
+	if (!slot) {
+		mutex_unlock(&client->lock);
 		return -ENOMSG;
+	}
 
 	slot->client = NULL;
 	list_del(&slot->list);
@@ -421,17 +443,11 @@ static int msm_adc_read_result(struct msm_adc_drv *msm_adc,
 
 	mutex_unlock(&client->lock);
 
-	result->chan = slot->chan_idx;
-	result->result = slot->result.physical;
-
-	if (slot->result.status == DAL_RESULT_STATUS_INVALID)
-		rc = -ENODATA;
-
-	conv_s = container_of(slot, struct dal_conv_state,
-					      context[slot->idx]);
+	*result = slot->conv.result;
 
 	/* restore this slot to reserve */
-	msm_adc_restore_slot(conv_s, slot);
+	channel[slot->conv.result.chan].adc_access_fn->adc_restore_slot(
+		channel[slot->conv.result.chan].adc_dev_instance, slot);
 
 	return rc;
 }
@@ -517,7 +533,7 @@ static long msm_adc_ioctl(struct file *file, unsigned int cmd,
 		}
 	case MSM_ADC_AIO_READ:
 		{
-			struct msm_adc_aio_result result;
+			struct adc_chan_result result;
 
 			rc = msm_adc_read_result(msm_adc, client, &result);
 			if (rc) {
@@ -526,7 +542,7 @@ static long msm_adc_ioctl(struct file *file, unsigned int cmd,
 			}
 
 			if (copy_to_user((void __user *)arg, &result,
-					sizeof(struct msm_adc_aio_result)))
+					sizeof(struct adc_chan_result)))
 				return -EFAULT;
 			break;
 		}

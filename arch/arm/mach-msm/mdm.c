@@ -34,15 +34,23 @@
 #include <linux/smp_lock.h>
 #include <linux/completion.h>
 #include <linux/workqueue.h>
+#include <linux/clk.h>
+#include <linux/mfd/pmic8058.h>
 #include <asm/mach-types.h>
 #include <asm/uaccess.h>
+#include <asm/clkdev.h>
 #include <mach/mdm.h>
 #include <mach/restart.h>
+#include <mach/subsystem_notif.h>
 #include <mach/subsystem_restart.h>
+#include <mach/msm_serial_hs_lite.h>
 #include <linux/msm_charm.h>
 #include "msm_watchdog.h"
+#include "devices.h"
+#include "clock.h"
 
-#define CHARM_MODEM_TIMEOUT	2000
+#define CHARM_MODEM_TIMEOUT	6000
+#define CHARM_HOLD_TIME		4000
 #define CHARM_MODEM_DELTA	100
 
 static void (*power_on_charm)(void);
@@ -79,7 +87,7 @@ static void charm_enable_irqs(void)
 	enable_irq(charm_status_irq);
 }
 
-static int charm_subsys_shutdown(void)
+static int charm_subsys_shutdown(const char * const crashed_subsys)
 {
 	charm_disable_irqs();
 	power_down_charm();
@@ -87,7 +95,7 @@ static int charm_subsys_shutdown(void)
 	return 0;
 }
 
-static int charm_subsys_powerup(void)
+static int charm_subsys_powerup(const char * const crashed_subsys)
 {
 	power_on_charm();
 	boot_type = CHARM_NORMAL_BOOT;
@@ -99,7 +107,8 @@ static int charm_subsys_powerup(void)
 	return charm_boot_status;
 }
 
-static int charm_subsys_ramdumps(int want_dumps)
+static int charm_subsys_ramdumps(int want_dumps,
+					const char * const crashed_subsys)
 {
 	charm_ram_dump_status = 0;
 	if (want_dumps) {
@@ -133,6 +142,7 @@ static struct notifier_block charm_panic_blk = {
 	.notifier_call  = charm_panic_prep,
 };
 
+static int first_boot = 1;
 
 static long charm_modem_ioctl(struct file *filp, unsigned int cmd,
 				unsigned long arg)
@@ -164,7 +174,12 @@ static long charm_modem_ioctl(struct file *filp, unsigned int cmd,
 			charm_boot_status = -EIO;
 		else
 			charm_boot_status = 0;
-		complete(&charm_boot);
+		charm_ready = 1;
+
+		if (!first_boot)
+			complete(&charm_boot);
+		else
+			first_boot = 0;
 		break;
 	case RAM_DUMP_DONE:
 		CHARM_DBG("%s: charm done collecting RAM dumps\n", __func__);
@@ -178,8 +193,9 @@ static long charm_modem_ioctl(struct file *filp, unsigned int cmd,
 	case WAIT_FOR_RESTART:
 		CHARM_DBG("%s: wait for charm to need images reloaded\n",
 				__func__);
-		wait_for_completion(&charm_needs_reload);
-		put_user(boot_type, (unsigned long __user *) arg);
+		ret = wait_for_completion_interruptible(&charm_needs_reload);
+		if (!ret)
+			put_user(boot_type, (unsigned long __user *) arg);
 		INIT_COMPLETION(charm_needs_reload);
 		break;
 	default:
@@ -222,6 +238,8 @@ static DECLARE_WORK(charm_status_work, charm_status_fn);
 static void charm_fatal_fn(struct work_struct *work)
 {
 	pr_info("Reseting the charm due to an errfatal\n");
+	if (get_restart_level() == RESET_SOC)
+		pm8058_stay_on();
 	subsystem_restart("external_modem");
 }
 
@@ -245,7 +263,6 @@ static irqreturn_t charm_status_change(int irq, void *dev_id)
 		queue_work(charm_queue, &charm_status_work);
 	} else if (gpio_get_value(MDM2AP_STATUS) == 1) {
 		CHARM_DBG("%s: charm is now ready\n", __func__);
-		charm_ready = 1;
 	}
 	return IRQ_HANDLED;
 }
@@ -279,6 +296,27 @@ static int charm_debugfs_init(void)
 	return 0;
 }
 
+static int gsbi9_uart_notifier_cb(struct notifier_block *this,
+					unsigned long code, void *_cmd)
+{
+
+	switch (code) {
+	case SUBSYS_AFTER_SHUTDOWN:
+		platform_device_unregister(msm_device_uart_gsbi9);
+		msm_device_uart_gsbi9 = msm_add_gsbi9_uart();
+		if (IS_ERR(msm_device_uart_gsbi9))
+			pr_err("%s(): Failed to create uart gsbi9 device\n",
+								__func__);
+	default:
+		break;
+	}
+	return NOTIFY_DONE;
+}
+
+static struct notifier_block gsbi9_nb = {
+	.notifier_call = gsbi9_uart_notifier_cb,
+};
+
 static int __init charm_modem_probe(struct platform_device *pdev)
 {
 	int ret, irq;
@@ -290,9 +328,11 @@ static int __init charm_modem_probe(struct platform_device *pdev)
 	gpio_request(AP2MDM_PMIC_RESET_N, "AP2MDM_PMIC_RESET_N");
 	gpio_request(MDM2AP_STATUS, "MDM2AP_STATUS");
 	gpio_request(MDM2AP_ERRFATAL, "MDM2AP_ERRFATAL");
+	gpio_request(AP2MDM_WAKEUP, "AP2MDM_WAKEUP");
 
 	gpio_direction_output(AP2MDM_STATUS, 1);
 	gpio_direction_output(AP2MDM_ERRFATAL, 0);
+	gpio_direction_output(AP2MDM_WAKEUP, 0);
 	gpio_direction_input(MDM2AP_STATUS);
 	gpio_direction_input(MDM2AP_ERRFATAL);
 
@@ -355,6 +395,8 @@ errfatal_err:
 	charm_status_irq = irq;
 
 status_err:
+	subsys_notif_register_notifier("external_modem", &gsbi9_nb);
+
 	pr_info("%s: Registering charm modem\n", __func__);
 
 	return misc_register(&charm_modem_misc);
@@ -393,19 +435,26 @@ static void charm_modem_shutdown(struct platform_device *pdev)
 	charm_disable_irqs();
 
 	gpio_set_value(AP2MDM_STATUS, 0);
+	gpio_set_value(AP2MDM_WAKEUP, 1);
 
-	for (i = 0; i < CHARM_MODEM_TIMEOUT; i += CHARM_MODEM_DELTA) {
+	for (i = CHARM_MODEM_TIMEOUT; i > 0; i -= CHARM_MODEM_DELTA) {
 		pet_watchdog();
 		msleep(CHARM_MODEM_DELTA);
 		if (gpio_get_value(MDM2AP_STATUS) == 0)
 			break;
 	}
 
-	if (i >= CHARM_MODEM_TIMEOUT) {
+	if (i <= 0) {
 		pr_err("%s: MDM2AP_STATUS never went low.\n",
 			 __func__);
+		gpio_direction_output(AP2MDM_PMIC_RESET_N, 1);
+		for (i = CHARM_HOLD_TIME; i > 0; i -= CHARM_MODEM_DELTA) {
+			pet_watchdog();
+			msleep(CHARM_MODEM_DELTA);
+		}
 		gpio_direction_output(AP2MDM_PMIC_RESET_N, 0);
 	}
+	gpio_set_value(AP2MDM_WAKEUP, 0);
 }
 
 static struct platform_driver charm_modem_driver = {

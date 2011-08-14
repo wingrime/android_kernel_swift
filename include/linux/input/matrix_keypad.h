@@ -66,6 +66,7 @@ struct matrix_keypad_platform_data {
 	bool		active_low;
 	bool		wakeup;
 	bool		no_autorepeat;
+	bool		qt_check;
 };
 
 /**

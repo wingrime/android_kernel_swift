@@ -120,6 +120,14 @@ enum {
 	QUP_STATUS_ERROR_FLAGS     = 0x7C,
 };
 
+/* Master status clock states */
+enum {
+	I2C_CLK_RESET_BUSIDLE_STATE	= 0,
+	I2C_CLK_FORCED_LOW_STATE	= 5,
+};
+
+#define QUP_MAX_CLK_STATE_RETRIES	300
+
 struct qup_i2c_dev {
 	struct device                *dev;
 	void __iomem                 *base;		/* virtual */
@@ -276,6 +284,30 @@ qup_i2c_poll_writeready(struct qup_i2c_dev *dev, int rem)
 	return -ETIMEDOUT;
 }
 
+static int qup_i2c_poll_clock_ready(struct qup_i2c_dev *dev)
+{
+	uint32_t retries = 0;
+
+	/*
+	 * Wait for the clock state to transition to either IDLE or FORCED
+	 * LOW.  This will usually happen within one cycle of the i2c clock.
+	 */
+
+	while (retries++ < QUP_MAX_CLK_STATE_RETRIES) {
+		uint32_t status = readl_relaxed(dev->base + QUP_I2C_STATUS);
+		uint32_t clk_state = (status >> 13) & 0x7;
+
+		if (clk_state == I2C_CLK_RESET_BUSIDLE_STATE ||
+				clk_state == I2C_CLK_FORCED_LOW_STATE)
+			return 0;
+		/* 1-bit delay before we check again */
+		udelay(dev->one_bit_t);
+	}
+
+	dev_err(dev->dev, "Error waiting for clk ready\n");
+	return -ETIMEDOUT;
+}
+
 static int
 qup_i2c_poll_state(struct qup_i2c_dev *dev, uint32_t state)
 {
@@ -415,6 +447,12 @@ qup_issue_write(struct qup_i2c_dev *dev, struct i2c_msg *msg, int rem,
 				writel(((last_entry | msg->buf[dev->pos]) |
 					((1 | QUP_OUT_NOP) << 16)), dev->base +
 					QUP_OUT_FIFO_BASE);/* + (*idx) - 2); */
+
+				qup_verify_fifo(dev,
+					((last_entry | msg->buf[dev->pos]) |
+					((1 | QUP_OUT_NOP) << 16)),
+					(uint32_t)dev->base +
+					QUP_OUT_FIFO_BASE + (*idx), 0);
 				*idx += 2;
 			} else if (next->flags == 0 && dev->pos == msg->len - 1
 					&& *idx < (dev->wr_sz*2)) {
@@ -677,8 +715,7 @@ qup_i2c_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[], int num)
 						 * same address
 						 */
 						struct i2c_msg *next = msgs + 1;
-						if (next->addr != msgs->addr ||
-							next->flags == 0)
+						if (next->addr != msgs->addr)
 							filled = true;
 						else {
 							rem--;
@@ -767,6 +804,11 @@ qup_i2c_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[], int num)
 				dev->pos = 0;
 			}
 			if (rem) {
+				err = qup_i2c_poll_clock_ready(dev);
+				if (err < 0) {
+					ret = err;
+					goto out_err;
+				}
 				err = qup_update_state(dev, QUP_RESET_STATE);
 				if (err < 0) {
 					ret = err;

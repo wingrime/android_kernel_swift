@@ -251,7 +251,7 @@ static struct regulator_init_data saw_s0_init_data = {
 		.constraints = {
 			.valid_ops_mask = REGULATOR_CHANGE_VOLTAGE,
 			.min_uV = 840000,
-			.max_uV = 1200000,
+			.max_uV = 1250000,
 		},
 		.num_consumer_supplies = 1,
 		.consumer_supplies = &saw_s0_supply,
@@ -261,7 +261,7 @@ static struct regulator_init_data saw_s1_init_data = {
 		.constraints = {
 			.valid_ops_mask = REGULATOR_CHANGE_VOLTAGE,
 			.min_uV = 840000,
-			.max_uV = 1200000,
+			.max_uV = 1250000,
 		},
 		.num_consumer_supplies = 1,
 		.consumer_supplies = &saw_s1_supply,
@@ -944,6 +944,317 @@ static void config_camera_off_gpios_web_cam(void)
 	gpio_free(GPIO_WEB_CAMIF_STANDBY);
 }
 
+#ifdef CONFIG_MSM_BUS_SCALING
+static struct msm_bus_vectors cam_init_vectors[] = {
+	{
+		.src = MSM_BUS_MASTER_VFE,
+		.dst = MSM_BUS_SLAVE_SMI,
+		.ab  = 0,
+		.ib  = 0,
+	},
+	{
+		.src = MSM_BUS_MASTER_VFE,
+		.dst = MSM_BUS_SLAVE_EBI_CH0,
+		.ab  = 0,
+		.ib  = 0,
+	},
+	{
+		.src = MSM_BUS_MASTER_VPE,
+		.dst = MSM_BUS_SLAVE_SMI,
+		.ab  = 0,
+		.ib  = 0,
+	},
+	{
+		.src = MSM_BUS_MASTER_VPE,
+		.dst = MSM_BUS_SLAVE_EBI_CH0,
+		.ab  = 0,
+		.ib  = 0,
+	},
+	{
+		.src = MSM_BUS_MASTER_JPEG_ENC,
+		.dst = MSM_BUS_SLAVE_SMI,
+		.ab  = 0,
+		.ib  = 0,
+	},
+	{
+		.src = MSM_BUS_MASTER_JPEG_ENC,
+		.dst = MSM_BUS_SLAVE_EBI_CH0,
+		.ab  = 0,
+		.ib  = 0,
+	},
+};
+
+static struct msm_bus_vectors cam_preview_vectors[] = {
+	{
+		.src = MSM_BUS_MASTER_VFE,
+		.dst = MSM_BUS_SLAVE_SMI,
+		.ab  = 0,
+		.ib  = 0,
+	},
+	{
+		.src = MSM_BUS_MASTER_VFE,
+		.dst = MSM_BUS_SLAVE_EBI_CH0,
+		.ab  = 283115520,
+		.ib  = 452984832 * 2,
+	},
+	{
+		.src = MSM_BUS_MASTER_VPE,
+		.dst = MSM_BUS_SLAVE_SMI,
+		.ab  = 0,
+		.ib  = 0,
+	},
+	{
+		.src = MSM_BUS_MASTER_VPE,
+		.dst = MSM_BUS_SLAVE_EBI_CH0,
+		.ab  = 0,
+		.ib  = 0,
+	},
+	{
+		.src = MSM_BUS_MASTER_JPEG_ENC,
+		.dst = MSM_BUS_SLAVE_SMI,
+		.ab  = 0,
+		.ib  = 0,
+	},
+	{
+		.src = MSM_BUS_MASTER_JPEG_ENC,
+		.dst = MSM_BUS_SLAVE_EBI_CH0,
+		.ab  = 0,
+		.ib  = 0,
+	},
+};
+
+static struct msm_bus_vectors cam_video_vectors[] = {
+	{
+		.src = MSM_BUS_MASTER_VFE,
+		.dst = MSM_BUS_SLAVE_SMI,
+		.ab  = 283115520,
+		.ib  = 452984832,
+	},
+	{
+		.src = MSM_BUS_MASTER_VFE,
+		.dst = MSM_BUS_SLAVE_EBI_CH0,
+		.ab  = 283115520,
+		.ib  = 452984832 * 2,
+	},
+	{
+		.src = MSM_BUS_MASTER_VPE,
+		.dst = MSM_BUS_SLAVE_SMI,
+		.ab  = 319610880,
+		.ib  = 511377408,
+	},
+	{
+		.src = MSM_BUS_MASTER_VPE,
+		.dst = MSM_BUS_SLAVE_EBI_CH0,
+		.ab  = 0,
+		.ib  = 0,
+	},
+	{
+		.src = MSM_BUS_MASTER_JPEG_ENC,
+		.dst = MSM_BUS_SLAVE_SMI,
+		.ab  = 0,
+		.ib  = 0,
+	},
+	{
+		.src = MSM_BUS_MASTER_JPEG_ENC,
+		.dst = MSM_BUS_SLAVE_EBI_CH0,
+		.ab  = 0,
+		.ib  = 0,
+	},
+};
+
+static struct msm_bus_vectors cam_snapshot_vectors[] = {
+	{
+		.src = MSM_BUS_MASTER_VFE,
+		.dst = MSM_BUS_SLAVE_SMI,
+		.ab  = 566231040,
+		.ib  = 905969664,
+	},
+	{
+		.src = MSM_BUS_MASTER_VFE,
+		.dst = MSM_BUS_SLAVE_EBI_CH0,
+		.ab  = 69984000,
+		.ib  = 111974400,
+	},
+	{
+		.src = MSM_BUS_MASTER_VPE,
+		.dst = MSM_BUS_SLAVE_SMI,
+		.ab  = 0,
+		.ib  = 0,
+	},
+	{
+		.src = MSM_BUS_MASTER_VPE,
+		.dst = MSM_BUS_SLAVE_EBI_CH0,
+		.ab  = 0,
+		.ib  = 0,
+	},
+	{
+		.src = MSM_BUS_MASTER_JPEG_ENC,
+		.dst = MSM_BUS_SLAVE_SMI,
+		.ab  = 320864256,
+		.ib  = 513382810,
+	},
+	{
+		.src = MSM_BUS_MASTER_JPEG_ENC,
+		.dst = MSM_BUS_SLAVE_EBI_CH0,
+		.ab  = 320864256,
+		.ib  = 513382810,
+	},
+};
+
+static struct msm_bus_vectors cam_zsl_vectors[] = {
+	{
+		.src = MSM_BUS_MASTER_VFE,
+		.dst = MSM_BUS_SLAVE_SMI,
+		.ab  = 566231040,
+		.ib  = 905969664,
+	},
+	{
+		.src = MSM_BUS_MASTER_VFE,
+		.dst = MSM_BUS_SLAVE_EBI_CH0,
+		.ab  = 706199040,
+		.ib  = 1129918464,
+	},
+	{
+		.src = MSM_BUS_MASTER_VPE,
+		.dst = MSM_BUS_SLAVE_SMI,
+		.ab  = 0,
+		.ib  = 0,
+	},
+	{
+		.src = MSM_BUS_MASTER_VPE,
+		.dst = MSM_BUS_SLAVE_EBI_CH0,
+		.ab  = 0,
+		.ib  = 0,
+	},
+	{
+		.src = MSM_BUS_MASTER_JPEG_ENC,
+		.dst = MSM_BUS_SLAVE_SMI,
+		.ab  = 320864256,
+		.ib  = 513382810,
+	},
+	{
+		.src = MSM_BUS_MASTER_JPEG_ENC,
+		.dst = MSM_BUS_SLAVE_EBI_CH0,
+		.ab  = 320864256,
+		.ib  = 513382810,
+	},
+};
+
+static struct msm_bus_vectors cam_stereo_video_vectors[] = {
+	{
+		.src = MSM_BUS_MASTER_VFE,
+		.dst = MSM_BUS_SLAVE_SMI,
+		.ab  = 212336640,
+		.ib  = 339738624,
+	},
+	{
+		.src = MSM_BUS_MASTER_VFE,
+		.dst = MSM_BUS_SLAVE_EBI_CH0,
+		.ab  = 25090560,
+		.ib  = 40144896,
+	},
+	{
+		.src = MSM_BUS_MASTER_VPE,
+		.dst = MSM_BUS_SLAVE_SMI,
+		.ab  = 239708160,
+		.ib  = 383533056,
+	},
+	{
+		.src = MSM_BUS_MASTER_VPE,
+		.dst = MSM_BUS_SLAVE_EBI_CH0,
+		.ab  = 79902720,
+		.ib  = 127844352,
+	},
+	{
+		.src = MSM_BUS_MASTER_JPEG_ENC,
+		.dst = MSM_BUS_SLAVE_SMI,
+		.ab  = 0,
+		.ib  = 0,
+	},
+	{
+		.src = MSM_BUS_MASTER_JPEG_ENC,
+		.dst = MSM_BUS_SLAVE_EBI_CH0,
+		.ab  = 0,
+		.ib  = 0,
+	},
+};
+
+static struct msm_bus_vectors cam_stereo_snapshot_vectors[] = {
+	{
+		.src = MSM_BUS_MASTER_VFE,
+		.dst = MSM_BUS_SLAVE_SMI,
+		.ab  = 0,
+		.ib  = 0,
+	},
+	{
+		.src = MSM_BUS_MASTER_VFE,
+		.dst = MSM_BUS_SLAVE_EBI_CH0,
+		.ab  = 300902400,
+		.ib  = 481443840,
+	},
+	{
+		.src = MSM_BUS_MASTER_VPE,
+		.dst = MSM_BUS_SLAVE_SMI,
+		.ab  = 230307840,
+		.ib  = 368492544,
+	},
+	{
+		.src = MSM_BUS_MASTER_VPE,
+		.dst = MSM_BUS_SLAVE_EBI_CH0,
+		.ab  = 245113344,
+		.ib  = 392181351,
+	},
+	{
+		.src = MSM_BUS_MASTER_JPEG_ENC,
+		.dst = MSM_BUS_SLAVE_SMI,
+		.ab  = 106536960,
+		.ib  = 170459136,
+	},
+	{
+		.src = MSM_BUS_MASTER_JPEG_ENC,
+		.dst = MSM_BUS_SLAVE_EBI_CH0,
+		.ab  = 106536960,
+		.ib  = 170459136,
+	},
+};
+
+static struct msm_bus_paths cam_bus_client_config[] = {
+	{
+		ARRAY_SIZE(cam_init_vectors),
+		cam_init_vectors,
+	},
+	{
+		ARRAY_SIZE(cam_preview_vectors),
+		cam_preview_vectors,
+	},
+	{
+		ARRAY_SIZE(cam_video_vectors),
+		cam_video_vectors,
+	},
+	{
+		ARRAY_SIZE(cam_snapshot_vectors),
+		cam_snapshot_vectors,
+	},
+	{
+		ARRAY_SIZE(cam_zsl_vectors),
+		cam_zsl_vectors,
+	},
+	{
+		ARRAY_SIZE(cam_stereo_video_vectors),
+		cam_stereo_video_vectors,
+	},
+	{
+		ARRAY_SIZE(cam_stereo_snapshot_vectors),
+		cam_stereo_snapshot_vectors,
+	},
+};
+
+static struct msm_bus_scale_pdata cam_bus_client_pdata = {
+		cam_bus_client_config,
+		ARRAY_SIZE(cam_bus_client_config),
+		.name = "msm_camera",
+};
+#endif
 static struct msm_camera_device_platform_data msm_camera_device_data = {
 	.camera_gpio_on  = config_camera_on_gpios,
 	.camera_gpio_off = config_camera_off_gpios,
@@ -952,6 +1263,9 @@ static struct msm_camera_device_platform_data msm_camera_device_data = {
 	.ioext.csiirq = CSI_0_IRQ,
 	.ioclk.mclk_clk_rate = 24000000,
 	.ioclk.vfe_clk_rate  = 228570000,
+#ifdef CONFIG_MSM_BUS_SCALING
+	.cam_bus_scale_table = &cam_bus_client_pdata,
+#endif
 };
 
 static struct msm_camera_device_platform_data msm_camera_device_data_web_cam = {
@@ -962,6 +1276,9 @@ static struct msm_camera_device_platform_data msm_camera_device_data_web_cam = {
 	.ioext.csiirq = CSI_1_IRQ,
 	.ioclk.mclk_clk_rate = 24000000,
 	.ioclk.vfe_clk_rate  = 228570000,
+#ifdef CONFIG_MSM_BUS_SCALING
+	.cam_bus_scale_table = &cam_bus_client_pdata,
+#endif
 };
 
 static struct resource msm_camera_resources[] = {
@@ -1189,13 +1506,22 @@ static struct msm_i2c_ssbi_platform_data msm_ssbi3_pdata = {
 #define MSM_FB_DSUB_PMEM_ADDER (0)
 #endif
 
+#ifdef CONFIG_FB_MSM_TRIPLE_BUFFER
+/* prim = 1376 x 768 x 4(bpp) x 3(pages) */
+#define MSM_FB_PRIM_BUF_SIZE 0xC18000
+#else
+/* prim = 1376 x 768 x 4(bpp) x 2(pages) */
+#define MSM_FB_PRIM_BUF_SIZE 0x810000
+#endif
+
 #ifdef CONFIG_FB_MSM_HDMI_MSM_PANEL
 /* prim = 1376 x 768 x 4(bpp) x 2(pages)
  * hdmi = 1920 x 1080 x 2(bpp) x 1(page)
  * Note: must be multiple of 4096 */
-#define MSM_FB_SIZE roundup(0x810000 + 0x3F4800 + MSM_FB_DSUB_PMEM_ADDER, 4096)
+#define MSM_FB_SIZE \
+	roundup(MSM_FB_PRIM_BUF_SIZE + 0x3F4800 + MSM_FB_DSUB_PMEM_ADDER, 4096)
 #else /* CONFIG_FB_MSM_HDMI_MSM_PANEL */
-#define MSM_FB_SIZE roundup(0x810000 + MSM_FB_DSUB_PMEM_ADDER, 4096)
+#define MSM_FB_SIZE roundup(MSM_FB_PRIM_BUF_SIZE + MSM_FB_DSUB_PMEM_ADDER, 4096)
 #endif /* CONFIG_FB_MSM_HDMI_MSM_PANEL */
 #define MSM_PMEM_SF_SIZE 0x4000000 /* 64 Mbytes */
 
@@ -1537,7 +1863,6 @@ static struct msm_charger_platform_data msm_charger_data = {
 	.update_time	= 1,
 	.max_voltage	= 4200,
 	.min_voltage	= 3200,
-	.resume_voltage = 4100,
 };
 
 static struct platform_device msm_charger_device = {
@@ -1754,9 +2079,9 @@ static struct rpm_vreg_pdata rpm_vreg_init_pdata[RPM_VREG_ID_MAX] = {
 	RPM_VREG_INIT_LDO(PM8058_L24, 0, 1, 0, 1200000, 1200000, LDO150HMIN, 0),
 	RPM_VREG_INIT_LDO(PM8058_L25, 0, 1, 0, 1200000, 1200000, LDO150HMIN, 0),
 
-	RPM_VREG_INIT_SMPS(PM8058_S0, 0, 1, 1,  500000, 1200000,  SMPS_HMIN, 0,
+	RPM_VREG_INIT_SMPS(PM8058_S0, 0, 1, 1,  500000, 1250000,  SMPS_HMIN, 0,
 		RPM_VREG_FREQ_1p60),
-	RPM_VREG_INIT_SMPS(PM8058_S1, 0, 1, 1,  500000, 1200000,  SMPS_HMIN, 0,
+	RPM_VREG_INIT_SMPS(PM8058_S1, 0, 1, 1,  500000, 1250000,  SMPS_HMIN, 0,
 		RPM_VREG_FREQ_1p60),
 	RPM_VREG_INIT_SMPS(PM8058_S2, 0, 1, 0, 1200000, 1400000,  SMPS_HMIN,
 		RPM_VREG_PIN_CTRL_A0, RPM_VREG_FREQ_1p60),
@@ -2158,9 +2483,9 @@ static struct platform_device qt_gpio_keys = {
 };
 
 static const unsigned int qt_keymap[] = {
-	KEY(0, 3, KEY_VOLUMEDOWN),
-	KEY(1, 3, KEY_VOLUMEUP),
-	KEY(2, 3, KEY_HOME),
+	KEY(0, 0, KEY_VOLUMEDOWN),
+	KEY(1, 0, KEY_VOLUMEUP),
+	KEY(2, 0, KEY_HOME),
 };
 
 static struct matrix_keymap_data qt_keymap_data = {
@@ -2184,6 +2509,7 @@ static struct matrix_keypad_platform_data qt_keypad_data = {
 	.wakeup			= 1,
 	.active_low		= 1,
 	.no_autorepeat		= 1,
+	.qt_check		= 1,
 };
 
 static struct platform_device qt_keypad_device = {
@@ -4640,7 +4966,7 @@ static struct msm_bus_vectors mdp_sd_ebi_vectors[] = {
 		.src = MSM_BUS_MASTER_MDP_PORT0,
 		.dst = MSM_BUS_SLAVE_EBI_CH0,
 		.ab = 334080000,
-		.ib = 417600000,
+		.ib = 417600000 * 2,
 	},
 };
 static struct msm_bus_vectors mdp_vga_vectors[] = {
@@ -4655,7 +4981,7 @@ static struct msm_bus_vectors mdp_vga_vectors[] = {
 		.src = MSM_BUS_MASTER_MDP_PORT0,
 		.dst = MSM_BUS_SLAVE_EBI_CH0,
 		.ab = 175110000,
-		.ib = 218887500,
+		.ib = 218887500 * 2,
 	},
 };
 
@@ -4672,7 +4998,7 @@ static struct msm_bus_vectors mdp_720p_vectors[] = {
 		.src = MSM_BUS_MASTER_MDP_PORT0,
 		.dst = MSM_BUS_SLAVE_EBI_CH0,
 		.ab = 230400000,
-		.ib = 288000000,
+		.ib = 288000000 * 2,
 	},
 };
 
@@ -4689,7 +5015,7 @@ static struct msm_bus_vectors mdp_1080p_vectors[] = {
 		.src = MSM_BUS_MASTER_MDP_PORT0,
 		.dst = MSM_BUS_SLAVE_EBI_CH0,
 		.ab = 334080000,
-		.ib = 417600000,
+		.ib = 417600000 * 2 ,
 	},
 };
 
@@ -4706,7 +5032,7 @@ static struct msm_bus_vectors mdp_rgb_vectors[] = {
 		.src = MSM_BUS_MASTER_MDP_PORT0,
 		.dst = MSM_BUS_SLAVE_EBI_CH0,
 		.ab = 334080000,
-		.ib = 417600000,
+		.ib = 417600000 * 2 ,
 	},
 };
 

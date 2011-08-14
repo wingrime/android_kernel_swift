@@ -39,8 +39,10 @@
 int rtc_hctosys(void);
 
 extern void msm_pm_set_max_sleep_time(int64_t sleep_time_ns);
+void msmrtc_updateatsuspend(struct timespec *ts);
+
+#ifdef CONFIG_PM
 int64_t msm_timer_get_sclk_time(int64_t *period);
-int64_t msmrtc_get_tickatsuspend(void);
-bool msmrtc_is_suspended(void);
+#endif /* CONFIG_PM */
 
 #endif  /* __RTC_MSM_H__ */

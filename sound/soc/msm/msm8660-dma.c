@@ -33,7 +33,7 @@
 #include <sound/soc.h>
 #include <mach/msm_iomap-8x60.h>
 #include <mach/audio_dma_msm8k.h>
-#include "dai.h"
+#include <sound/dai.h>
 #include "msm8660-pcm.h"
 
 struct dai_baseinfo {
@@ -146,7 +146,8 @@ static int dai_enable_irq(uint32_t dma_ch)
 
 static void dai_config_dma(uint32_t dma_ch)
 {
-	pr_debug("%s\n", __func__);
+	pr_debug("%s dma_ch = %u\n", __func__, dma_ch);
+
 	writel(dai[dma_ch]->buffer_phys,
 			dai_info.base + LPAIF_DMA_BASE(dma_ch));
 	writel(((dai[dma_ch]->buffer_len >> 2) - 1),
@@ -260,6 +261,67 @@ int dai_start(uint32_t dma_ch)
 	return 0;
 }
 
+#define   HDMI_BURST_INCR4		(1 << 11)
+#define   HDMI_WPSCNT			(1 << 8)
+#define   HDMI_AUDIO_INTF		(5 << 4)
+#define   HDMI_FIFO_WATER_MARK		(7 << 1)
+#define   HDMI_ENABLE			(1)
+
+int dai_start_hdmi(uint32_t dma_ch)
+{
+	unsigned long flag = 0x0;
+	uint32_t val;
+
+	pr_debug("%s dma_ch = %u\n", __func__, dma_ch);
+
+	spin_lock_irqsave(&dai_lock, flag);
+
+	dai_enable_irq(dma_ch);
+
+	if ((dma_ch >= 0) && (dma_ch < 5)) {
+
+		val = readl(dai_info.base + LPAIF_IRQ_EN(0));
+		val = val | (7 << (dma_ch * 3));
+		writel(val, dai_info.base + LPAIF_IRQ_EN(0));
+
+
+		val = (HDMI_BURST_INCR4 | HDMI_WPSCNT | HDMI_AUDIO_INTF |
+			HDMI_FIFO_WATER_MARK | HDMI_ENABLE);
+
+		writel(val, dai_info.base + LPAIF_DMA_CTL(dma_ch));
+	}
+	spin_unlock_irqrestore(&dai_lock, flag);
+
+	dai_print_state(dma_ch);
+	return 0;
+}
+
+void dai_stop_hdmi(uint32_t dma_ch)
+{
+	unsigned long flag = 0x0;
+	uint32_t intrVal;
+	uint32_t int_mask = 0x00000007;
+
+	pr_debug("%s dma_ch %u\n", __func__, dma_ch);
+
+	spin_lock_irqsave(&dai_lock, flag);
+
+	free_irq(LPASS_SCSS_AUDIO_IF_OUT0_IRQ, (void *) (dma_ch + 1));
+
+
+	intrVal = 0x0;
+	writel(intrVal, dai_info.base + LPAIF_DMA_CTL(dma_ch));
+
+	intrVal = readl(dai_info.base + LPAIF_IRQ_EN(0));
+
+	int_mask = ((int_mask) << (dma_ch * 3));
+	int_mask = ~int_mask;
+
+	intrVal = intrVal && int_mask;
+	writel(intrVal, dai_info.base + LPAIF_IRQ_EN(0));
+
+	spin_unlock_irqrestore(&dai_lock, flag);
+}
 
 int dai_stop(uint32_t dma_ch)
 {
@@ -325,6 +387,7 @@ static struct resource msm_lpa_resources[] = {
 		.start = MSM_LPA_PHYS,
 		.end   = MSM_LPA_END,
 		.flags = IORESOURCE_MEM,
+		.name  = "msm-dai",
 	},
 };
 

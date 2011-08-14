@@ -27,10 +27,9 @@
 #include <sound/core.h>
 #include <sound/soc.h>
 #include <sound/soc-dapm.h>
-
 #include <sound/pcm.h>
+#include <sound/dai.h>
 #include "msm8660-pcm.h"
-#include "dai.h"
 #include "../codecs/timpani.h"
 
 #define PM8058_GPIO_BASE			NR_MSM_GPIOS

@@ -42,6 +42,7 @@ static struct vfe31_ctrl_type *vfe31_ctrl;
 static struct msm_camera_io_clk camio_clk;
 static void *vfe_syncdata;
 static void vfe31_send_msg_no_payload(enum VFE31_MESSAGE_ID id);
+static void vfe31_reset_hist_cfg(void);
 
 struct vfe31_isr_queue_cmd {
 	struct list_head list;
@@ -345,19 +346,6 @@ static void vfe_addr_convert(struct msm_vfe_phy_info *pinfo,
 		*elen = vfe31_ctrl->extlen;
 	}
 		break;
-	case VFE_MSG_STATS_AF:
-	case VFE_MSG_STATS_AEC:
-	case VFE_MSG_STATS_AWB:
-	case VFE_MSG_STATS_IHIST:
-	case VFE_MSG_STATS_RS:
-	case VFE_MSG_STATS_CS:
-		pinfo->sbuf_phy =
-		((struct vfe_message *)data)->_u.msgStats.buffer;
-
-		pinfo->frame_id =
-		((struct vfe_message *)data)->_u.msgStats.frameCounter;
-
-		break;
 
 	default:
 		break;
@@ -414,46 +402,25 @@ static void vfe31_proc_ops(enum VFE31_MESSAGE_ID id, void *msg, size_t len)
 			&(rp->extlen));
 		break;
 
-	case MSG_ID_STATS_AF:
-		rp->type = VFE_MSG_STATS_AF;
-		vfe_addr_convert(&(rp->phy), VFE_MSG_STATS_AF,
-				rp->evt_msg.data, NULL, NULL);
-		break;
+	case MSG_ID_COMMON:
+		rp->type = VFE_MSG_COMMON;
+		rp->stats_msg.status_bits = ((struct vfe_message *)
+			rp->evt_msg.data)->_u.msgStats.status_bits;
+		rp->stats_msg.frame_id = ((struct vfe_message *)
+			rp->evt_msg.data)->_u.msgStats.frameCounter;
 
-	case MSG_ID_STATS_AWB:
-		rp->type = VFE_MSG_STATS_AWB;
-		vfe_addr_convert(&(rp->phy), VFE_MSG_STATS_AWB,
-				rp->evt_msg.data, NULL, NULL);
-		break;
-
-	case MSG_ID_STATS_AEC:
-		rp->type = VFE_MSG_STATS_AEC;
-		vfe_addr_convert(&(rp->phy), VFE_MSG_STATS_AEC,
-				rp->evt_msg.data, NULL, NULL);
-		break;
-
-	case MSG_ID_STATS_SKIN:
-		rp->type = VFE_MSG_STATS_SKIN;
-		vfe_addr_convert(&(rp->phy), VFE_MSG_STATS_SKIN,
-				rp->evt_msg.data, NULL, NULL);
-		break;
-
-	case MSG_ID_STATS_IHIST:
-		rp->type = VFE_MSG_STATS_IHIST;
-		vfe_addr_convert(&(rp->phy), VFE_MSG_STATS_IHIST,
-				rp->evt_msg.data, NULL, NULL);
-		break;
-
-	case MSG_ID_STATS_RS:
-		rp->type = VFE_MSG_STATS_RS;
-		vfe_addr_convert(&(rp->phy), VFE_MSG_STATS_RS,
-				rp->evt_msg.data, NULL, NULL);
-		break;
-
-	case MSG_ID_STATS_CS:
-		rp->type = VFE_MSG_STATS_CS;
-		vfe_addr_convert(&(rp->phy), VFE_MSG_STATS_CS,
-				rp->evt_msg.data, NULL, NULL);
+		rp->stats_msg.aec_buff = ((struct vfe_message *)
+			rp->evt_msg.data)->_u.msgStats.buff.aec;
+		rp->stats_msg.awb_buff = ((struct vfe_message *)
+			rp->evt_msg.data)->_u.msgStats.buff.awb;
+		rp->stats_msg.af_buff = ((struct vfe_message *)
+			rp->evt_msg.data)->_u.msgStats.buff.af;
+		rp->stats_msg.ihist_buff = ((struct vfe_message *)
+			rp->evt_msg.data)->_u.msgStats.buff.ihist;
+		rp->stats_msg.rs_buff = ((struct vfe_message *)
+			rp->evt_msg.data)->_u.msgStats.buff.rs;
+		rp->stats_msg.cs_buff = ((struct vfe_message *)
+			rp->evt_msg.data)->_u.msgStats.buff.cs;
 		break;
 
 	case MSG_ID_SYNC_TIMER0_DONE:
@@ -938,14 +905,20 @@ static void vfe31_reset_internal_variables(void)
 	atomic_set(&vfe31_ctrl->stop_ack_pending, 0);
 	atomic_set(&vfe31_ctrl->vstate, 0);
 
+	vfe31_ctrl->aec_ack_pending = FALSE;
+	vfe31_ctrl->af_ack_pending = FALSE;
+	vfe31_ctrl->awb_ack_pending = FALSE;
+	vfe31_ctrl->ihist_ack_pending = FALSE;
+	vfe31_ctrl->rs_ack_pending = FALSE;
+	vfe31_ctrl->cs_ack_pending = FALSE;
+
 	vfe31_ctrl->reset_ack_pending  = FALSE;
 
 	spin_lock_irqsave(&vfe31_ctrl->update_ack_lock, flags);
 	vfe31_ctrl->update_ack_pending = FALSE;
 	spin_unlock_irqrestore(&vfe31_ctrl->update_ack_lock, flags);
 
-	vfe31_ctrl->req_stop_video_rec = FALSE;
-	vfe31_ctrl->req_start_video_rec = FALSE;
+	vfe31_ctrl->recording_state = VFE_REC_STATE_IDLE;
 
 	/* 0 for continuous mode, 1 for snapshot mode */
 	vfe31_ctrl->operation_mode = VFE_MODE_OF_OPERATION_CONTINUOUS;
@@ -988,6 +961,8 @@ static void vfe31_reset(void)
 	uint32_t vfe_version;
 	vfe31_reset_free_buf_queue_all();
 	vfe31_reset_internal_variables();
+
+	vfe31_reset_hist_cfg();
 	vfe_version = msm_io_r(vfe31_ctrl->vfebase);
 	CDBG("vfe_version = 0x%x\n", vfe_version);
 	/* disable all interrupts.  vfeImaskLocal is also reset to 0
@@ -1128,7 +1103,7 @@ static void vfe31_start_common(void)
 	vfe31_ctrl->start_ack_pending = TRUE;
 	CDBG("VFE opertaion mode = 0x%x, output mode = 0x%x\n",
 		vfe31_ctrl->operation_mode, vfe31_ctrl->outpath.output_mode);
-	/* Enable comp IRQ for stats  */
+	/* Enable IRQ for comp stats, Image master, SOF & Reg Update*/
 	if (vfe31_ctrl->stats_comp)
 		msm_io_w(0x01E00021, vfe31_ctrl->vfebase + VFE_IRQ_MASK_0);
 	else /* Disable comp IRQ and enable only AF irq */
@@ -1150,38 +1125,18 @@ static void vfe31_start_common(void)
 
 static int vfe31_start_recording(void)
 {
-	vfe31_ctrl->req_start_video_rec = TRUE;
-	/* Mask with 0x7 to extract the pixel pattern*/
-	switch (msm_io_r(vfe31_ctrl->vfebase + VFE_CFG_OFF) & 0x7) {
-	case VFE_YUV_YCbYCr:
-	case VFE_YUV_YCrYCb:
-	case VFE_YUV_CbYCrY:
-	case VFE_YUV_CrYCbY:
-		msm_io_w_mb(1,
-		vfe31_ctrl->vfebase + VFE_REG_UPDATE_CMD);
-		break;
-	default:
-		break;
-	}
+	msm_camio_set_perf_lvl(S_VIDEO);
+	usleep(1000);
+	vfe31_ctrl->recording_state = VFE_REC_STATE_START_REQUESTED;
+	msm_io_w_mb(1, vfe31_ctrl->vfebase + VFE_REG_UPDATE_CMD);
 	return 0;
 }
 
 static int vfe31_stop_recording(void)
 {
-
-	vfe31_ctrl->req_stop_video_rec = TRUE;
-	/* Mask with 0x7 to extract the pixel pattern*/
-	switch (msm_io_r(vfe31_ctrl->vfebase + VFE_CFG_OFF) & 0x7) {
-	case VFE_YUV_YCbYCr:
-	case VFE_YUV_YCrYCb:
-	case VFE_YUV_CbYCrY:
-	case VFE_YUV_CrYCbY:
-		msm_io_w_mb(1, vfe31_ctrl->vfebase + VFE_REG_UPDATE_CMD);
-		break;
-	default:
-		break;
-	}
-
+	vfe31_ctrl->recording_state = VFE_REC_STATE_STOP_REQUESTED;
+	msm_io_w_mb(1, vfe31_ctrl->vfebase + VFE_REG_UPDATE_CMD);
+	msm_camio_set_perf_lvl(S_PREVIEW);
 	return 0;
 }
 
@@ -1247,6 +1202,8 @@ static int vfe31_zsl(void)
 	}
 	msm_io_w(irq_comp_mask, vfe31_ctrl->vfebase + VFE_IRQ_COMP_MASK);
 	vfe31_start_common();
+	msm_camio_set_perf_lvl(S_ZSL);
+	usleep(1000);
 	/* for debug */
 	msm_io_w(1, vfe31_ctrl->vfebase + 0x18C);
 	msm_io_w(1, vfe31_ctrl->vfebase + 0x188);
@@ -1304,6 +1261,12 @@ static int vfe31_capture(uint32_t num_frames_capture)
 		}
 	}
 	msm_io_w(irq_comp_mask, vfe31_ctrl->vfebase + VFE_IRQ_COMP_MASK);
+	if (p_sync->stereocam_enabled)
+		msm_camio_set_perf_lvl(S_STEREO_CAPTURE);
+	else
+		msm_camio_set_perf_lvl(S_CAPTURE);
+
+	usleep(1000);
 	vfe31_start_common();
 	return 0;
 }
@@ -1311,6 +1274,7 @@ static int vfe31_capture(uint32_t num_frames_capture)
 static int vfe31_start(void)
 {
 	uint32_t irq_comp_mask = 0;
+	struct msm_sync* p_sync = (struct msm_sync *)vfe_syncdata;
 	/* start command now is only good for continuous mode. */
 	if ((vfe31_ctrl->operation_mode != VFE_MODE_OF_OPERATION_CONTINUOUS) &&
 		(vfe31_ctrl->operation_mode != VFE_MODE_OF_OPERATION_VIDEO))
@@ -1337,6 +1301,12 @@ static int vfe31_start(void)
 		msm_io_w(1, vfe31_ctrl->vfebase + V31_AXI_OUT_OFF + 20 +
 			24 * (vfe31_ctrl->outpath.out0.ch1));
 	}
+	if (p_sync->stereocam_enabled)
+		msm_camio_set_perf_lvl(S_STEREO_VIDEO);
+	else
+		msm_camio_set_perf_lvl(S_PREVIEW);
+
+	usleep(1000);
 	vfe31_start_common();
 	return 0;
 }
@@ -1457,6 +1427,17 @@ static void vfe31_write_gamma_cfg(enum VFE31_DMI_RAM_SEL channel_sel,
 		msm_io_w((value1), vfe31_ctrl->vfebase + VFE_DMI_DATA_LO);
 		msm_io_w((value2), vfe31_ctrl->vfebase + VFE_DMI_DATA_LO);
 	}
+	vfe31_program_dmi_cfg(NO_MEM_SELECTED);
+}
+
+static void vfe31_reset_hist_cfg()
+{
+	uint32_t i;
+	uint32_t value = 0;
+
+	vfe31_program_dmi_cfg(STATS_HIST_RAM);
+	for (i = 0 ; i < VFE31_HIST_TABLE_LENGTH ; i++)
+		msm_io_w(value, vfe31_ctrl->vfebase + VFE_DMI_DATA_LO);
 	vfe31_program_dmi_cfg(NO_MEM_SELECTED);
 }
 
@@ -2024,47 +2005,38 @@ proc_general_done:
 
 static void vfe31_stats_af_ack(struct vfe_cmd_stats_ack *pAck)
 {
-	unsigned long flags;
-	spin_lock_irqsave(&vfe31_ctrl->af_ack_lock, flags);
 	vfe31_ctrl->afStatsControl.nextFrameAddrBuf = pAck->nextStatsBuf;
-	vfe31_ctrl->afStatsControl.ackPending = FALSE;
-	spin_unlock_irqrestore(&vfe31_ctrl->af_ack_lock, flags);
+	vfe31_ctrl->af_ack_pending = FALSE;
 }
 
 static void vfe31_stats_awb_ack(struct vfe_cmd_stats_ack *pAck)
 {
-	unsigned long flags;
-	spin_lock_irqsave(&vfe31_ctrl->awb_ack_lock, flags);
 	vfe31_ctrl->awbStatsControl.nextFrameAddrBuf = pAck->nextStatsBuf;
-	vfe31_ctrl->awbStatsControl.ackPending = FALSE;
-	spin_unlock_irqrestore(&vfe31_ctrl->awb_ack_lock, flags);
+	vfe31_ctrl->awb_ack_pending = FALSE;
 }
 
 static void vfe31_stats_aec_ack(struct vfe_cmd_stats_ack *pAck)
 {
-	unsigned long flags;
-	spin_lock_irqsave(&vfe31_ctrl->aec_ack_lock, flags);
 	vfe31_ctrl->aecStatsControl.nextFrameAddrBuf = pAck->nextStatsBuf;
-	vfe31_ctrl->aecStatsControl.ackPending = FALSE;
-	spin_unlock_irqrestore(&vfe31_ctrl->aec_ack_lock, flags);
+	vfe31_ctrl->aec_ack_pending = FALSE;
 }
 
 static void vfe31_stats_ihist_ack(struct vfe_cmd_stats_ack *pAck)
 {
 	vfe31_ctrl->ihistStatsControl.nextFrameAddrBuf = pAck->nextStatsBuf;
-	vfe31_ctrl->ihistStatsControl.ackPending = FALSE;
+	vfe31_ctrl->ihist_ack_pending = FALSE;
 }
 
 static void vfe31_stats_rs_ack(struct vfe_cmd_stats_ack *pAck)
 {
 	vfe31_ctrl->rsStatsControl.nextFrameAddrBuf = pAck->nextStatsBuf;
-	vfe31_ctrl->rsStatsControl.ackPending = FALSE;
+	vfe31_ctrl->rs_ack_pending = FALSE;
 }
 
 static void vfe31_stats_cs_ack(struct vfe_cmd_stats_ack *pAck)
 {
 	vfe31_ctrl->csStatsControl.nextFrameAddrBuf = pAck->nextStatsBuf;
-	vfe31_ctrl->csStatsControl.ackPending = FALSE;
+	vfe31_ctrl->cs_ack_pending = FALSE;
 }
 
 static int vfe31_config(struct msm_vfe_cfg_cmd *cmd, void *data)
@@ -2399,17 +2371,17 @@ static inline void vfe31_read_irq_status(struct vfe31_irq_status *out)
 	uint32_t *temp;
 	memset(out, 0, sizeof(struct vfe31_irq_status));
 	temp = (uint32_t *)(vfe31_ctrl->vfebase + VFE_IRQ_STATUS_0);
-	out->vfeIrqStatus0 = msm_io_r(temp);
+	out->vfeIrqStatus0 = msm_io_r_mb(temp);
 
 	temp = (uint32_t *)(vfe31_ctrl->vfebase + VFE_IRQ_STATUS_1);
-	out->vfeIrqStatus1 = msm_io_r(temp);
+	out->vfeIrqStatus1 = msm_io_r_mb(temp);
 
 	temp = (uint32_t *)(vfe31_ctrl->vfebase + VFE_CAMIF_STATUS);
 	out->camifStatus = msm_io_r(temp);
 	CDBG("camifStatus  = 0x%x\n", out->camifStatus);
 
 	temp = (uint32_t *)(vfe31_ctrl->vfebase + VFE_BUS_PING_PONG_STATUS);
-	out->vfePingPongStatus = msm_io_r(temp);
+	out->vfePingPongStatus = msm_io_r_mb(temp);
 
 	/* clear the pending interrupt of the same kind.*/
 	msm_io_w(out->vfeIrqStatus0, vfe31_ctrl->vfebase + VFE_IRQ_CLEAR_0);
@@ -2434,27 +2406,14 @@ static void vfe31_process_reg_update_irq(void)
 {
 	uint32_t  temp, old_val;
 	unsigned long flags;
-	if (vfe31_ctrl->req_start_video_rec) {
+	if (vfe31_ctrl->recording_state == VFE_REC_STATE_START_REQUESTED) {
 		if (vfe31_ctrl->outpath.output_mode & VFE31_OUTPUT_MODE_V) {
 			msm_io_w(1, vfe31_ctrl->vfebase + V31_AXI_OUT_OFF +
 				20 + 24 * (vfe31_ctrl->outpath.out2.ch0));
 			msm_io_w(1, vfe31_ctrl->vfebase + V31_AXI_OUT_OFF +
 				20 + 24 * (vfe31_ctrl->outpath.out2.ch1));
-			/* Mask with 0x7 to extract the pixel pattern*/
-			switch (msm_io_r(vfe31_ctrl->vfebase + VFE_CFG_OFF)
-				& 0x7) {
-			case VFE_YUV_YCbYCr:
-			case VFE_YUV_YCrYCb:
-			case VFE_YUV_CbYCrY:
-			case VFE_YUV_CrYCbY:
-				msm_io_w_mb(1,
-				vfe31_ctrl->vfebase + VFE_REG_UPDATE_CMD);
-				break;
-			default:
-				break;
-			}
 		}
-		vfe31_ctrl->req_start_video_rec =  FALSE;
+		vfe31_ctrl->recording_state = VFE_REC_STATE_STARTED;
 		if (vpe_ctrl->dis_en) {
 			old_val = msm_io_r(
 				vfe31_ctrl->vfebase + VFE_MODULE_CFG);
@@ -2462,28 +2421,39 @@ static void vfe31_process_reg_update_irq(void)
 			msm_io_w(old_val,
 				vfe31_ctrl->vfebase + VFE_MODULE_CFG);
 		}
+		msm_io_w_mb(1, vfe31_ctrl->vfebase + VFE_REG_UPDATE_CMD);
 		CDBG("start video triggered .\n");
-	} else if (vfe31_ctrl->req_stop_video_rec) {
+	} else if (vfe31_ctrl->recording_state
+			== VFE_REC_STATE_STOP_REQUESTED) {
 		if (vfe31_ctrl->outpath.output_mode & VFE31_OUTPUT_MODE_V) {
 			msm_io_w(0, vfe31_ctrl->vfebase + V31_AXI_OUT_OFF +
 				20 + 24 * (vfe31_ctrl->outpath.out2.ch0));
 			msm_io_w(0, vfe31_ctrl->vfebase + V31_AXI_OUT_OFF +
 				 20 + 24 * (vfe31_ctrl->outpath.out2.ch1));
 		}
-		vfe31_ctrl->req_stop_video_rec =  FALSE;
 
 		/*disable rs& cs when stop recording. */
 		old_val = msm_io_r(vfe31_ctrl->vfebase + VFE_MODULE_CFG);
 		old_val &= (~RS_CS_ENABLE_MASK);
 		msm_io_w(old_val,
 				vfe31_ctrl->vfebase + VFE_MODULE_CFG);
-
-		CDBG("stop video triggered .\n");
+		CDBG("stop video triggered\n");
 	}
 	if (vfe31_ctrl->start_ack_pending == TRUE) {
 		vfe31_send_msg_no_payload(MSG_ID_START_ACK);
 		vfe31_ctrl->start_ack_pending = FALSE;
 	} else {
+		if (vfe31_ctrl->recording_state ==
+			VFE_REC_STATE_STOP_REQUESTED) {
+			vfe31_ctrl->recording_state = VFE_REC_STATE_STOPPED;
+			msm_io_w_mb(1, vfe31_ctrl->vfebase +
+						VFE_REG_UPDATE_CMD);
+		} else if (vfe31_ctrl->recording_state ==
+			VFE_REC_STATE_STOPPED) {
+			CDBG("sent stop video rec ACK");
+			vfe31_send_msg_no_payload(MSG_ID_STOP_REC_ACK);
+			vfe31_ctrl->recording_state = VFE_REC_STATE_IDLE;
+		}
 		spin_lock_irqsave(&vfe31_ctrl->update_ack_lock, flags);
 		if (vfe31_ctrl->update_ack_pending == TRUE) {
 			vfe31_ctrl->update_ack_pending = FALSE;
@@ -3039,9 +3009,23 @@ static void vfe31_process_output_path_irq_2(uint32_t ping_pong)
 	/* we render frames in the following conditions:
 	1. Continuous mode and the free buffer is avaialable.
 	*/
+	CDBG("%s, operation_mode = %d, state %d\n", __func__,
+		vfe31_ctrl->operation_mode,
+		vfe31_ctrl->recording_state);
+	/* Ensure that both wm1 and wm5 ping and pong buffers are active*/
+	if (!(((ping_pong & 0x22) == 0x22) ||
+		((ping_pong & 0x22) == 0x0))) {
+		pr_err(" Irq_2 - skip the frame pp_status is not proper"
+			"PP_status = 0x%x\n", ping_pong);
+		return;
+	}
+	if (vfe31_ctrl->recording_state == VFE_REC_STATE_STOP_REQUESTED) {
+		vfe31_ctrl->outpath.out2.frame_drop_cnt++;
+		pr_warning("path_irq_2 - recording stopped\n");
+		return;
+	}
+
 	free_buf = vfe31_get_free_buf(&vfe31_ctrl->outpath.out2);
-	CDBG("%s, operation_mode = %d,\n", __func__,
-		 vfe31_ctrl->operation_mode);
 
 	if (free_buf) {
 		/* Y channel */
@@ -3094,166 +3078,132 @@ static uint32_t  vfe31_process_stats_irq_common(uint32_t statsNum,
 	return returnAddr;
 }
 
-static void
-vfe_send_stats_msg(uint32_t bufAddress, uint32_t statsNum)
+static void vfe_send_stats_msg(void)
 {
-	unsigned long flags;
 	struct  vfe_message msg;
 	/* fill message with right content. */
-	/* @todo This is causing issues, need further investigate */
-	/* spin_lock_irqsave(&ctrl->state_lock, flags); */
 	msg._u.msgStats.frameCounter = vfe31_ctrl->vfeFrameId;
-	msg._u.msgStats.buffer = bufAddress;
+	msg._u.msgStats.status_bits = vfe31_ctrl->status_bits;
+	msg._d = MSG_ID_COMMON;
 
-	switch (statsNum) {
-	case statsAeNum:{
-		msg._d = MSG_ID_STATS_AEC;
-		spin_lock_irqsave(&vfe31_ctrl->aec_ack_lock, flags);
-		vfe31_ctrl->aecStatsControl.ackPending = TRUE;
-		spin_unlock_irqrestore(&vfe31_ctrl->aec_ack_lock, flags);
-		}
-		break;
-	case statsAfNum:{
-		msg._d = MSG_ID_STATS_AF;
-		spin_lock_irqsave(&vfe31_ctrl->af_ack_lock, flags);
-		vfe31_ctrl->afStatsControl.ackPending = TRUE;
-		spin_unlock_irqrestore(&vfe31_ctrl->af_ack_lock, flags);
-		}
-		break;
-	case statsAwbNum: {
-		msg._d = MSG_ID_STATS_AWB;
-		spin_lock_irqsave(&vfe31_ctrl->awb_ack_lock, flags);
-		vfe31_ctrl->awbStatsControl.ackPending = TRUE;
-		spin_unlock_irqrestore(&vfe31_ctrl->awb_ack_lock, flags);
-		}
-		break;
+	msg._u.msgStats.buff.aec = vfe31_ctrl->aecStatsControl.bufToRender;
+	msg._u.msgStats.buff.awb = vfe31_ctrl->awbStatsControl.bufToRender;
+	msg._u.msgStats.buff.af = vfe31_ctrl->afStatsControl.bufToRender;
 
-	case statsIhistNum: {
-		msg._d = MSG_ID_STATS_IHIST;
-		vfe31_ctrl->ihistStatsControl.ackPending = TRUE;
-		}
-		break;
-	case statsRsNum: {
-		msg._d = MSG_ID_STATS_RS;
-		vfe31_ctrl->rsStatsControl.ackPending = TRUE;
-		}
-		break;
-	case statsCsNum: {
-		msg._d = MSG_ID_STATS_CS;
-		vfe31_ctrl->csStatsControl.ackPending = TRUE;
-		}
-		break;
-
-
-	default:
-		goto stats_done;
-	}
+	msg._u.msgStats.buff.ihist = vfe31_ctrl->ihistStatsControl.bufToRender;
+	msg._u.msgStats.buff.rs = vfe31_ctrl->rsStatsControl.bufToRender;
+	msg._u.msgStats.buff.cs = vfe31_ctrl->csStatsControl.bufToRender;
 
 	vfe31_proc_ops(msg._d,
 		&msg, sizeof(struct vfe_message));
-stats_done:
-	/* spin_unlock_irqrestore(&ctrl->state_lock, flags); */
 	return;
 }
 
-static void vfe31_process_stats_ae_irq(void)
+static void vfe31_process_stats(void)
 {
-	unsigned long flags;
-	spin_lock_irqsave(&vfe31_ctrl->aec_ack_lock, flags);
-	if (!(vfe31_ctrl->aecStatsControl.ackPending)) {
-		spin_unlock_irqrestore(&vfe31_ctrl->aec_ack_lock, flags);
-		vfe31_ctrl->aecStatsControl.bufToRender =
-			vfe31_process_stats_irq_common(statsAeNum,
-			vfe31_ctrl->aecStatsControl.nextFrameAddrBuf);
+	int32_t process_stats = false;
 
-		vfe_send_stats_msg(vfe31_ctrl->aecStatsControl.bufToRender,
-						statsAeNum);
-	} else{
-		spin_unlock_irqrestore(&vfe31_ctrl->aec_ack_lock, flags);
-		vfe31_ctrl->aecStatsControl.droppedStatsFrameCount++;
+	CDBG("%s, stats = 0x%x\n", __func__, vfe31_ctrl->status_bits);
+
+	if (vfe31_ctrl->status_bits & VFE_IRQ_STATUS0_STATS_AEC) {
+		if (!vfe31_ctrl->aec_ack_pending) {
+			vfe31_ctrl->aec_ack_pending = TRUE;
+			vfe31_ctrl->aecStatsControl.bufToRender =
+				vfe31_process_stats_irq_common(statsAeNum,
+				vfe31_ctrl->aecStatsControl.nextFrameAddrBuf);
+			process_stats = true;
+		} else{
+			vfe31_ctrl->aecStatsControl.bufToRender = 0;
+			vfe31_ctrl->aecStatsControl.droppedStatsFrameCount++;
+		}
+	} else {
+		vfe31_ctrl->aecStatsControl.bufToRender = 0;
 	}
 
-}
-
-static void vfe31_process_stats_awb_irq(void)
-{
-	unsigned long flags;
-	spin_lock_irqsave(&vfe31_ctrl->awb_ack_lock, flags);
-	if (!(vfe31_ctrl->awbStatsControl.ackPending)) {
-		spin_unlock_irqrestore(&vfe31_ctrl->awb_ack_lock, flags);
-		vfe31_ctrl->awbStatsControl.bufToRender =
-			vfe31_process_stats_irq_common(statsAwbNum,
-			vfe31_ctrl->awbStatsControl.nextFrameAddrBuf);
-
-		vfe_send_stats_msg(vfe31_ctrl->awbStatsControl.bufToRender,
-						statsAwbNum);
-	} else{
-		spin_unlock_irqrestore(&vfe31_ctrl->awb_ack_lock, flags);
-		vfe31_ctrl->awbStatsControl.droppedStatsFrameCount++;
+	if (vfe31_ctrl->status_bits & VFE_IRQ_STATUS0_STATS_AWB) {
+		if (!vfe31_ctrl->awb_ack_pending) {
+			vfe31_ctrl->awb_ack_pending = TRUE;
+			vfe31_ctrl->awbStatsControl.bufToRender =
+				vfe31_process_stats_irq_common(statsAwbNum,
+				vfe31_ctrl->awbStatsControl.nextFrameAddrBuf);
+			process_stats = true;
+		} else{
+			vfe31_ctrl->awbStatsControl.droppedStatsFrameCount++;
+			vfe31_ctrl->awbStatsControl.bufToRender = 0;
+		}
+	} else {
+		vfe31_ctrl->awbStatsControl.bufToRender = 0;
 	}
 
-}
 
-static void vfe31_process_stats_af_irq(void)
-{
-	unsigned long flags;
-	spin_lock_irqsave(&vfe31_ctrl->af_ack_lock, flags);
-	if (!(vfe31_ctrl->afStatsControl.ackPending)) {
-		spin_unlock_irqrestore(&vfe31_ctrl->af_ack_lock, flags);
-		vfe31_ctrl->afStatsControl.bufToRender =
-			vfe31_process_stats_irq_common(statsAfNum,
-			vfe31_ctrl->afStatsControl.nextFrameAddrBuf);
-
-		vfe_send_stats_msg(vfe31_ctrl->afStatsControl.bufToRender,
-						statsAfNum);
-	} else{
-		spin_unlock_irqrestore(&vfe31_ctrl->af_ack_lock, flags);
-		vfe31_ctrl->afStatsControl.droppedStatsFrameCount++;
+	if (vfe31_ctrl->status_bits & VFE_IRQ_STATUS0_STATS_AF) {
+		if (!vfe31_ctrl->af_ack_pending) {
+			vfe31_ctrl->af_ack_pending = TRUE;
+			vfe31_ctrl->afStatsControl.bufToRender =
+				vfe31_process_stats_irq_common(statsAfNum,
+				vfe31_ctrl->afStatsControl.nextFrameAddrBuf);
+			process_stats = true;
+		} else {
+			vfe31_ctrl->afStatsControl.bufToRender = 0;
+			vfe31_ctrl->afStatsControl.droppedStatsFrameCount++;
+		}
+	} else {
+		vfe31_ctrl->afStatsControl.bufToRender = 0;
 	}
 
+	if (vfe31_ctrl->status_bits & VFE_IRQ_STATUS0_STATS_IHIST) {
+		if (!vfe31_ctrl->ihist_ack_pending) {
+			vfe31_ctrl->ihist_ack_pending = TRUE;
+			vfe31_ctrl->ihistStatsControl.bufToRender =
+				vfe31_process_stats_irq_common(statsIhistNum,
+				vfe31_ctrl->ihistStatsControl.nextFrameAddrBuf);
+			process_stats = true;
+		} else {
+			vfe31_ctrl->ihistStatsControl.droppedStatsFrameCount++;
+			vfe31_ctrl->ihistStatsControl.bufToRender = 0;
+		}
+	} else {
+		vfe31_ctrl->ihistStatsControl.bufToRender = 0;
+	}
+
+	if (vfe31_ctrl->status_bits & VFE_IRQ_STATUS0_STATS_RS) {
+		if (!vfe31_ctrl->rs_ack_pending) {
+			vfe31_ctrl->rs_ack_pending = TRUE;
+			vfe31_ctrl->rsStatsControl.bufToRender =
+				vfe31_process_stats_irq_common(statsRsNum,
+				vfe31_ctrl->rsStatsControl.nextFrameAddrBuf);
+			process_stats = true;
+		} else {
+			vfe31_ctrl->rsStatsControl.droppedStatsFrameCount++;
+			vfe31_ctrl->rsStatsControl.bufToRender = 0;
+		}
+	} else {
+		vfe31_ctrl->rsStatsControl.bufToRender = 0;
+	}
+
+
+	if (vfe31_ctrl->status_bits & VFE_IRQ_STATUS0_STATS_CS) {
+		if (!vfe31_ctrl->cs_ack_pending) {
+			vfe31_ctrl->cs_ack_pending = TRUE;
+			vfe31_ctrl->csStatsControl.bufToRender =
+				vfe31_process_stats_irq_common(statsCsNum,
+				vfe31_ctrl->csStatsControl.nextFrameAddrBuf);
+			process_stats = true;
+		} else {
+			vfe31_ctrl->csStatsControl.droppedStatsFrameCount++;
+			vfe31_ctrl->csStatsControl.bufToRender = 0;
+		}
+	} else {
+		vfe31_ctrl->csStatsControl.bufToRender = 0;
+	}
+
+	if (process_stats)
+		vfe_send_stats_msg();
+
+	return;
 }
 
-static void vfe31_process_stats_ihist_irq(void)
-{
-	if (!(vfe31_ctrl->ihistStatsControl.ackPending)) {
-		vfe31_ctrl->ihistStatsControl.bufToRender =
-			vfe31_process_stats_irq_common(statsIhistNum,
-			vfe31_ctrl->ihistStatsControl.nextFrameAddrBuf);
-
-		vfe_send_stats_msg(vfe31_ctrl->ihistStatsControl.bufToRender,
-						statsIhistNum);
-	} else
-		vfe31_ctrl->ihistStatsControl.droppedStatsFrameCount++;
-}
-
-
-static void vfe31_process_stats_rs_irq(void)
-{
-	if (!(vfe31_ctrl->rsStatsControl.ackPending)) {
-		vfe31_ctrl->rsStatsControl.bufToRender =
-			vfe31_process_stats_irq_common(statsRsNum,
-			vfe31_ctrl->rsStatsControl.nextFrameAddrBuf);
-
-		vfe_send_stats_msg(vfe31_ctrl->rsStatsControl.bufToRender,
-						statsRsNum);
-	} else
-		vfe31_ctrl->rsStatsControl.droppedStatsFrameCount++;
-}
-
-static void vfe31_process_stats_cs_irq(void)
-{
-	if (!(vfe31_ctrl->csStatsControl.ackPending)) {
-		vfe31_ctrl->csStatsControl.bufToRender =
-			vfe31_process_stats_irq_common(statsCsNum,
-			vfe31_ctrl->csStatsControl.nextFrameAddrBuf);
-
-		vfe_send_stats_msg(vfe31_ctrl->csStatsControl.bufToRender,
-						statsCsNum);
-	} else
-		vfe31_ctrl->csStatsControl.droppedStatsFrameCount++;
-}
-
-static void vfe31_process_stats_comb_irq(uint32_t *irqstatus)
+static void vfe31_process_stats_irq(uint32_t *irqstatus)
 {
 	/* Subsample the stats according to the hfr speed*/
 	if ((vfe31_ctrl->hfr_mode != HFR_MODE_OFF) &&
@@ -3261,37 +3211,9 @@ static void vfe31_process_stats_comb_irq(uint32_t *irqstatus)
 		CDBG("Skip the stats when HFR enabled\n");
 		return;
 	}
-	/* process individual stats interrupt. */
-	if (*irqstatus &
-		VFE_IRQ_STATUS0_STATS_AF) {
-		CDBG("Stats AF irq occured.\n");
-		vfe31_process_stats_af_irq();
-	}
-	if (*irqstatus &
-		VFE_IRQ_STATUS0_STATS_AEC) {
-		CDBG("Stats AEC irq occured.\n");
-		vfe31_process_stats_ae_irq();
-	}
-	if (*irqstatus &
-		VFE_IRQ_STATUS0_STATS_AWB) {
-		CDBG("Stats AWB irq occured.\n");
-		vfe31_process_stats_awb_irq();
-	}
-	if (*irqstatus &
-		VFE_IRQ_STATUS0_STATS_IHIST) {
-		CDBG("Stats IHIST irq occured.\n");
-		vfe31_process_stats_ihist_irq();
-	}
-	if (*irqstatus &
-		VFE_IRQ_STATUS0_STATS_RS) {
-		CDBG("Stats RS irq occured.\n");
-		vfe31_process_stats_rs_irq();
-	}
-	if (*irqstatus &
-		VFE_IRQ_STATUS0_STATS_CS) {
-		CDBG("Stats CS irq occured.\n");
-		vfe31_process_stats_cs_irq();
-	}
+
+	vfe31_ctrl->status_bits = VFE_COM_STATUS & *irqstatus;
+	vfe31_process_stats();
 	return;
 }
 
@@ -3377,40 +3299,16 @@ static void vfe31_do_tasklet(unsigned long data)
 				if (qcmd->vfeInterruptStatus0 &
 					VFE_IRQ_STATUS0_STATS_COMPOSIT_MASK) {
 					CDBG("Stats composite irq occured.\n");
-					vfe31_process_stats_comb_irq(
+					vfe31_process_stats_irq(
 						&qcmd->vfeInterruptStatus0);
 				}
 			} else {
 				/* process individual stats interrupt. */
 				if (qcmd->vfeInterruptStatus0 &
-						VFE_IRQ_STATUS0_STATS_AEC) {
-					CDBG("Stats AEC irq occured.\n");
-					vfe31_process_stats_ae_irq();
-				}
-				if (qcmd->vfeInterruptStatus0 &
-						VFE_IRQ_STATUS0_STATS_AWB) {
-					CDBG("Stats AWB irq occured.\n");
-					vfe31_process_stats_awb_irq();
-				}
-				if (qcmd->vfeInterruptStatus0 &
-						VFE_IRQ_STATUS0_STATS_AF) {
-					CDBG("Stats AF irq occured.\n");
-					vfe31_process_stats_af_irq();
-				}
-				if (qcmd->vfeInterruptStatus0 &
-						VFE_IRQ_STATUS0_STATS_IHIST) {
-					CDBG("Stats IHIST irq occured.\n");
-					vfe31_process_stats_ihist_irq();
-				}
-				if (qcmd->vfeInterruptStatus0 &
-						VFE_IRQ_STATUS0_STATS_RS) {
-					CDBG("Stats RS irq occured.\n");
-					vfe31_process_stats_rs_irq();
-				}
-				if (qcmd->vfeInterruptStatus0 &
-						VFE_IRQ_STATUS0_STATS_CS) {
-					CDBG("Stats CS irq occured.\n");
-					vfe31_process_stats_cs_irq();
+						VFE_COM_STATUS) {
+					CDBG("VFE stats occured.\n");
+					vfe31_process_stats_irq(
+						&qcmd->vfeInterruptStatus0);
 				}
 				if (qcmd->vfeInterruptStatus0 &
 						VFE_IRQ_STATUS0_SYNC_TIMER0) {
@@ -3593,9 +3491,6 @@ static int vfe31_resource_init(struct msm_vfe_callback *presp,
 	spin_lock_init(&vfe31_ctrl->update_ack_lock);
 	spin_lock_init(&vfe31_ctrl->tasklet_lock);
 
-	spin_lock_init(&vfe31_ctrl->aec_ack_lock);
-	spin_lock_init(&vfe31_ctrl->awb_ack_lock);
-	spin_lock_init(&vfe31_ctrl->af_ack_lock);
 	INIT_LIST_HEAD(&vfe31_ctrl->tasklet_q);
 	vfe31_init_free_buf_queue();
 
@@ -3634,7 +3529,6 @@ static int vfe31_init(struct msm_vfe_callback *presp,
 	/* Bring up all the required GPIOs and Clocks */
 	rc = msm_camio_enable(pdev);
 	msm_camio_set_perf_lvl(S_INIT);
-	msm_camio_set_perf_lvl(S_PREVIEW);
 	if (msm_vpe_open() < 0)
 		CDBG("%s: vpe_open failed\n", __func__);
 

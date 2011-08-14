@@ -669,10 +669,17 @@ static int msm_otg_suspend(struct msm_otg *dev)
 	 *
 	 * For simplicity, LPM is not allowed in bus suspend.
 	 */
+#ifndef CONFIG_USB_MSM_STANDARD_ACA
+	/*
+	 * RID_A and IdGnd states are only possible with standard ACA.  We can
+	 * exit from low power mode with !BSV or IdGnd interrupt.  Hence LPM
+	 * is allowed.
+	 */
 	if ((test_bit(ID, &dev->inputs) && test_bit(B_SESS_VLD, &dev->inputs) &&
 			chg_type != USB_CHG_TYPE__WALLCHARGER) ||
 			test_bit(ID_A, &dev->inputs))
 		goto out;
+#endif
 	/* Disable ID_abc interrupts else it causes spurious interrupt */
 	disable_idabc(dev);
 #endif
@@ -719,6 +726,9 @@ static int msm_otg_suspend(struct msm_otg *dev)
 	}
 
 	writel(readl(USB_USBCMD) | ASYNC_INTR_CTRL | ULPI_STP_CTRL, USB_USBCMD);
+	/* Ensure that above operation is completed before turning off clocks */
+	dsb();
+
 	if (dev->hs_pclk)
 		clk_disable(dev->hs_pclk);
 	if (dev->hs_cclk)
@@ -890,6 +900,8 @@ static int msm_otg_set_suspend(struct otg_transceiver *xceiv, int suspend)
 		switch (state) {
 #ifndef CONFIG_MSM_OTG_ENABLE_A_WAIT_BCON_TIMEOUT
 		case OTG_STATE_A_WAIT_BCON:
+			if (test_bit(ID_A, &dev->inputs))
+				msm_otg_set_power(xceiv, USB_IDCHG_MIN - 100);
 			msm_otg_put_suspend(dev);
 			break;
 #endif
@@ -1474,6 +1486,9 @@ reset_link:
 
 	writel(0x0, USB_AHB_BURST);
 	writel(0x00, USB_AHB_MODE);
+	/* Ensure that RESET operation is completed before turning off clock */
+	dsb();
+
 	clk_disable(dev->hs_clk);
 
 	if ((xceiv->gadget && xceiv->gadget->is_a_peripheral) ||
@@ -2174,6 +2189,16 @@ static void msm_otg_id_func(unsigned long _dev)
 	struct msm_otg	*dev = (struct msm_otg *) _dev;
 	u8		phy_ints;
 
+#ifdef CONFIG_USB_MSM_STANDARD_ACA
+	/*
+	 * When standard ACA is attached RID_A and RID_GND states are only
+	 * possible.  RID_A-->RID_GND transition generates IdGnd interrupt
+	 * from PHY.  Hence polling is disabled.
+	 */
+	if (test_bit(ID_A, &dev->inputs))
+		goto out;
+#endif
+
 	if (atomic_read(&dev->in_lpm))
 		msm_otg_set_suspend(&dev->otg, 0);
 
@@ -2591,6 +2616,8 @@ static int __init msm_otg_probe(struct platform_device *pdev)
 	writel((readl(USB_OTGSC) & ~OTGSC_INTR_MASK), USB_OTGSC);
 	writel(readl(USB_USBSTS), USB_USBSTS);
 	writel(0, USB_USBINTR);
+	/* Ensure that above STOREs are completed before enabling interrupts */
+	dsb();
 
 	ret = request_irq(dev->irq, msm_otg_irq, IRQF_SHARED,
 					"msm_otg", dev);

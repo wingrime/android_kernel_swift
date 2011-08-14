@@ -30,6 +30,7 @@
 #include <mach/msm_iomap.h>
 #include <mach/restart.h>
 #include <mach/scm-io.h>
+#include <asm/mach-types.h>
 
 #define TCSR_WDT_CFG 0x30
 
@@ -50,8 +51,13 @@ void *restart_reason;
 
 #ifdef CONFIG_MSM_DLOAD_MODE
 static int in_panic;
-static int reset_detection;
 static void *dload_mode_addr;
+
+/* Download mode master kill-switch */
+static int dload_set(const char *val, struct kernel_param *kp);
+static int download_mode = 1;
+module_param_call(download_mode, dload_set, param_get_int,
+			&download_mode, 0644);
 
 static int panic_prep_restart(struct notifier_block *this,
 			      unsigned long event, void *ptr)
@@ -70,48 +76,30 @@ static void set_dload_mode(int on)
 		writel(on ? 0xE47B337D : 0, dload_mode_addr);
 		writel(on ? 0xCE14091A : 0,
 		       dload_mode_addr + sizeof(unsigned int));
-		dmb();
+		mb();
 	}
 }
 
-static int reset_detect_set(const char *val, struct kernel_param *kp)
+static int dload_set(const char *val, struct kernel_param *kp)
 {
 	int ret;
-	int old_val = reset_detection;
+	int old_val = download_mode;
 
 	ret = param_set_int(val, kp);
 
 	if (ret)
 		return ret;
 
-	switch (reset_detection) {
-
-	case 0:
-		/*
-		*  Deactivate reset detection. Unset the download mode flag only
-		*  if someone hasn't already set restart_mode to something other
-		*  than RESTART_NORMAL.
-		*/
-		if (restart_mode == RESTART_NORMAL)
-			set_dload_mode(0);
-	break;
-
-	case 1:
-		set_dload_mode(1);
-	break;
-
-	default:
-		reset_detection = old_val;
+	/* If download_mode is not zero or one, ignore. */
+	if (download_mode >> 1) {
+		download_mode = old_val;
 		return -EINVAL;
-	break;
-
 	}
+
+	set_dload_mode(download_mode);
 
 	return 0;
 }
-
-module_param_call(reset_detection, reset_detect_set, param_get_int,
-			&reset_detection, 0644);
 #else
 #define set_dload_mode(x) do {} while (0)
 #endif
@@ -140,15 +128,19 @@ void arch_reset(char mode, const char *cmd)
 {
 
 #ifdef CONFIG_MSM_DLOAD_MODE
-	if (in_panic || restart_mode == RESTART_DLOAD)
+
+	/* This looks like a normal reboot at this point. */
+	set_dload_mode(0);
+
+	/* Write download mode flags if we're panic'ing */
+	set_dload_mode(in_panic);
+
+	/* Write download mode flags if restart_mode says so */
+	if (restart_mode == RESTART_DLOAD)
 		set_dload_mode(1);
 
-	/*
-	*  If we're not currently panic-ing, and if reset detection is active,
-	*  unset the download mode flag. However, do this only if the current
-	*  restart mode is RESTART_NORMAL.
-	*/
-	if (reset_detection && !in_panic && restart_mode == RESTART_NORMAL)
+	/* Kill download mode if master-kill switch is set */
+	if (!download_mode)
 		set_dload_mode(0);
 #endif
 
@@ -172,15 +164,18 @@ void arch_reset(char mode, const char *cmd)
 	}
 
 	writel(0, WDT0_EN);
-	writel(0, PSHOLD_CTL_SU); /* Actually reset the chip */
-	mdelay(5000);
+	if (!(machine_is_msm8x60_charm_surf() ||
+	      machine_is_msm8x60_charm_ffa())) {
+		dsb();
+		writel(0, PSHOLD_CTL_SU); /* Actually reset the chip */
+		mdelay(5000);
+		pr_notice("PS_HOLD didn't work, falling back to watchdog\n");
+	}
 
-	printk(KERN_NOTICE "PS_HOLD didn't work, falling back to watchdog\n");
-
-	writel(5*0x31F3, WDT0_BARK_TIME);
-	writel(0x31F3, WDT0_BITE_TIME);
-	writel(3, WDT0_EN);
-	dmb();
+	__raw_writel(1, WDT0_RST);
+	__raw_writel(5*0x31F3, WDT0_BARK_TIME);
+	__raw_writel(0x31F3, WDT0_BITE_TIME);
+	__raw_writel(3, WDT0_EN);
 	secure_writel(3, MSM_TCSR_BASE + TCSR_WDT_CFG);
 
 	mdelay(10000);
@@ -197,7 +192,6 @@ static int __init msm_restart_init(void)
 
 	/* Reset detection is switched on below.*/
 	set_dload_mode(1);
-	reset_detection = 1;
 #endif
 	restart_reason = imem + RESTART_REASON_ADDR;
 	pm_power_off = msm_power_off;

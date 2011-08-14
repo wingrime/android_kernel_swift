@@ -25,6 +25,7 @@
 #define SDIO_SMEM_EVENT_READ_ERR	1
 
 int sdio_smem_register_client(void);
+int sdio_smem_unregister_client(void);
 
 struct sdio_smem_client {
 	void *buf;

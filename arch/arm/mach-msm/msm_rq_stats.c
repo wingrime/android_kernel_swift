@@ -48,6 +48,7 @@ struct rq_data {
 
 static struct rq_data rq_info;
 static DEFINE_SPINLOCK(rq_lock);
+static struct workqueue_struct *rq_wq;
 
 static void rq_work_fn(struct work_struct *work)
 {
@@ -76,7 +77,7 @@ static void rq_work_fn(struct work_struct *work)
 
 	/* Set the next poll */
 	if (rq_info.rq_poll_ms)
-		schedule_delayed_work(&rq_info.rq_work,
+		queue_delayed_work(rq_wq, &rq_info.rq_work,
 			msecs_to_jiffies(rq_info.rq_poll_ms));
 
 	rq_info.total_time += time_diff;
@@ -142,7 +143,8 @@ static ssize_t store_run_queue_poll_ms(struct kobject *kobj,
 	if (val <= 0)
 		cancel_delayed_work(&rq_info.rq_work);
 	else
-		schedule_delayed_work(&rq_info.rq_work, msecs_to_jiffies(val));
+		queue_delayed_work(rq_wq, &rq_info.rq_work,
+				msecs_to_jiffies(val));
 
 	mutex_unlock(&lock_poll_ms);
 
@@ -167,7 +169,7 @@ static ssize_t store_def_timer_ms(struct kobject *kobj,
 		cancel_delayed_work(&rq_info.def_timer_work);
 	else {
 		rq_info.def_start_time = ktime_to_ns(ktime_get());
-		schedule_delayed_work(&rq_info.def_timer_work,
+		queue_delayed_work(rq_wq, &rq_info.def_timer_work,
 				msecs_to_jiffies(val));
 	}
 
@@ -258,6 +260,8 @@ rel:
 
 static int __init msm_rq_stats_init(void)
 {
+	rq_wq = create_singlethread_workqueue("rq_stats");
+	BUG_ON(!rq_wq);
 	INIT_DELAYED_WORK_DEFERRABLE(&rq_info.rq_work, rq_work_fn);
 	INIT_DELAYED_WORK_DEFERRABLE(&rq_info.def_timer_work, def_work_fn);
 	return init_rq_attribs();

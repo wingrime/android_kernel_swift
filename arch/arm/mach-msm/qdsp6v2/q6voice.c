@@ -32,6 +32,8 @@
 #include <mach/qdsp6v2/q6voice.h>
 #include "audio_acdb.h"
 #include "rtac.h"
+#include "q6core.h"
+
 
 #define TIMEOUT_MS 3000
 #define SNDDEV_CAP_TTY 0x20
@@ -102,14 +104,13 @@ static void voice_set_apr_cvs(struct voice_data *v, void *apr_cvs)
 	pr_debug("%s: apr_cvs 0x%x\n", __func__, (unsigned int)apr_cvs);
 
 	if (v->voc_path == VOC_PATH_PASSIVE &&
-		!(is_adsp_support_cvd())) {
+		!(is_adsp_support_cvd()))
 		v->apr_cvs = apr_cvs;
-#ifdef CONFIG_MSM8X60_RTAC
-		rtac_set_voice_handle(RTAC_CVS, apr_cvs);
-#endif
-	} else {
+	else
 		v->apr_q6_cvs = apr_cvs;
-	}
+#ifdef CONFIG_MSM8X60_RTAC
+	rtac_set_voice_handle(RTAC_CVS, apr_cvs);
+#endif
 }
 
 static void *voice_get_apr_cvp(struct voice_data *v)
@@ -132,14 +133,13 @@ static void voice_set_apr_cvp(struct voice_data *v, void *apr_cvp)
 	pr_debug("%s: apr_cvp 0x%x\n", __func__, (unsigned int)apr_cvp);
 
 	if (v->voc_path == VOC_PATH_PASSIVE &&
-		!(is_adsp_support_cvd())) {
+		!(is_adsp_support_cvd()))
 		v->apr_cvp = apr_cvp;
-#ifdef CONFIG_MSM8X60_RTAC
-		rtac_set_voice_handle(RTAC_CVP, apr_cvp);
-#endif
-	} else {
+	else
 		v->apr_q6_cvp = apr_cvp;
-	}
+#ifdef CONFIG_MSM8X60_RTAC
+	rtac_set_voice_handle(RTAC_CVP, apr_cvp);
+#endif
 }
 
 static u16 voice_get_mvm_handle(struct voice_data *v)
@@ -230,7 +230,6 @@ static int voice_apr_register(struct voice_data *v)
 	void *apr_cvp;
 
 	if (v->adsp_version == 0) {
-		core_open();
 		v->adsp_version = core_get_adsp_version();
 		pr_info("adsp_ver fetched:%x\n", v->adsp_version);
 	}
@@ -981,6 +980,50 @@ done:
 	return 0;
 }
 
+static int voice_set_dtx(struct voice_data *v)
+{
+	int ret = 0;
+	void *apr_cvs = voice_get_apr_cvs(v);
+	u16 cvs_handle = voice_get_cvs_handle(v);
+
+	/* Set DTX */
+	struct cvs_set_enc_dtx_mode_cmd cvs_set_dtx = {
+		.hdr.hdr_field = APR_HDR_FIELD(APR_MSG_TYPE_SEQ_CMD,
+					      APR_HDR_LEN(APR_HDR_SIZE),
+					      APR_PKT_VER),
+		.hdr.pkt_size = APR_PKT_SIZE(APR_HDR_SIZE,
+					sizeof(cvs_set_dtx) - APR_HDR_SIZE),
+		.hdr.src_port = 0,
+		.hdr.dest_port = cvs_handle,
+		.hdr.token = 0,
+		.hdr.opcode = VSS_ISTREAM_CMD_SET_ENC_DTX_MODE,
+		.dtx_mode.enable = v->mvs_info.dtx_mode,
+	};
+
+	pr_debug("%s: Setting DTX %d\n", __func__, v->mvs_info.dtx_mode);
+
+	v->cvs_state = CMD_STATUS_FAIL;
+
+	ret = apr_send_pkt(apr_cvs, (uint32_t *) &cvs_set_dtx);
+	if (ret < 0) {
+		pr_err("%s: Error %d sending SET_DTX\n", __func__, ret);
+
+		goto done;
+	}
+
+	ret = wait_event_timeout(v->cvs_wait,
+				 (v->cvs_state == CMD_STATUS_SUCCESS),
+				 msecs_to_jiffies(TIMEOUT_MS));
+	if (!ret) {
+		pr_err("%s: wait_event timeout\n", __func__);
+
+		ret = -EINVAL;
+	}
+
+done:
+	return ret;
+}
+
 static int voice_config_cvs_vocoder(struct voice_data *v)
 {
 	int ret = 0;
@@ -1011,7 +1054,7 @@ static int voice_config_cvs_vocoder(struct voice_data *v)
 		pr_err("%s: Error %d sending SET_MEDIA_TYPE\n",
 		       __func__, ret);
 
-		goto fail;
+		goto done;
 	}
 
 	ret = wait_event_timeout(v->cvs_wait,
@@ -1020,7 +1063,8 @@ static int voice_config_cvs_vocoder(struct voice_data *v)
 	if (!ret) {
 		pr_err("%s: wait_event timeout\n", __func__);
 
-		goto fail;
+		ret = -EINVAL;
+		goto done;
 	}
 
 	/* Set encoder properties. */
@@ -1051,7 +1095,7 @@ static int voice_config_cvs_vocoder(struct voice_data *v)
 			pr_err("%s: Error %d sending SET_EVRC_MINMAX_RATE\n",
 			       __func__, ret);
 
-			goto fail;
+			goto done;
 		}
 
 		ret = wait_event_timeout(v->cvs_wait,
@@ -1060,7 +1104,8 @@ static int voice_config_cvs_vocoder(struct voice_data *v)
 		if (!ret) {
 			pr_err("%s: wait_event timeout\n", __func__);
 
-			goto fail;
+			ret = -EINVAL;
+			goto done;
 		}
 
 		break;
@@ -1068,7 +1113,6 @@ static int voice_config_cvs_vocoder(struct voice_data *v)
 
 	case VSS_MEDIA_ID_AMR_NB_MODEM: {
 		struct cvs_set_amr_enc_rate_cmd cvs_set_amr_rate;
-		struct cvs_set_enc_dtx_mode_cmd cvs_set_dtx;
 
 		pr_info("%s: Setting AMR rate\n", __func__);
 
@@ -1092,7 +1136,7 @@ static int voice_config_cvs_vocoder(struct voice_data *v)
 			pr_err("%s: Error %d sending SET_AMR_RATE\n",
 			       __func__, ret);
 
-			goto fail;
+			goto done;
 		}
 
 		ret = wait_event_timeout(v->cvs_wait,
@@ -1101,48 +1145,17 @@ static int voice_config_cvs_vocoder(struct voice_data *v)
 		if (!ret) {
 			pr_err("%s: wait_event timeout\n", __func__);
 
-			goto fail;
+			ret = -EINVAL;
+			goto done;
 		}
 
-		/* Disable DTX */
-		pr_info("%s: Disabling DTX\n", __func__);
-
-		cvs_set_dtx.hdr.hdr_field = APR_HDR_FIELD(APR_MSG_TYPE_SEQ_CMD,
-						      APR_HDR_LEN(APR_HDR_SIZE),
-						      APR_PKT_VER);
-		cvs_set_dtx.hdr.pkt_size = APR_PKT_SIZE(APR_HDR_SIZE,
-				       sizeof(cvs_set_dtx) - APR_HDR_SIZE);
-		cvs_set_dtx.hdr.src_port = 0;
-		cvs_set_dtx.hdr.dest_port = cvs_handle;
-		cvs_set_dtx.hdr.token = 0;
-		cvs_set_dtx.hdr.opcode = VSS_ISTREAM_CMD_SET_ENC_DTX_MODE;
-		cvs_set_dtx.dtx_mode.enable = 0;
-
-		v->cvs_state = CMD_STATUS_FAIL;
-
-		ret = apr_send_pkt(apr_cvs, (uint32_t *) &cvs_set_dtx);
-		if (ret < 0) {
-			pr_err("%s: Error %d sending SET_DTX\n",
-			       __func__, ret);
-
-			goto fail;
-		}
-
-		ret = wait_event_timeout(v->cvs_wait,
-					 (v->cvs_state == CMD_STATUS_SUCCESS),
-					 msecs_to_jiffies(TIMEOUT_MS));
-		if (!ret) {
-			pr_err("%s: wait_event timeout\n", __func__);
-
-			goto fail;
-		}
+		ret = voice_set_dtx(v);
 
 		break;
 	}
 
 	case VSS_MEDIA_ID_AMR_WB_MODEM: {
 		struct cvs_set_amrwb_enc_rate_cmd cvs_set_amrwb_rate;
-		struct cvs_set_enc_dtx_mode_cmd cvs_set_dtx;
 
 		pr_info("%s: Setting AMR WB rate\n", __func__);
 
@@ -1166,7 +1179,7 @@ static int voice_config_cvs_vocoder(struct voice_data *v)
 			pr_err("%s: Error %d sending SET_AMRWB_RATE\n",
 			       __func__, ret);
 
-			goto fail;
+			goto done;
 		}
 
 		ret = wait_event_timeout(v->cvs_wait,
@@ -1175,41 +1188,11 @@ static int voice_config_cvs_vocoder(struct voice_data *v)
 		if (!ret) {
 			pr_err("%s: wait_event timeout\n", __func__);
 
-			goto fail;
+			ret = -EINVAL;
+			goto done;
 		}
 
-		/* Disable DTX */
-		pr_info("%s: Disabling DTX\n", __func__);
-
-		cvs_set_dtx.hdr.hdr_field = APR_HDR_FIELD(APR_MSG_TYPE_SEQ_CMD,
-						      APR_HDR_LEN(APR_HDR_SIZE),
-						      APR_PKT_VER);
-		cvs_set_dtx.hdr.pkt_size = APR_PKT_SIZE(APR_HDR_SIZE,
-				       sizeof(cvs_set_dtx) - APR_HDR_SIZE);
-		cvs_set_dtx.hdr.src_port = 0;
-		cvs_set_dtx.hdr.dest_port = cvs_handle;
-		cvs_set_dtx.hdr.token = 0;
-		cvs_set_dtx.hdr.opcode = VSS_ISTREAM_CMD_SET_ENC_DTX_MODE;
-		cvs_set_dtx.dtx_mode.enable = 0;
-
-		v->cvs_state = CMD_STATUS_FAIL;
-
-		ret = apr_send_pkt(apr_cvs, (uint32_t *) &cvs_set_dtx);
-		if (ret < 0) {
-			pr_err("%s: Error %d sending SET_DTX\n",
-			       __func__, ret);
-
-			goto fail;
-		}
-
-		ret = wait_event_timeout(v->cvs_wait,
-					 (v->cvs_state == CMD_STATUS_SUCCESS),
-					 msecs_to_jiffies(TIMEOUT_MS));
-		if (!ret) {
-			pr_err("%s: wait_event timeout\n", __func__);
-
-			goto fail;
-		}
+		ret = voice_set_dtx(v);
 
 		break;
 	}
@@ -1217,39 +1200,7 @@ static int voice_config_cvs_vocoder(struct voice_data *v)
 	case VSS_MEDIA_ID_G729:
 	case VSS_MEDIA_ID_G711_ALAW:
 	case VSS_MEDIA_ID_G711_MULAW: {
-		struct cvs_set_enc_dtx_mode_cmd cvs_set_dtx;
-		/* Disable DTX */
-		pr_info("%s: Disabling DTX\n", __func__);
-
-		cvs_set_dtx.hdr.hdr_field = APR_HDR_FIELD(APR_MSG_TYPE_SEQ_CMD,
-						      APR_HDR_LEN(APR_HDR_SIZE),
-						      APR_PKT_VER);
-		cvs_set_dtx.hdr.pkt_size = APR_PKT_SIZE(APR_HDR_SIZE,
-					    sizeof(cvs_set_dtx) - APR_HDR_SIZE);
-		cvs_set_dtx.hdr.src_port = 0;
-		cvs_set_dtx.hdr.dest_port = cvs_handle;
-		cvs_set_dtx.hdr.token = 0;
-		cvs_set_dtx.hdr.opcode = VSS_ISTREAM_CMD_SET_ENC_DTX_MODE;
-		cvs_set_dtx.dtx_mode.enable = 0;
-
-		v->cvs_state = CMD_STATUS_FAIL;
-
-		ret = apr_send_pkt(apr_cvs, (uint32_t *) &cvs_set_dtx);
-		if (ret < 0) {
-			pr_err("%s: Error %d sending SET_DTX\n",
-			       __func__, ret);
-
-			goto fail;
-		}
-
-		ret = wait_event_timeout(v->cvs_wait,
-					 (v->cvs_state == CMD_STATUS_SUCCESS),
-					 msecs_to_jiffies(TIMEOUT_MS));
-		if (!ret) {
-			pr_err("%s: wait_event timeout\n", __func__);
-
-			goto fail;
-		}
+		ret = voice_set_dtx(v);
 
 		break;
 	}
@@ -1259,10 +1210,8 @@ static int voice_config_cvs_vocoder(struct voice_data *v)
 	}
 	}
 
-	return 0;
-
-fail:
-	return -EINVAL;
+done:
+	return ret;
 }
 
 static int voice_send_start_voice_cmd(struct voice_data *v)
@@ -2139,6 +2088,7 @@ static void voice_auddev_cb_function(u32 evt_id,
 				&& (v->dev_tx.enabled == VOICE_DEV_ENABLED)) {
 				rc = voice_apr_register(v);
 				if (rc < 0) {
+					mutex_unlock(&v->lock);
 					pr_err("%s: voice apr registration"
 						"failed\n", __func__);
 					return;
@@ -2250,6 +2200,7 @@ static void voice_auddev_cb_function(u32 evt_id,
 				(v->v_call_status == VOICE_CALL_START)) {
 				rc = voice_apr_register(v);
 				if (rc < 0) {
+					mutex_unlock(&v->lock);
 					pr_err("%s: voice apr registration"
 						"failed\n", __func__);
 					return;
@@ -2397,11 +2348,13 @@ void voice_register_mvs_cb(ul_cb_fn ul_cb,
 
 void voice_config_vocoder(uint32_t media_type,
 			  uint32_t rate,
-			  uint32_t network_type)
+			  uint32_t network_type,
+			  uint32_t dtx_mode)
 {
 	voice.mvs_info.media_type = media_type;
 	voice.mvs_info.rate = rate;
 	voice.mvs_info.network_type = network_type;
+	voice.mvs_info.dtx_mode = dtx_mode;
 }
 
 static int32_t modem_mvm_callback(struct apr_client_data *data, void *priv)
@@ -2414,11 +2367,14 @@ static int32_t modem_mvm_callback(struct apr_client_data *data, void *priv)
 				data->payload_size, data->opcode);
 
 	if (data->opcode == RESET_EVENTS) {
+		pr_debug("%s:Reset event received in Voice service MVM\n",
+					__func__);
 		apr_reset(v->apr_mvm);
 		apr_reset(v->apr_q6_mvm);
 		v->apr_q6_mvm = NULL;
 		v->apr_mvm = NULL;
-		pr_debug("Reset event received in Voice service");
+		v->mvm_handle = 0;
+		v->mvm_q6_handle = 0;
 		return 0;
 	}
 
@@ -2512,10 +2468,14 @@ static int32_t modem_cvs_callback(struct apr_client_data *data, void *priv)
 					data->payload_size, data->opcode);
 
 	if (data->opcode == RESET_EVENTS) {
+		pr_debug("%s:Reset event received in Voice service CVS\n",
+						__func__);
 		apr_reset(v->apr_cvs);
 		apr_reset(v->apr_q6_cvs);
 		v->apr_q6_cvs = NULL;
 		v->apr_cvs = NULL;
+		v->cvs_handle = 0;
+		v->cvs_q6_handle = 0;
 		return 0;
 	}
 
@@ -2697,10 +2657,14 @@ static int32_t modem_cvp_callback(struct apr_client_data *data, void *priv)
 				data->payload_size, data->opcode);
 
 	if (data->opcode == RESET_EVENTS) {
+		pr_debug("%s:Reset event received in Voice service CVP\n",
+							__func__);
 		apr_reset(v->apr_cvp);
 		apr_reset(v->apr_q6_cvp);
 		v->apr_q6_cvp = NULL;
 		v->apr_cvp = NULL;
+		v->cvp_handle = 0;
+		v->cvp_q6_handle = 0;
 		return 0;
 	}
 

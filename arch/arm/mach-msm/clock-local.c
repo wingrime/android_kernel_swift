@@ -410,7 +410,7 @@ static int local_clk_enable_nolock(unsigned id)
 	struct clk_local *clk = &soc_clk_local_tbl[id];
 	int rc = 0;
 
-	if (clk->type == RESET)
+	if (clk->type == NOENABLE)
 		return -EPERM;
 
 	if (!clk->count) {
@@ -523,7 +523,7 @@ void local_clk_auto_off(unsigned id)
 	struct clk_local *clk = &soc_clk_local_tbl[id];
 	unsigned long flags;
 
-	if (clk->type == RESET)
+	if (clk->type == NOENABLE)
 		return;
 
 	spin_lock_irqsave(&local_clock_reg_lock, flags);
@@ -618,7 +618,7 @@ int local_clk_set_rate(unsigned id, unsigned rate)
 	struct clk_local *clk = &soc_clk_local_tbl[id];
 	struct clk_freq_tbl *nf;
 
-	if (clk->type == NORATE || clk->type == RESET)
+	if (clk->type == NORATE || clk->type == NOENABLE)
 		return -EPERM;
 
 	for (nf = clk->freq_tbl; nf->freq_hz != FREQ_END
@@ -637,7 +637,7 @@ int local_clk_set_min_rate(unsigned id, unsigned rate)
 	struct clk_local *clk = &soc_clk_local_tbl[id];
 	struct clk_freq_tbl *nf;
 
-	if (clk->type == NORATE || clk->type == RESET)
+	if (clk->type == NORATE || clk->type == NOENABLE)
 		return -EPERM;
 
 	for (nf = clk->freq_tbl; nf->freq_hz != FREQ_END
@@ -663,7 +663,7 @@ unsigned local_clk_get_rate(unsigned id)
 	unsigned long flags;
 	unsigned ret = 0;
 
-	if (clk->type == NORATE || clk->type == RESET)
+	if (clk->type == NORATE || clk->type == NOENABLE)
 		return 0;
 
 	spin_lock_irqsave(&local_clock_reg_lock, flags);
@@ -683,7 +683,7 @@ int local_clk_is_enabled(unsigned id)
 {
 	struct clk_local *clk = &soc_clk_local_tbl[id];
 
-	if (clk->type == RESET)
+	if (clk->type == NOENABLE)
 		return -EPERM;
 
 	return !!(soc_clk_local_tbl[id].count);
@@ -695,7 +695,7 @@ long local_clk_round_rate(unsigned id, unsigned rate)
 	struct clk_local *clk = &soc_clk_local_tbl[id];
 	struct clk_freq_tbl *f;
 
-	if (clk->type == NORATE || clk->type == RESET)
+	if (clk->type == NORATE || clk->type == NOENABLE)
 		return -EINVAL;
 
 	for (f = clk->freq_tbl; f->freq_hz != FREQ_END; f++)

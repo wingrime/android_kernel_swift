@@ -63,11 +63,14 @@
 #define QS_S5K4E1_TOTAL_STEPS_NEAR_TO_FAR    32
 
 uint16_t qs_s5k4e1_step_position_table[QS_S5K4E1_TOTAL_STEPS_NEAR_TO_FAR+1];
-uint16_t qs_s5k4e1_nl_region_boundary1 = 3;
-uint16_t qs_s5k4e1_nl_region_code_per_step1 = 30;
-uint16_t qs_s5k4e1_l_region_code_per_step = 4;
+uint16_t qs_s5k4e1_nl_region_boundary1;
+uint16_t qs_s5k4e1_nl_region_code_per_step1 = 190;
+uint16_t qs_s5k4e1_l_region_code_per_step = 8;
 uint16_t qs_s5k4e1_damping_threshold = 10;
-uint16_t qs_s5k4e1_sw_damping_time_wait = 1;
+uint16_t qs_s5k4e1_sw_damping_time_wait = 8;
+uint16_t qs_s5k4e1_af_mode = 4;
+int16_t qs_s5k4e1_af_initial_code = 190;
+int16_t qs_s5k4e1_af_right_adjust;
 
 struct qs_s5k4e1_work_t {
 	struct work_struct work;
@@ -512,9 +515,6 @@ static int32_t qs_s5k4e1_bridge_reset(void){
 	if (rc < 0)
 		goto bridge_fail;
 	msleep(30);
-	rc = bridge_i2c_write_w(0x14, 0x0C);
-	if (rc < 0)
-		goto err;
 	rc = bridge_i2c_write_w(0x0E, 0xFFFF);
 	if (rc < 0)
 		goto err;
@@ -525,16 +525,10 @@ static int32_t qs_s5k4e1_bridge_reset(void){
 	if (rc < 0)
 		goto err;
 	msleep(30);
-	rc = bridge_i2c_write_w(0x54, (RegData | 0x3));
-	if (rc < 0)
-		goto err;
 	rc = bridge_i2c_read(0x54, &RegData, 2);
 	if (rc < 0)
 		goto err;
 	rc = bridge_i2c_write_w(0x54, (RegData | 0x4));
-	if (rc < 0)
-		goto err;
-	rc = bridge_i2c_write_w(0x54, (RegData | 0xC));
 	if (rc < 0)
 		goto err;
 	rc = bridge_i2c_read(0x55, &GPIOInState, 2);
@@ -544,9 +538,6 @@ static int32_t qs_s5k4e1_bridge_reset(void){
 	if (rc < 0)
 		goto err;
 	msleep(30);
-	rc = bridge_i2c_write_w(0x55, (GPIOInState | 0x3));
-	if (rc < 0)
-		goto err;
 	rc = bridge_i2c_read(0x55, &GPIOInState, 2);
 	if (rc < 0)
 		goto err;
@@ -554,9 +545,6 @@ static int32_t qs_s5k4e1_bridge_reset(void){
 	if (rc < 0)
 		goto err;
 	msleep(30);
-	rc = bridge_i2c_write_w(0x55, (GPIOInState | 0xC));
-	if (rc < 0)
-		goto err;
 	rc = bridge_i2c_read(0x55, &GPIOInState, 2);
 	if (rc < 0)
 		goto err;
@@ -581,7 +569,16 @@ bridge_fail:
 
 static void qs_s5k4e1_bridge_config(int mode, int rt)
 {
+	unsigned short RegData = 0;
 	if (mode == MODE_3D) {
+		bridge_i2c_read(0x54, &RegData, 2);
+		bridge_i2c_write_w(0x54, (RegData | 0x2));
+		bridge_i2c_write_w(0x54, (RegData | 0xa));
+		bridge_i2c_read(0x55, &RegData, 2);
+		bridge_i2c_write_w(0x55, (RegData | 0x2));
+		bridge_i2c_write_w(0x55, (RegData | 0xa));
+		bridge_i2c_write_w(0x14, 0x0C);
+		msleep(20);
 		bridge_i2c_write_w(0x16, 0x00);
 		bridge_i2c_write_w(0x51, 0x3);
 		bridge_i2c_write_w(0x52, 0x1);
@@ -589,11 +586,31 @@ static void qs_s5k4e1_bridge_config(int mode, int rt)
 		bridge_i2c_write_w(0x04, 0x2018);
 		bridge_i2c_write_w(0x50, 0x00);
 	} else if (mode == MODE_2D_RIGHT) {
+		bridge_i2c_read(0x54, &RegData, 2);
+		RegData |= 0x2;
+		bridge_i2c_write_w(0x54, RegData);
+		bridge_i2c_write_w(0x54, (RegData & ~(0x8)));
+		bridge_i2c_read(0x55, &RegData, 2);
+		RegData |= 0x2;
+		bridge_i2c_write_w(0x55, RegData);
+		bridge_i2c_write_w(0x55, (RegData & ~(0x8)));
+		bridge_i2c_write_w(0x14, 0x04);
+		msleep(20);
 		bridge_i2c_write_w(0x51, 0x3);
 		bridge_i2c_write_w(0x06, 0x01);
 		bridge_i2c_write_w(0x04, 0x2018);
 		bridge_i2c_write_w(0x50, 0x01);
 	} else if (mode == MODE_2D_LEFT) {
+		bridge_i2c_read(0x54, &RegData, 2);
+		RegData |= 0x8;
+		bridge_i2c_write_w(0x54, RegData);
+		bridge_i2c_write_w(0x54, (RegData & ~(0x2)));
+		bridge_i2c_read(0x55, &RegData, 2);
+		RegData |= 0x8;
+		bridge_i2c_write_w(0x55, RegData);
+		bridge_i2c_write_w(0x55, (RegData & ~(0x2)));
+		bridge_i2c_write_w(0x14, 0x08);
+		msleep(20);
 		bridge_i2c_write_w(0x51, 0x3);
 		bridge_i2c_write_w(0x06, 0x02);
 		bridge_i2c_write_w(0x04, 0x2018);
@@ -678,7 +695,8 @@ static int32_t qs_s5k4e1_set_fps(struct fps_cfg   *fps)
 		((prev_frame_length_lines) * qs_s5k4e1_ctrl->fps_divider/0x400);
 	} else {
 		total_lines_per_frame = (uint16_t)
-		((snap_frame_length_lines) * qs_s5k4e1_ctrl->fps_divider/0x400);
+		((snap_frame_length_lines) *
+			qs_s5k4e1_ctrl->pict_fps_divider/0x400);
 	}
 	qs_s5k4e1_group_hold_on();
 	rc = qs_s5k4e1_i2c_write_w_sensor(REG_FRAME_LENGTH_LINES,
@@ -690,11 +708,9 @@ static int32_t qs_s5k4e1_set_fps(struct fps_cfg   *fps)
 static int32_t qs_s5k4e1_write_exp_gain(struct sensor_3d_exp_cfg exp_cfg)
 {
 	uint16_t max_legal_gain = 0x0200;
-	uint16_t min_ll_pck = 0x0AB2;
 	uint32_t ll_pck, fl_lines;
 	uint16_t gain = exp_cfg.gain;
 	uint32_t line = exp_cfg.line;
-	uint32_t ll_ratio;
 	int32_t rc = 0;
 	if (gain > max_legal_gain) {
 		CDBG("Max legal gain Line:%d\n", __LINE__);
@@ -705,28 +721,19 @@ static int32_t qs_s5k4e1_write_exp_gain(struct sensor_3d_exp_cfg exp_cfg)
 	if (qs_s5k4e1_ctrl->sensormode == SENSOR_PREVIEW_MODE) {
 		qs_s5k4e1_ctrl->my_reg_gain = gain;
 		qs_s5k4e1_ctrl->my_reg_line_count = (uint16_t) line;
-		line = (uint32_t) (line * qs_s5k4e1_ctrl->fps_divider);
-		fl_lines = prev_frame_length_lines;
+		fl_lines = prev_frame_length_lines *
+			qs_s5k4e1_ctrl->fps_divider / 0x400;
 		ll_pck = prev_line_length_pck;
 	} else {
-		line = (uint32_t) (line * qs_s5k4e1_ctrl->pict_fps_divider);
-		fl_lines = snap_frame_length_lines;
+		fl_lines = snap_frame_length_lines *
+			qs_s5k4e1_ctrl->pict_fps_divider / 0x400;
 		ll_pck = snap_line_length_pck;
 	}
-
-	if (fl_lines < (line / 0x400))
-		ll_ratio = (line / (fl_lines - QS_S5K4E1_OFFSET));
-	else
-		ll_ratio = 0x400;
-
-	ll_pck = ll_pck * ll_ratio / 0x400;
-	line = line / ll_ratio;
-	if (ll_pck < min_ll_pck)
-		ll_pck = min_ll_pck;
-
+	if (line > (fl_lines - QS_S5K4E1_OFFSET))
+		fl_lines = line + QS_S5K4E1_OFFSET;
 	qs_s5k4e1_group_hold_on();
 	rc = qs_s5k4e1_i2c_write_w_sensor(REG_GLOBAL_GAIN, gain);
-	rc = qs_s5k4e1_i2c_write_w_sensor(REG_LINE_LENGTH_PCK, ll_pck);
+	rc = qs_s5k4e1_i2c_write_w_sensor(REG_FRAME_LENGTH_LINES, fl_lines);
 	rc = qs_s5k4e1_i2c_write_w_sensor(REG_COARSE_INTEGRATION_TIME, line);
 	if ((qs_s5k4e1_ctrl->cam_mode == MODE_3D) && (cali_data_status == 1)) {
 		bridge_i2c_write_w(0x06, 0x01);
@@ -752,57 +759,150 @@ static int32_t qs_s5k4e1_set_pict_exp_gain(struct sensor_3d_exp_cfg exp_cfg)
 	return rc;
 }
 
+static int32_t qs_s5k4e1_write_focus_value(uint16_t code_value)
+{
+	uint8_t code_val_msb, code_val_lsb;
+	if ((qs_s5k4e1_ctrl->cam_mode == MODE_2D_LEFT) ||
+		(qs_s5k4e1_ctrl->cam_mode == MODE_3D)) {
+		/* Left */
+		bridge_i2c_write_w(0x06, 0x02);
+		CDBG("%s: Left Lens Position: %d\n", __func__,
+			code_value);
+		code_val_msb = code_value >> 4;
+		code_val_lsb = (code_value & 0x000F) << 4;
+		code_val_lsb |= qs_s5k4e1_af_mode;
+		if (af_i2c_write_b_sensor(code_val_msb, code_val_lsb) < 0) {
+			CDBG("move_focus failed at line %d ...\n", __LINE__);
+			return -EBUSY;
+		}
+	}
+
+	if ((qs_s5k4e1_ctrl->cam_mode == MODE_2D_RIGHT) ||
+		(qs_s5k4e1_ctrl->cam_mode == MODE_3D)) {
+		/* Right */
+		bridge_i2c_write_w(0x06, 0x01);
+		code_value += qs_s5k4e1_af_right_adjust;
+		CDBG("%s: Right Lens Position: %d\n", __func__,
+			code_value);
+		code_val_msb = code_value >> 4;
+		code_val_lsb = (code_value & 0x000F) << 4;
+		code_val_lsb |= qs_s5k4e1_af_mode;
+		if (af_i2c_write_b_sensor(code_val_msb, code_val_lsb) < 0) {
+			CDBG("move_focus failed at line %d ...\n", __LINE__);
+			return -EBUSY;
+		}
+	}
+
+	if (qs_s5k4e1_ctrl->cam_mode == MODE_3D) {
+		/* 3D Mode */
+		bridge_i2c_write_w(0x06, 0x03);
+	}
+	usleep(qs_s5k4e1_sw_damping_time_wait*50);
+	return 0;
+}
+
 static int32_t qs_s5k4e1_move_focus(int direction,
 	int32_t num_steps)
 {
-	int16_t step_direction, actual_step, next_position;
-	uint8_t code_val_msb, code_val_lsb;
+	int16_t step_direction, actual_step, dest_lens_position,
+		dest_step_position;
+	CDBG("Inside %s\n", __func__);
 	if (direction == MOVE_NEAR)
-		step_direction = 16;
+		step_direction = 1;
 	else
-		step_direction = -16;
+		step_direction = -1;
 
 	actual_step = (int16_t) (step_direction * (int16_t) num_steps);
-	next_position = (int16_t) (qs_s5k4e1_ctrl->curr_lens_pos + actual_step);
+	dest_step_position = (int16_t) (qs_s5k4e1_ctrl->curr_step_pos +
+		actual_step);
 
-	if (next_position > 1023)
-		next_position = 1023;
-	else if (next_position < 0)
-		next_position = 0;
+	if (dest_step_position > QS_S5K4E1_TOTAL_STEPS_NEAR_TO_FAR)
+		dest_step_position = QS_S5K4E1_TOTAL_STEPS_NEAR_TO_FAR;
+	else if (dest_step_position < 0)
+		dest_step_position = 0;
 
-	code_val_msb = next_position >> 4;
-	code_val_lsb = (next_position & 0x000F) << 4;
-
-	if (af_i2c_write_b_sensor(code_val_msb, code_val_lsb) < 0) {
-		CDBG("move_focus failed at line %d ...\n", __LINE__);
-		return -EBUSY;
+	if (dest_step_position == qs_s5k4e1_ctrl->curr_step_pos) {
+		CDBG("%s cur and dest pos are same\n", __func__);
+		CDBG("%s cur_step_pos:%d\n", __func__,
+			qs_s5k4e1_ctrl->curr_step_pos);
+		return 0;
 	}
 
-	qs_s5k4e1_ctrl->curr_lens_pos = next_position;
+	dest_lens_position = qs_s5k4e1_step_position_table[dest_step_position];
+	CDBG("%s: Step Position: %d\n", __func__, dest_step_position);
+
+	if (step_direction < 0) {
+		if (num_steps >= 20) {
+			/* sweeping towards all the way in infinity direction */
+			qs_s5k4e1_af_mode = 2;
+			qs_s5k4e1_sw_damping_time_wait = 8;
+		} else if (num_steps <= 4) {
+			/* reverse search during macro mode */
+			qs_s5k4e1_af_mode = 4;
+			qs_s5k4e1_sw_damping_time_wait = 16;
+		} else {
+			qs_s5k4e1_af_mode = 3;
+			qs_s5k4e1_sw_damping_time_wait = 12;
+		}
+	} else {
+		/* coarse search towards macro direction */
+		qs_s5k4e1_af_mode = 4;
+		qs_s5k4e1_sw_damping_time_wait = 16;
+	}
+
+	if (qs_s5k4e1_ctrl->curr_lens_pos != dest_lens_position) {
+		if (qs_s5k4e1_write_focus_value(dest_lens_position) < 0) {
+			CDBG("move_focus failed at line %d ...\n", __LINE__);
+			return -EBUSY;
+		}
+	}
+
+	qs_s5k4e1_ctrl->curr_step_pos = dest_step_position;
+	qs_s5k4e1_ctrl->curr_lens_pos = dest_lens_position;
 	return 0;
 }
 
 static int32_t qs_s5k4e1_set_default_focus(uint8_t af_step)
 {
 	int32_t rc = 0;
-	return 0;
-	if (qs_s5k4e1_ctrl->curr_step_pos != 0) {
+	if (qs_s5k4e1_ctrl->curr_step_pos) {
 		rc = qs_s5k4e1_move_focus(MOVE_FAR,
-		qs_s5k4e1_ctrl->curr_step_pos);
+			qs_s5k4e1_ctrl->curr_step_pos);
+		if (rc < 0)
+			return rc;
 	} else {
-		af_i2c_write_b_sensor(0x00, 0x00);
+		rc = qs_s5k4e1_write_focus_value(
+			qs_s5k4e1_step_position_table[0]);
+		if (rc < 0)
+			return rc;
+		qs_s5k4e1_ctrl->curr_lens_pos =
+			qs_s5k4e1_step_position_table[0];
 	}
-
-	qs_s5k4e1_ctrl->curr_lens_pos = 0;
-	qs_s5k4e1_ctrl->curr_step_pos = 0;
-
-	return rc;
+	CDBG("%s\n", __func__);
+	return 0;
 }
 
 static void qs_s5k4e1_init_focus(void)
 {
 	uint8_t i;
-	qs_s5k4e1_step_position_table[0] = 0;
+	int32_t rc = 0;
+	int16_t af_far_data = 0;
+	qs_s5k4e1_af_initial_code = 190;
+	/* Read the calibration data from left and right sensors if available */
+	rc = qs_s5k4e1_eeprom_i2c_read_b(0x110, &af_far_data, 2);
+	if (rc == 0) {
+		CDBG("%s: Left Far data - %d\n", __func__, af_far_data);
+		qs_s5k4e1_af_initial_code = af_far_data;
+	}
+
+	rc = qs_s5k4e1_eeprom_i2c_read_b(0x112, &af_far_data, 2);
+	if (rc == 0) {
+		CDBG("%s: Right Far data - %d\n", __func__, af_far_data);
+		qs_s5k4e1_af_right_adjust = af_far_data -
+			qs_s5k4e1_af_initial_code;
+	}
+
+	qs_s5k4e1_step_position_table[0] = qs_s5k4e1_af_initial_code;
 	for (i = 1; i <= QS_S5K4E1_TOTAL_STEPS_NEAR_TO_FAR; i++) {
 		if (i <= qs_s5k4e1_nl_region_boundary1) {
 			qs_s5k4e1_step_position_table[i] =
@@ -814,9 +914,10 @@ static void qs_s5k4e1_init_focus(void)
 				+ qs_s5k4e1_l_region_code_per_step;
 		}
 
-		if (qs_s5k4e1_step_position_table[i] > 255)
-			qs_s5k4e1_step_position_table[i] = 255;
+		if (qs_s5k4e1_step_position_table[i] > 1023)
+			qs_s5k4e1_step_position_table[i] = 1023;
 	}
+	qs_s5k4e1_ctrl->curr_step_pos = 0;
 }
 
 static int32_t qs_s5k4e1_test(enum qs_s5k4e1_test_mode_t mo)
@@ -850,7 +951,7 @@ static int32_t qs_s5k4e1_sensor_setting(int update_type, int rt)
 	if (update_type == REG_INIT) {
 		CSI_CONFIG = 0;
 		LENS_SHADE_CONFIG = 0;
-		default_lens_shade = 1;
+		default_lens_shade = 0;
 		bridge_i2c_write_w(0x53, 0x01);
 		msleep(30);
 		qs_s5k4e1_bridge_config(qs_s5k4e1_ctrl->cam_mode, rt);
@@ -866,12 +967,12 @@ static int32_t qs_s5k4e1_sensor_setting(int update_type, int rt)
 				qs_s5k4e1_csi_params.lane_cnt = 4;
 				qs_s5k4e1_csi_params.data_format = CSI_8BIT;
 			} else {
-				qs_s5k4e1_csi_params.lane_cnt = 2;
+				qs_s5k4e1_csi_params.lane_cnt = 1;
 				qs_s5k4e1_csi_params.data_format = CSI_10BIT;
 			}
 			qs_s5k4e1_csi_params.lane_assign = 0xe4;
 			qs_s5k4e1_csi_params.dpcm_scheme = 0;
-			qs_s5k4e1_csi_params.settle_cnt = 24;
+			qs_s5k4e1_csi_params.settle_cnt = 28;
 			rc = msm_camio_csi_config(&qs_s5k4e1_csi_params);
 			msleep(10);
 			cam_debug_init();
@@ -996,6 +1097,14 @@ static int32_t qs_s5k4e1_set_sensor_mode(int mode,
 
 static int32_t qs_s5k4e1_power_down(void)
 {
+	qs_s5k4e1_stop_stream();
+	msleep(30);
+	qs_s5k4e1_af_mode = 2;
+	qs_s5k4e1_af_right_adjust = 0;
+	qs_s5k4e1_write_focus_value(0);
+	msleep(100);
+	/* Set AF actutator to PowerDown */
+	af_i2c_write_b_sensor(0x80, 00);
 	return 0;
 }
 
@@ -1406,14 +1515,14 @@ static int qs_s5k4e1_focus_test(void *data, u64 *val)
 	int i = 0;
 	qs_s5k4e1_set_default_focus(0);
 
-	for (i = 90; i < 256; i++) {
-		qs_s5k4e1_i2c_write_w_sensor(REG_VCM_NEW_CODE, i);
-		msleep(5000);
+	for (i = 0; i < QS_S5K4E1_TOTAL_STEPS_NEAR_TO_FAR; i++) {
+		qs_s5k4e1_move_focus(MOVE_NEAR, 1);
+		msleep(2000);
 	}
 	msleep(5000);
-	for (i = 255; i > 90; i--) {
-		qs_s5k4e1_i2c_write_w_sensor(REG_VCM_NEW_CODE, i);
-		msleep(5000);
+	for ( ; i > 0; i--) {
+		qs_s5k4e1_move_focus(MOVE_FAR, 1);
+		msleep(2000);
 	}
 	return 0;
 }
@@ -1423,20 +1532,27 @@ DEFINE_SIMPLE_ATTRIBUTE(cam_focus, qs_s5k4e1_focus_test,
 
 static int qs_s5k4e1_step_test(void *data, u64 *val)
 {
-	int i = 0;
-	uint16_t RegMSB, RegLSB;
-	for (i = 0; i < 1024; i += 10) {
-		RegMSB = i >> 4;
-		RegLSB = (i & 0x000F) << 4;
-		af_i2c_write_b_sensor(RegMSB, RegLSB);
-		msleep(20);
-	}
+	int rc = 0;
+	struct sensor_large_data cdata;
+	rc = qs_s5k4e1_get_calibration_data
+		(&cdata.data.sensor_3d_cali_data);
+	if (rc < 0)
+		CDBG("%s: Calibration data read fail.\n", __func__);
+
+	return 0;
+}
+
+static int qs_s5k4e1_set_step(void *data, u64 val)
+{
+	qs_s5k4e1_l_region_code_per_step = val & 0xFF;
+	qs_s5k4e1_af_mode = (val >> 8) & 0xFF;
+	qs_s5k4e1_nl_region_code_per_step1 = (val >> 16) & 0xFFFF;
 
 	return 0;
 }
 
 DEFINE_SIMPLE_ATTRIBUTE(cam_step, qs_s5k4e1_step_test,
-			NULL, "%lld\n");
+			qs_s5k4e1_set_step, "%lld\n");
 
 static int cam_debug_stream_set(void *data, u64 val)
 {
@@ -1461,6 +1577,37 @@ static int cam_debug_stream_get(void *data, u64 *val)
 DEFINE_SIMPLE_ATTRIBUTE(cam_stream, cam_debug_stream_get,
 			cam_debug_stream_set, "%llu\n");
 
+static uint16_t qs_s5k4e1_step_val = QS_S5K4E1_TOTAL_STEPS_NEAR_TO_FAR;
+static uint8_t qs_s5k4e1_step_dir = MOVE_NEAR;
+static int qs_s5k4e1_af_step_config(void *data, u64 val)
+{
+	qs_s5k4e1_step_val = val & 0xFFFF;
+	qs_s5k4e1_step_dir = (val >> 16) & 0x1;
+	CDBG("%s\n", __func__);
+	return 0;
+}
+
+static int qs_s5k4e1_af_step(void *data, u64 *val)
+{
+	int i = 0;
+	int dir = MOVE_NEAR;
+	CDBG("%s\n", __func__);
+	qs_s5k4e1_set_default_focus(0);
+	msleep(5000);
+	if (qs_s5k4e1_step_dir == 1)
+		dir = MOVE_FAR;
+
+	for (i = 0; i < qs_s5k4e1_step_val; i += 4) {
+		qs_s5k4e1_move_focus(dir, 4);
+		msleep(1000);
+	}
+	qs_s5k4e1_set_default_focus(0);
+	return 0;
+}
+
+DEFINE_SIMPLE_ATTRIBUTE(af_step, qs_s5k4e1_af_step,
+			qs_s5k4e1_af_step_config, "%llu\n");
+
 static int cam_debug_init(void)
 {
 	struct dentry *cam_dir;
@@ -1480,6 +1627,9 @@ static int cam_debug_init(void)
 		return -ENOMEM;
 	if (!debugfs_create_file("stream", S_IRUGO | S_IWUSR, cam_dir,
 							 NULL, &cam_stream))
+		return -ENOMEM;
+	if (!debugfs_create_file("af_step", S_IRUGO | S_IWUSR, cam_dir,
+							 NULL, &af_step))
 		return -ENOMEM;
 	return 0;
 }

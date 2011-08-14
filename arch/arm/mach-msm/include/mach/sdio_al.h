@@ -127,26 +127,4 @@ int sdio_write_avail(struct sdio_channel *ch);
  */
 int sdio_read_avail(struct sdio_channel *ch);
 
-/**
- *  Set the threshold to trigger interrupt from SDIO-Card on
- *  available bytes to write.
- *
- * @ch: channel handle.
- * @threshold: bytes count;
- *
- * @return 0 on success, negative value on error.
- */
-int sdio_set_write_threshold(struct sdio_channel *ch, int threshold);
-
-/**
- *  Set the threshold to trigger interrupt from SDIO-Card on
- *  available bytes to read.
- *
- * @ch: channel handle.
- * @threshold: bytes count;
- *
- * @return 0 on success, negative value on error.
- */
-int sdio_set_read_threshold(struct sdio_channel *ch, int threshold);
-
 #endif /* __SDIO_AL__ */

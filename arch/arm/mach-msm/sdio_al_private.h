@@ -28,6 +28,8 @@
 #define SDIO_PREFIX "SDIO_"
 #define PEER_CHANNEL_NAME_SIZE		4
 #define CHANNEL_NAME_SIZE (sizeof(SDIO_PREFIX) + PEER_CHANNEL_NAME_SIZE)
+#define SDIO_TEST_POSTFIX_SIZE 5
+#define MAX_NUM_OF_SDIO_DEVICES	2
 
 struct sdio_al_device; /* Forward Declaration */
 
@@ -56,6 +58,28 @@ struct peer_sdioc_channel_config {
 	u32 is_host_ok_to_sleep;
 	u32 is_packet_mode;
 	u32 reserved[25];
+};
+
+
+/**
+ * Peer SDIO-Client channel statsitics.
+ *
+ * @last_any_read_avail - the last read avail in all the
+ *		 channels including this channel.
+ * @last_read_avail - the last read_avail that was read from HW
+ *	    mailbox.
+ * @last_old_read_avail - the last read_avail channel shadow.
+ * @total_notifs - the total number of read notifications sent
+ *	 to this channel client
+ * @total_read_times - the total number of successful sdio_read
+ *	     calls for this channel
+ */
+struct sdio_channel_statistics {
+	int last_any_read_avail;
+	int last_read_avail;
+	int last_old_read_avail;
+	int total_notifs;
+	int total_read_times;
 };
 
 /**
@@ -126,13 +150,17 @@ struct peer_sdioc_channel_config {
  *  @sdio_al_dev - a pointer to the sdio_al_device instance of
  *   this channel
  *
+ *   @statistics - channel statistics
+ *
  */
 struct sdio_channel {
 	/* Channel Configuration Parameters*/
 	char name[CHANNEL_NAME_SIZE];
+	char ch_test_name[CHANNEL_NAME_SIZE+SDIO_TEST_POSTFIX_SIZE];
 	int read_threshold;
 	int write_threshold;
 	int def_read_threshold;
+	int threshold_change_cnt;
 	int min_write_avail;
 	int poll_delay_msec;
 	int is_packet_mode;
@@ -164,7 +192,7 @@ struct sdio_channel {
 
 	struct list_head rx_size_list_head;
 
-	struct platform_device pdev;
+	struct platform_device *pdev;
 
 	u32 total_rx_bytes;
 	u32 total_tx_bytes;
@@ -173,9 +201,7 @@ struct sdio_channel {
 
 	struct sdio_al_device *sdio_al_dev;
 
-	int last_any_read_avail;
-	int last_read_avail;
-	int last_old_read_avail;
+	struct sdio_channel_statistics statistics;
 };
 
 /**

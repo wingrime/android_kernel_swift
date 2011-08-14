@@ -78,7 +78,11 @@ static void activate_all_cols(const struct matrix_keypad_platform_data *pdata,
 static bool row_asserted(const struct matrix_keypad_platform_data *pdata,
 			 int row)
 {
-	return gpio_get_value_cansleep(pdata->row_gpios[row]) ?
+	if (pdata->qt_check)
+		return gpio_get_value_cansleep(pdata->row_gpios[row]) ?
+			pdata->active_low : !pdata->active_low;
+	else
+		return gpio_get_value_cansleep(pdata->row_gpios[row]) ?
 			!pdata->active_low : pdata->active_low;
 }
 

@@ -196,9 +196,7 @@ static int gic_suspend(struct sys_device *sysdev, pm_message_t state)
 	unsigned int gic_nr = sysdev->id;
 	void __iomem *base = gic_data[gic_nr].dist_base;
 
-	/* Dont disable STI's and PPI's. Assume they are quiesced
-	 * by the suspend framework */
-	for (i = 1; i * 32 < gic_data[gic_nr].max_irq; i++) {
+	for (i = 0; i * 32 < gic_data[gic_nr].max_irq; i++) {
 		gic_data[gic_nr].enabled_irqs[i]
 			= readl(base + GIC_DIST_ENABLE_SET + i * 4);
 		/* disable all of them */
@@ -218,9 +216,8 @@ void gic_show_resume_irq(unsigned int gic_nr)
 	unsigned long pending[32];
 	void __iomem *base = gic_data[gic_nr].dist_base;
 
-	pending[0] = 0;
 	spin_lock(&irq_controller_lock);
-	for (i = 1; i * 32 < gic_data[gic_nr].max_irq; i++) {
+	for (i = 0; i * 32 < gic_data[gic_nr].max_irq; i++) {
 		enabled = readl(base + GIC_DIST_ENABLE_CLEAR + i * 4);
 		pending[i] = readl(base + GIC_DIST_PENDING_SET + i * 4);
 		pending[i] &= enabled;
@@ -241,7 +238,7 @@ static int gic_resume(struct sys_device *sysdev)
 	unsigned int gic_nr = sysdev->id;
 	void __iomem *base = gic_data[gic_nr].dist_base;
 
-	for (i = 1; i * 32 < gic_data[gic_nr].max_irq; i++) {
+	for (i = 0; i * 32 < gic_data[gic_nr].max_irq; i++) {
 		/* disable all of them */
 		writel(0xffffffff, base + GIC_DIST_ENABLE_CLEAR + i * 4);
 		/* enable the enabled set */
@@ -302,7 +299,7 @@ static int __init gic_init_sysdev(void)
 		}
 	return 0;
 }
-arch_initcall(gic_init_sysdev);
+late_initcall(gic_init_sysdev);
 #else
 static int gic_set_wake(unsigned int irq, unsigned int on)
 {

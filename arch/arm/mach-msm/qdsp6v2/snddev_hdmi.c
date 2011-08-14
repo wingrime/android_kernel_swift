@@ -52,6 +52,14 @@ static int snddev_hdmi_open(struct msm_snddev_info *dev_info)
 		mutex_unlock(&snddev_hdmi_lock);
 		return -EBUSY;
 	}
+
+	if (snddev_hdmi_data->on_apps) {
+		snddev_hdmi_active = 1;
+		pr_debug("%s open done\n", dev_info->name);
+		mutex_unlock(&snddev_hdmi_lock);
+		return 0;
+	}
+
 	afe_config.hdmi.channel_mode = snddev_hdmi_data->channel_mode;
 	afe_config.hdmi.bitwidth = 16;
 	afe_config.hdmi.data_type = 0;
@@ -74,10 +82,15 @@ static int snddev_hdmi_open(struct msm_snddev_info *dev_info)
 
 static int snddev_hdmi_close(struct msm_snddev_info *dev_info)
 {
+
+	struct snddev_hdmi_data *snddev_hdmi_data;
+
 	if (!dev_info) {
 		pr_err("msm_snddev_info is null\n");
 		return -EINVAL;
 	}
+
+	snddev_hdmi_data = dev_info->private_data;
 
 	if (!dev_info->opened) {
 		pr_err("calling close device with out opening the"
@@ -92,6 +105,14 @@ static int snddev_hdmi_close(struct msm_snddev_info *dev_info)
 		return -EPERM;
 	}
 	snddev_hdmi_active = 0;
+
+	if (snddev_hdmi_data->on_apps) {
+		pr_debug("%s open done\n", dev_info->name);
+
+		mutex_unlock(&snddev_hdmi_lock);
+		return 0;
+	}
+
 
 	afe_close(HDMI_RX);
 

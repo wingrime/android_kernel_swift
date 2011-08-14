@@ -47,6 +47,7 @@
 #define MSM_ROTATOR_SRC_SIZE			(MSM_ROTATOR_BASE+0x1108)
 #define MSM_ROTATOR_SRCP0_ADDR			(MSM_ROTATOR_BASE+0x110c)
 #define MSM_ROTATOR_SRCP1_ADDR			(MSM_ROTATOR_BASE+0x1110)
+#define MSM_ROTATOR_SRCP2_ADDR			(MSM_ROTATOR_BASE+0x1114)
 #define MSM_ROTATOR_SRC_YSTRIDE1		(MSM_ROTATOR_BASE+0x111c)
 #define MSM_ROTATOR_SRC_YSTRIDE2		(MSM_ROTATOR_BASE+0x1120)
 #define MSM_ROTATOR_SRC_FORMAT			(MSM_ROTATOR_BASE+0x1124)
@@ -55,6 +56,7 @@
 #define MSM_ROTATOR_OUT_PACK_PATTERN1		(MSM_ROTATOR_BASE+0x1154)
 #define MSM_ROTATOR_OUTP0_ADDR			(MSM_ROTATOR_BASE+0x1168)
 #define MSM_ROTATOR_OUTP1_ADDR			(MSM_ROTATOR_BASE+0x116c)
+#define MSM_ROTATOR_OUTP2_ADDR			(MSM_ROTATOR_BASE+0x1170)
 #define MSM_ROTATOR_OUT_YSTRIDE1		(MSM_ROTATOR_BASE+0x1178)
 #define MSM_ROTATOR_OUT_YSTRIDE2		(MSM_ROTATOR_BASE+0x117c)
 #define MSM_ROTATOR_SRC_XY			(MSM_ROTATOR_BASE+0x1200)
@@ -97,6 +99,8 @@ struct msm_rotator_dev {
 	void __iomem *io_base;
 	int irq;
 	struct msm_rotator_img_info *img_info[MAX_SESSIONS];
+	struct clk *core_clk;
+	int pid_list[MAX_SESSIONS];
 	struct clk *pclk;
 	struct clk *axi_clk;
 	int rot_clk_state;
@@ -256,6 +260,8 @@ static int get_bpp(int format)
 
 	case MDP_Y_CBCR_H2V2:
 	case MDP_Y_CRCB_H2V2:
+	case MDP_Y_CB_CR_H2V2:
+	case MDP_Y_CR_CB_H2V2:
 	case MDP_Y_CRCB_H2V2_TILE:
 	case MDP_Y_CBCR_H2V2_TILE:
 		return 1;
@@ -370,13 +376,11 @@ static int msm_rotator_ycxcx_h2v2(struct msm_rotator_img_info *info,
 				  unsigned int use_imem,
 				  int new_session,
 				  unsigned int in_chroma_paddr,
-				  unsigned int out_chroma_paddr)
+				  unsigned int out_chroma_paddr,
+				  int is_planar)
 {
 	int bpp;
 	unsigned int in_chr_addr, out_chr_addr;
-
-	if (info->src.format != info->dst.format)
-		return -EINVAL;
 
 	bpp = get_bpp(info->src.format);
 	if (bpp < 0)
@@ -406,14 +410,30 @@ static int msm_rotator_ycxcx_h2v2(struct msm_rotator_img_info *info,
 			((info->dst_y * info->dst.width)/2 + info->dst_x),
 		  MSM_ROTATOR_OUTP1_ADDR);
 
+	if (is_planar) {
+		iowrite32(in_chr_addr +
+				(info->src.width / 2) * (info->src.height / 2),
+				MSM_ROTATOR_SRCP2_ADDR);
+	}
+
 	if (new_session) {
-		iowrite32(info->src.width |
-			  info->src.width << 16,
-			  MSM_ROTATOR_SRC_YSTRIDE1);
+		if (is_planar) {
+			iowrite32(info->src.width |
+					(info->src.width / 2) << 16,
+					MSM_ROTATOR_SRC_YSTRIDE1);
+			iowrite32((info->src.width / 2),
+					MSM_ROTATOR_SRC_YSTRIDE2);
+		} else {
+			iowrite32(info->src.width |
+					info->src.width << 16,
+					MSM_ROTATOR_SRC_YSTRIDE1);
+		}
 		iowrite32(info->dst.width |
-			  info->dst.width << 16,
-			  MSM_ROTATOR_OUT_YSTRIDE1);
-		if (info->src.format == MDP_Y_CBCR_H2V2) {
+				info->dst.width << 16,
+				MSM_ROTATOR_OUT_YSTRIDE1);
+
+		if ((info->src.format == MDP_Y_CBCR_H2V2) ||
+		    (info->src.format == MDP_Y_CB_CR_H2V2)) {
 			iowrite32(GET_PACK_PATTERN(0, 0, CLR_CB, CLR_CR, 8),
 				  MSM_ROTATOR_SRC_UNPACK_PATTERN1);
 			iowrite32(GET_PACK_PATTERN(0, 0, CLR_CB, CLR_CR, 8),
@@ -430,7 +450,7 @@ static int msm_rotator_ycxcx_h2v2(struct msm_rotator_img_info *info,
 			  MSM_ROTATOR_SUB_BLOCK_CFG);
 		iowrite32(0 << 29 | 		/* frame format 0 = linear */
 			  (use_imem ? 0 : 1) << 22 | /* tile size */
-			  2 << 19 | 		/* fetch planes 2 = pseudo */
+			  (is_planar ? 1 : 2) << 19 | /* fetch planes */
 			  0 << 18 | 		/* unpack align */
 			  1 << 17 | 		/* unpack tight */
 			  1 << 13 | 		/* unpack count 0=1 component */
@@ -887,7 +907,18 @@ static int msm_rotator_do_rotate(unsigned long arg)
 					    msm_rotator_dev->last_session_idx
 								!= s,
 					    in_chroma_paddr,
-					    out_chroma_paddr);
+					    out_chroma_paddr,
+						0);
+		break;
+	case MDP_Y_CB_CR_H2V2:
+	case MDP_Y_CR_CB_H2V2:
+		rc = msm_rotator_ycxcx_h2v2(msm_rotator_dev->img_info[s],
+					    in_paddr, out_paddr, use_imem,
+					    msm_rotator_dev->last_session_idx
+								!= s,
+					    in_chroma_paddr,
+					    out_chroma_paddr,
+						1);
 		break;
 	case MDP_Y_CRCB_H2V2_TILE:
 	case MDP_Y_CBCR_H2V2_TILE:
@@ -959,7 +990,7 @@ do_rotate_fail_dst_img:
 	return rc;
 }
 
-static int msm_rotator_start(unsigned long arg)
+static int msm_rotator_start(unsigned long arg, int pid)
 {
 	struct msm_rotator_img_info info;
 	int rc = 0;
@@ -997,6 +1028,8 @@ static int msm_rotator_start(unsigned long arg)
 	case MDP_BGRA_8888:
 	case MDP_Y_CBCR_H2V2:
 	case MDP_Y_CRCB_H2V2:
+	case MDP_Y_CB_CR_H2V2:
+	case MDP_Y_CR_CB_H2V2:
 	case MDP_Y_CBCR_H2V1:
 	case MDP_Y_CRCB_H2V1:
 	case MDP_YCRYCB_H2V1:
@@ -1018,6 +1051,8 @@ static int msm_rotator_start(unsigned long arg)
 	case MDP_BGRA_8888:
 	case MDP_Y_CBCR_H2V2:
 	case MDP_Y_CRCB_H2V2:
+	case MDP_Y_CB_CR_H2V2:
+	case MDP_Y_CR_CB_H2V2:
 	case MDP_Y_CBCR_H2V1:
 	case MDP_Y_CRCB_H2V1:
 	case MDP_YCRYCB_H2V1:
@@ -1033,6 +1068,7 @@ static int msm_rotator_start(unsigned long arg)
 			(unsigned int)msm_rotator_dev->img_info[s]
 			)) {
 			*(msm_rotator_dev->img_info[s]) = info;
+			msm_rotator_dev->pid_list[s] = pid;
 
 			if (msm_rotator_dev->last_session_idx == s)
 				msm_rotator_dev->last_session_idx =
@@ -1060,6 +1096,7 @@ static int msm_rotator_start(unsigned long arg)
 		info.session_id = (unsigned int)
 			msm_rotator_dev->img_info[first_free_index];
 		*(msm_rotator_dev->img_info[first_free_index]) = info;
+		msm_rotator_dev->pid_list[first_free_index] = pid;
 
 		if (copy_to_user((void __user *)arg, &info, sizeof(info)))
 			rc = -EFAULT;
@@ -1094,6 +1131,7 @@ static int msm_rotator_finish(unsigned long arg)
 					INVALID_SESSION;
 			kfree(msm_rotator_dev->img_info[s]);
 			msm_rotator_dev->img_info[s] = NULL;
+			msm_rotator_dev->pid_list[s] = 0;
 			break;
 		}
 	}
@@ -1104,15 +1142,67 @@ static int msm_rotator_finish(unsigned long arg)
 	return rc;
 }
 
-static int msm_rotator_ioctl(struct inode *inode, struct file *file,
-			     unsigned cmd, unsigned long arg)
+static int
+msm_rotator_open(struct inode *inode, struct file *filp)
 {
+	int *id;
+	int i;
+
+	if (filp->private_data)
+		return -EBUSY;
+
+	mutex_lock(&msm_rotator_dev->rotator_lock);
+	id = &msm_rotator_dev->pid_list[0];
+	for (i = 0; i < MAX_SESSIONS; i++, id++) {
+		if (*id == 0)
+			break;
+	}
+	mutex_unlock(&msm_rotator_dev->rotator_lock);
+
+	if (i == MAX_SESSIONS)
+		return -EBUSY;
+
+	filp->private_data = (void *)task_tgid_nr(current);
+
+	return 0;
+}
+
+static int
+msm_rotator_close(struct inode *inode, struct file *filp)
+{
+	int s;
+	int pid;
+
+	pid = (int)filp->private_data;
+	mutex_lock(&msm_rotator_dev->rotator_lock);
+	for (s = 0; s < MAX_SESSIONS; s++) {
+		if (msm_rotator_dev->img_info[s] != NULL &&
+			msm_rotator_dev->pid_list[s] == pid) {
+			kfree(msm_rotator_dev->img_info[s]);
+			msm_rotator_dev->img_info[s] = NULL;
+			if (msm_rotator_dev->last_session_idx == s)
+				msm_rotator_dev->last_session_idx =
+					INVALID_SESSION;
+		}
+	}
+	mutex_unlock(&msm_rotator_dev->rotator_lock);
+
+	return 0;
+}
+
+static long msm_rotator_ioctl(struct file *file, unsigned cmd,
+						 unsigned long arg)
+{
+	int pid;
+
 	if (_IOC_TYPE(cmd) != MSM_ROTATOR_IOCTL_MAGIC)
 		return -ENOTTY;
 
+	pid = (int)file->private_data;
+
 	switch (cmd) {
 	case MSM_ROTATOR_IOCTL_START:
-		return msm_rotator_start(arg);
+		return msm_rotator_start(arg, pid);
 	case MSM_ROTATOR_IOCTL_ROTATE:
 		return msm_rotator_do_rotate(arg);
 	case MSM_ROTATOR_IOCTL_FINISH:
@@ -1127,7 +1217,9 @@ static int msm_rotator_ioctl(struct inode *inode, struct file *file,
 
 static const struct file_operations msm_rotator_fops = {
 	.owner = THIS_MODULE,
-	.ioctl = msm_rotator_ioctl,
+	.open = msm_rotator_open,
+	.release = msm_rotator_close,
+	.unlocked_ioctl = msm_rotator_ioctl,
 };
 
 static int __devinit msm_rotator_probe(struct platform_device *pdev)
@@ -1384,12 +1476,16 @@ static int msm_rotator_resume(struct platform_device *dev)
 {
 	mutex_lock(&msm_rotator_dev->imem_lock);
 	if (msm_rotator_dev->imem_clk_state == CLK_SUSPEND
-		&& msm_rotator_dev->imem_clk)
+		&& msm_rotator_dev->imem_clk) {
 		clk_enable(msm_rotator_dev->imem_clk);
+		msm_rotator_dev->imem_clk_state = CLK_EN;
+	}
 	mutex_unlock(&msm_rotator_dev->imem_lock);
 	mutex_lock(&msm_rotator_dev->rotator_lock);
-	if (msm_rotator_dev->rot_clk_state == CLK_SUSPEND)
+	if (msm_rotator_dev->rot_clk_state == CLK_SUSPEND) {
 		enable_rot_clks();
+		msm_rotator_dev->rot_clk_state = CLK_EN;
+	}
 	mutex_unlock(&msm_rotator_dev->rotator_lock);
 	return 0;
 }

@@ -1,7 +1,7 @@
 /* arch/arm/mach-msm/smd_rpcrouter_device.c
  *
  * Copyright (C) 2007 Google, Inc.
- * Copyright (c) 2007-2010, Code Aurora Forum. All rights reserved.
+ * Copyright (c) 2007-2011, Code Aurora Forum. All rights reserved.
  * Author: San Mehat <san@android.com>
  *
  * This software is licensed under the terms of the GNU General Public
@@ -45,6 +45,7 @@
 
 /* Next minor # available for a remote server */
 static int next_minor = 1;
+static DEFINE_SPINLOCK(server_cdev_lock);
 
 struct class *msm_rpcrouter_class;
 dev_t msm_rpcrouter_devno;
@@ -344,8 +345,11 @@ int msm_rpcrouter_create_server_cdev(struct rr_server *server)
 {
 	int rc;
 	uint32_t dev_vers;
+	unsigned long flags;
 
+	spin_lock_irqsave(&server_cdev_lock, flags);
 	if (next_minor == RPCROUTER_MAX_REMOTE_SERVERS) {
+		spin_unlock_irqrestore(&server_cdev_lock, flags);
 		printk(KERN_ERR
 		       "rpcrouter: Minor numbers exhausted - Increase "
 		       "RPCROUTER_MAX_REMOTE_SERVERS\n");
@@ -365,6 +369,7 @@ int msm_rpcrouter_create_server_cdev(struct rr_server *server)
 
 	server->device_number =
 		MKDEV(MAJOR(msm_rpcrouter_devno), next_minor++);
+	spin_unlock_irqrestore(&server_cdev_lock, flags);
 
 	server->device =
 		device_create(msm_rpcrouter_class, rpcrouter_device,

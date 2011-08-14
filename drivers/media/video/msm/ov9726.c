@@ -293,7 +293,7 @@ static int32_t ov9726_set_fps(struct fps_cfg	*fps)
 
 static int32_t ov9726_write_exp_gain(uint16_t gain, uint32_t line)
 {
-	static uint16_t max_legal_gain	=	0x00E0;
+	static uint16_t max_legal_gain = 0x00FF;
 	uint8_t gain_msb, gain_lsb;
 	uint8_t intg_time_msb, intg_time_lsb;
 	uint8_t ov9726_offset = 6;

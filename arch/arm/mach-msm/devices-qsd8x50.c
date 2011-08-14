@@ -471,10 +471,17 @@ static struct resource resources_sdc1[] = {
 		.flags	= IORESOURCE_IRQ,
 	},
 	{
-		.start	= 8,
-		.end	= 8,
+		.name	= "sdcc_dma_chnl",
+		.start	= DMOV_SDC1_CHAN,
+		.end	= DMOV_SDC1_CHAN,
 		.flags	= IORESOURCE_DMA,
 	},
+	{
+		.name	= "sdcc_dma_crci",
+		.start	= DMOV_SDC1_CRCI,
+		.end	= DMOV_SDC1_CRCI,
+		.flags	= IORESOURCE_DMA,
+	}
 };
 
 static struct resource resources_sdc2[] = {
@@ -489,10 +496,17 @@ static struct resource resources_sdc2[] = {
 		.flags	= IORESOURCE_IRQ,
 	},
 	{
-		.start	= 8,
-		.end	= 8,
+		.name	= "sdcc_dma_chnl",
+		.start	= DMOV_SDC2_CHAN,
+		.end	= DMOV_SDC2_CHAN,
 		.flags	= IORESOURCE_DMA,
 	},
+	{
+		.name	= "sdcc_dma_crci",
+		.start	= DMOV_SDC2_CRCI,
+		.end	= DMOV_SDC2_CRCI,
+		.flags	= IORESOURCE_DMA,
+	}
 };
 
 static struct resource resources_sdc3[] = {
@@ -507,8 +521,15 @@ static struct resource resources_sdc3[] = {
 		.flags	= IORESOURCE_IRQ,
 	},
 	{
-		.start	= 8,
-		.end	= 8,
+		.name	= "sdcc_dma_chnl",
+		.start	= DMOV_SDC3_CHAN,
+		.end	= DMOV_SDC3_CHAN,
+		.flags	= IORESOURCE_DMA,
+	},
+	{
+		.name	= "sdcc_dma_crci",
+		.start	= DMOV_SDC3_CRCI,
+		.end	= DMOV_SDC3_CRCI,
 		.flags	= IORESOURCE_DMA,
 	},
 };
@@ -525,8 +546,15 @@ static struct resource resources_sdc4[] = {
 		.flags	= IORESOURCE_IRQ,
 	},
 	{
-		.start	= 8,
-		.end	= 8,
+		.name	= "sdcc_dma_chnl",
+		.start	= DMOV_SDC4_CHAN,
+		.end	= DMOV_SDC4_CHAN,
+		.flags	= IORESOURCE_DMA,
+	},
+	{
+		.name	= "sdcc_dma_crci",
+		.start	= DMOV_SDC4_CRCI,
+		.end	= DMOV_SDC4_CRCI,
 		.flags	= IORESOURCE_DMA,
 	},
 };

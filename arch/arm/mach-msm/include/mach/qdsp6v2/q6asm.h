@@ -75,6 +75,9 @@
 #define NO_TIMESTAMP    0xFF00
 #define SET_TIMESTAMP   0x0000
 
+#define SOFT_PAUSE_ENABLE	1
+#define SOFT_PAUSE_DISABLE	0
+
 #define SESSION_MAX	0x08
 
 typedef void (*app_cb)(uint32_t opcode, uint32_t token,
@@ -236,6 +239,10 @@ int q6asm_equalizer(struct audio_client *ac, void *eq);
 
 /* Send Volume Command */
 int q6asm_set_volume(struct audio_client *ac, int volume);
+
+/* Set SoftPause Params */
+int q6asm_set_softpause(struct audio_client *ac,
+			struct asm_softpause_params *param);
 
 /* Send left-right channel gain */
 int q6asm_set_lrgain(struct audio_client *ac, int left_gain, int right_gain);

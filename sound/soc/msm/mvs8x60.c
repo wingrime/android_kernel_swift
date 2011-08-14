@@ -70,7 +70,7 @@ static int msm_voice_path_put(struct snd_kcontrol *kcontrol,
 	voice_set_voc_path_full(voc_path);
 	/* MVS_AMR_MODE_UNDEF = 17 */
 	voice_config_vocoder(VSS_MEDIA_ID_PCM_NB, MVS_AMR_MODE_UNDEF,
-				VSS_NETWORK_ID_VOIP_NB);
+				VSS_NETWORK_ID_VOIP_NB, 0);
 	return 0;
 }
 

@@ -260,4 +260,11 @@ void kgsl_ringbuffer_watchdog(void);
 
 void kgsl_cp_intrcallback(struct kgsl_device *device);
 
+/* Increment a value by 4 bytes with wrap-around based on size */
+static inline unsigned int adreno_ringbuffer_inc_wrapped(unsigned int val,
+							unsigned int size)
+{
+	return (val + sizeof(unsigned int)) % size;
+}
+
 #endif  /* __GSL_RINGBUFFER_H */

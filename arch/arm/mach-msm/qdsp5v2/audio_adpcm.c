@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2010, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2009-2011, Code Aurora Forum. All rights reserved.
  *
  * Based on the mp3 native driver in arch/arm/mach-msm/qdsp5v2/audio_mp3.c
  *
@@ -428,6 +428,8 @@ static void audio_dsp_event(void *private, unsigned id, uint16_t *msg)
 		wake_up(&audio->write_wait);
 		if (audio->pcm_feedback)
 			audplay_buffer_refresh(audio);
+		break;
+
 	case AUDPP_MSG_PCMDMAMISSED:
 		MM_DBG("PCMDMAMISSED\n");
 		audio->teos = 1;

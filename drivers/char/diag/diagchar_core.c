@@ -43,6 +43,9 @@ MODULE_LICENSE("GPL v2");
 MODULE_VERSION("1.0");
 
 struct diagchar_dev *driver;
+struct diagchar_priv {
+	int pid;
+};
 /* The following variables can be specified by module options */
  /* for copy buffer */
 static unsigned int itemsize = 2048; /*Size of item in the mempool */
@@ -127,9 +130,24 @@ void diag_read_smd_qdsp_work_fn(struct work_struct *work)
 	__diag_smd_qdsp_send_req();
 }
 
+void diag_add_client(int i, struct file *file)
+{
+	struct diagchar_priv *diagpriv_data;
+
+	driver->client_map[i].pid = current->tgid;
+	diagpriv_data = kmalloc(sizeof(struct diagchar_priv),
+							GFP_KERNEL);
+	if (diagpriv_data)
+		diagpriv_data->pid = current->tgid;
+	file->private_data = diagpriv_data;
+	strncpy(driver->client_map[i].name, current->comm, 20);
+	driver->client_map[i].name[19] = '\0';
+}
+
 static int diagchar_open(struct inode *inode, struct file *file)
 {
 	int i = 0;
+	void *temp;
 
 	if (driver) {
 		mutex_lock(&driver->diagchar_mutex);
@@ -139,37 +157,34 @@ static int diagchar_open(struct inode *inode, struct file *file)
 				break;
 
 		if (i < driver->num_clients) {
-			driver->client_map[i].pid = current->tgid;
-			strncpy(driver->client_map[i].name, current->comm, 20);
-			driver->client_map[i].name[19] = '\0';
+			diag_add_client(i, file);
 		} else {
 			if (i < threshold_client_limit) {
 				driver->num_clients++;
-				driver->client_map = krealloc(driver->client_map
+				temp = krealloc(driver->client_map
 					, (driver->num_clients) * sizeof(struct
 						 diag_client_map), GFP_KERNEL);
-				driver->data_ready = krealloc(driver->data_ready
+				if (!temp)
+					goto fail;
+				else
+					driver->client_map = temp;
+				temp = krealloc(driver->data_ready
 					, (driver->num_clients) * sizeof(int),
 							GFP_KERNEL);
-				driver->client_map[i].pid = current->tgid;
-				strncpy(driver->client_map[i].name,
-					current->comm, 20);
-				driver->client_map[i].name[19] = '\0';
+				if (!temp)
+					goto fail;
+				else
+					driver->data_ready = temp;
+				diag_add_client(i, file);
 			} else {
 				mutex_unlock(&driver->diagchar_mutex);
-				if (driver->alert_count == 0 ||
-						 driver->alert_count == 10) {
-					printk(KERN_ALERT "Max client limit for"
-						 "DIAG driver reached\n");
-					printk(KERN_INFO "Cannot open handle %s"
+				pr_info("Max client limit for DIAG reached\n");
+				pr_info("Cannot open handle %s"
 					   " %d", current->comm, current->tgid);
 				for (i = 0; i < driver->num_clients; i++)
-					printk(KERN_INFO "%d) %s PID=%d"
-					, i, driver->client_map[i].name,
+					pr_info("%d) %s PID=%d", i, driver->
+						client_map[i].name,
 					 driver->client_map[i].pid);
-					driver->alert_count = 0;
-				}
-				driver->alert_count++;
 				return -ENOMEM;
 			}
 		}
@@ -184,11 +199,24 @@ static int diagchar_open(struct inode *inode, struct file *file)
 		return 0;
 	}
 	return -ENOMEM;
+
+fail:
+	mutex_unlock(&driver->diagchar_mutex);
+	driver->num_clients--;
+	pr_alert("diag: Insufficient memory for new client");
+	return -ENOMEM;
 }
 
 static int diagchar_close(struct inode *inode, struct file *file)
 {
 	int i = 0;
+	struct diagchar_priv *diagpriv_data = file->private_data;
+
+	if (!(file->private_data)) {
+		pr_alert("diag: Invalid file pointer");
+		return -ENOMEM;
+	}
+
 #ifdef CONFIG_DIAG_OVER_USB
 	/* If the SD logging process exits, change logging to USB mode */
 	if (driver->logging_process_id == current->tgid) {
@@ -208,12 +236,15 @@ static int diagchar_close(struct inode *inode, struct file *file)
 				diagmem_exit(driver, POOL_TYPE_COPY);
 				diagmem_exit(driver, POOL_TYPE_HDLC);
 				diagmem_exit(driver, POOL_TYPE_WRITE_STRUCT);
-				for (i = 0; i < driver->num_clients; i++)
-					if (driver->client_map[i].pid ==
-					     current->tgid) {
+		for (i = 0; i < driver->num_clients; i++) {
+			if (NULL != diagpriv_data && diagpriv_data->pid ==
+				 driver->client_map[i].pid) {
 						driver->client_map[i].pid = 0;
+				kfree(diagpriv_data);
+				diagpriv_data = NULL;
 						break;
 					}
+		}
 		mutex_unlock(&driver->diagchar_mutex);
 		return 0;
 	}
@@ -851,7 +882,6 @@ static int __init diagchar_init(void)
 		driver->used = 0;
 		timer_in_progress = 0;
 		driver->debug_flag = 1;
-		driver->alert_count = 0;
 		setup_timer(&drain_timer, drain_timer_func, 1234);
 		driver->itemsize = itemsize;
 		driver->poolsize = poolsize;

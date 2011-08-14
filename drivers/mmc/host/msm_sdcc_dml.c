@@ -181,7 +181,7 @@ int msmsdcc_dml_init(struct msmsdcc_host *host)
 
 	dml_base = host->dml_base;
 	/* Reset the DML block */
-	writel(1, (dml_base + DML_SW_RESET));
+	writel_relaxed(1, (dml_base + DML_SW_RESET));
 
 	/* Disable the producer and consumer CRCI */
 	config = (PRODUCER_CRCI_DIS | CONSUMER_CRCI_DIS);
@@ -202,21 +202,22 @@ int msmsdcc_dml_init(struct msmsdcc_host *host)
 	 * of finite data size.
 	 */
 	config &= ~INFINITE_CONS_TRANS;
-	writel(config, (dml_base + DML_CONFIG));
+	writel_relaxed(config, (dml_base + DML_CONFIG));
 
 	/*
 	 * Initialize the logical BAM pipe size for producer
 	 * and consumer.
 	 */
-	writel(PRODUCER_PIPE_LOGICAL_SIZE,
+	writel_relaxed(PRODUCER_PIPE_LOGICAL_SIZE,
 		(dml_base + DML_PRODUCER_PIPE_LOGICAL_SIZE));
-	writel(CONSUMER_PIPE_LOGICAL_SIZE,
+	writel_relaxed(CONSUMER_PIPE_LOGICAL_SIZE,
 		(dml_base + DML_CONSUMER_PIPE_LOGICAL_SIZE));
 
 	/* Initialize Producer/consumer pipe id */
-	writel(host->sps.src_pipe_index |
+	writel_relaxed(host->sps.src_pipe_index |
 		(host->sps.dest_pipe_index << CONSUMER_PIPE_ID_SHFT),
 		(dml_base + DML_PIPE_ID));
+	dsb();
 out:
 	return rc;
 }
@@ -228,7 +229,8 @@ out:
 void msmsdcc_dml_reset(struct msmsdcc_host *host)
 {
 	/* Reset the DML block */
-	writel(1, (host->dml_base + DML_SW_RESET));
+	writel_relaxed(1, (host->dml_base + DML_SW_RESET));
+	dsb();
 }
 
 /**
@@ -237,8 +239,8 @@ void msmsdcc_dml_reset(struct msmsdcc_host *host)
  */
 bool msmsdcc_is_dml_busy(struct msmsdcc_host *host)
 {
-	return !(readl(host->dml_base + DML_STATUS) & PRODUCER_IDLE) ||
-		!(readl(host->dml_base + DML_STATUS) & CONSUMER_IDLE);
+	return !(readl_relaxed(host->dml_base + DML_STATUS) & PRODUCER_IDLE) ||
+		!(readl_relaxed(host->dml_base + DML_STATUS) & CONSUMER_IDLE);
 }
 
 /**
@@ -253,37 +255,39 @@ void msmsdcc_dml_start_xfer(struct msmsdcc_host *host, struct mmc_data *data)
 	if (data->flags & MMC_DATA_READ) {
 		/* Read operation: configure DML for producer operation */
 		/* Set producer CRCI-x and disable consumer CRCI */
-		config = readl(dml_base + DML_CONFIG);
+		config = readl_relaxed(dml_base + DML_CONFIG);
 		config = (config & ~PRODUCER_CRCI_MSK) | PRODUCER_CRCI_X_SEL;
 		config = (config & ~CONSUMER_CRCI_MSK) | CONSUMER_CRCI_DIS;
-		writel(config, (dml_base + DML_CONFIG));
+		writel_relaxed(config, (dml_base + DML_CONFIG));
 
 		/* Set the Producer BAM block size */
-		writel(data->blksz, (dml_base + DML_PRODUCER_BAM_BLOCK_SIZE));
+		writel_relaxed(data->blksz, (dml_base +
+					DML_PRODUCER_BAM_BLOCK_SIZE));
 
 		/* Set Producer BAM Transaction size */
-		writel(host->curr.xfer_size,
+		writel_relaxed(host->curr.xfer_size,
 			(dml_base + DML_PRODUCER_BAM_TRANS_SIZE));
 		/* Set Producer Transaction End bit */
-		writel((readl(dml_base + DML_CONFIG)
+		writel_relaxed((readl_relaxed(dml_base + DML_CONFIG)
 			| PRODUCER_TRANS_END_EN),
 			(dml_base + DML_CONFIG));
 		/* Trigger producer */
-		writel(1, (dml_base + DML_PRODUCER_START));
+		writel_relaxed(1, (dml_base + DML_PRODUCER_START));
 	} else {
 		/* Write operation: configure DML for consumer operation */
 		/* Set consumer CRCI-x and disable producer CRCI*/
-		config = readl(dml_base + DML_CONFIG);
+		config = readl_relaxed(dml_base + DML_CONFIG);
 		config = (config & ~CONSUMER_CRCI_MSK) | CONSUMER_CRCI_X_SEL;
 		config = (config & ~PRODUCER_CRCI_MSK) | PRODUCER_CRCI_DIS;
-		writel(config, (dml_base + DML_CONFIG));
+		writel_relaxed(config, (dml_base + DML_CONFIG));
 		/* Clear Producer Transaction End bit */
-		writel((readl(dml_base + DML_CONFIG)
+		writel_relaxed((readl_relaxed(dml_base + DML_CONFIG)
 			& ~PRODUCER_TRANS_END_EN),
 			(dml_base + DML_CONFIG));
 		/* Trigger consumer */
-		writel(1, (dml_base + DML_CONSUMER_START));
+		writel_relaxed(1, (dml_base + DML_CONSUMER_START));
 	}
+	dsb();
 }
 
 /**

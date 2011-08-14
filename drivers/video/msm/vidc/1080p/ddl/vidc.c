@@ -78,6 +78,8 @@
 #define VIDC_1080P_ENC_TYPE_FRAME_DATA       0x00020000
 #define VIDC_1080P_ENC_TYPE_LAST_FRAME_DATA  0x00030000
 
+#define VIDC_1080P_MAX_INTRA_PERIOD 0xffff
+
 u8 *VIDC_BASE_PTR;
 
 void vidc_1080p_do_sw_reset(enum vidc_1080p_reset init_flag)
@@ -487,6 +489,8 @@ void vidc_1080p_get_display_frame_result(
 	VIDC_HWIO_IN(REG_640904, &dec_disp_info->display_y_addr);
 	VIDC_HWIO_IN(REG_60114, &dec_disp_info->display_c_addr);
 	VIDC_HWIO_IN(REG_853667, &display_result);
+	VIDC_HWIO_IN(REG_845544, &dec_disp_info->img_size_y);
+	VIDC_HWIO_IN(REG_859906, &dec_disp_info->img_size_x);
 	dec_disp_info->display_status =
 		(enum vidc_1080p_display_status)
 		VIDC_GETFIELD(display_result,
@@ -790,12 +794,17 @@ void vidc_1080p_encode_frame_start_ch1(
 		param->inst_id);
 }
 
-void vidc_1080p_set_encode_picture(u32 ifrm_ctrl, u32 number_b)
+void vidc_1080p_set_encode_picture(u32 number_p, u32 number_b)
 {
-	u32 picture = VIDC_SETFIELD(1 ,
+	u32 picture, ifrm_ctrl;
+	if (number_p >= VIDC_1080P_MAX_INTRA_PERIOD)
+		ifrm_ctrl = 0;
+	else
+		ifrm_ctrl = number_p + 1;
+	picture = VIDC_SETFIELD(1 ,
 				HWIO_REG_783891_ENC_PIC_TYPE_USE_SHFT,
 				HWIO_REG_783891_ENC_PIC_TYPE_USE_BMSK) |
-				VIDC_SETFIELD(ifrm_ctrl + 1 ,
+				VIDC_SETFIELD(ifrm_ctrl,
 					HWIO_REG_783891_I_FRM_CTRL_SHFT,
 					HWIO_REG_783891_I_FRM_CTRL_BMSK)
 				| VIDC_SETFIELD(number_b ,

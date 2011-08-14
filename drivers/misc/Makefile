@@ -50,3 +50,4 @@ obj-$(CONFIG_MSM_MEMORY_LOW_POWER_MODE_SUSPEND_DEEP_POWER_DOWN) \
 obj-$(CONFIG_PMIC8058_XOADC) += pmic8058-xoadc.o
 obj-$(CONFIG_PMIC8058_MISC) += pmic8058-misc.o
 obj-$(CONFIG_PMIC8058_BATTALARM) += pmic8058-batt-alarm.o
+obj-$(CONFIG_TZCOM) += tzcom.o

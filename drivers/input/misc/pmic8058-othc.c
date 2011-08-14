@@ -324,6 +324,18 @@ static void othc_report_switch(struct pm8058_othc *dd, u32 res)
 			return;
 		}
 	}
+
+	/*
+	 * If the switch is not present in a specified ADC range
+	 * report a default switch press.
+	 */
+	if (dd->switch_config->default_sw_en) {
+		dd->othc_sw_state = true;
+		dd->sw_key_code =
+			sw_info[dd->switch_config->default_sw_idx].key_code;
+		input_report_key(dd->othc_ipd, dd->sw_key_code, 1);
+		input_sync(dd->othc_ipd);
+	}
 }
 
 static void switch_work_f(struct work_struct *work)

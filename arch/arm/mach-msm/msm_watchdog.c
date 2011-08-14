@@ -124,6 +124,7 @@ static int panic_wdog_handler(struct notifier_block *this,
 		__raw_writel(32768 * (panic_timeout + 4), WDT0_BARK_TIME);
 		__raw_writel(32768 * (panic_timeout + 4), WDT0_BITE_TIME);
 		__raw_writel(1, WDT0_RST);
+		dsb();
 	}
 	return NOTIFY_DONE;
 }

@@ -15,3 +15,5 @@
 uint32_t etm_read_reg(uint32_t reg);
 void   etm_write_reg(uint32_t reg, uint32_t val);
 void   l2tevselr0_write(uint32_t val);
+void etm_save_reg(void);
+void etm_restore_reg(void);

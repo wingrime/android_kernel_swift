@@ -41,6 +41,7 @@ static struct workqueue_struct *gsmd_wq;
 
 #define N_PORTS	2
 #define CH_OPENED	0
+#define CH_READY	1
 struct smd_port_info {
 	struct smd_channel	*ch;
 	char			*name;
@@ -97,6 +98,7 @@ struct gsmd_port {
 static struct portmaster {
 	struct mutex lock;
 	struct gsmd_port *port;
+	struct platform_driver pdrv;
 } ports[N_PORTS];
 static unsigned n_ports;
 
@@ -253,6 +255,12 @@ static void gsmd_rx_push(struct work_struct *w)
 			}
 
 			count = smd_write(pi->ch, packet, size);
+			if (count < 0) {
+				pr_err("%s: smd write failed err:%d\n",
+						__func__, count);
+				goto rx_push_end;
+			}
+
 			if (count != size) {
 				port->n_read += count;
 				goto rx_push_end;
@@ -261,6 +269,7 @@ static void gsmd_rx_push(struct work_struct *w)
 			port->nbytes_tomodem += count;
 		}
 
+		port->n_read = 0;
 		list_move(&req->list, &port->read_pool);
 	}
 
@@ -403,9 +412,15 @@ static void gsmd_write_complete(struct usb_ep *ep, struct usb_request *req)
 
 static void gsmd_start_io(struct gsmd_port *port)
 {
-	int ret;
+	int		ret = -ENODEV;
+	unsigned long	flags;
 
 	pr_debug("%s: port: %p\n", __func__, port);
+
+	spin_lock_irqsave(&port->port_lock, flags);
+
+	if (!port->port_usb)
+		goto start_io_out;
 
 	ret = gsmd_alloc_requests(port->port_usb->out,
 				&port->read_pool,
@@ -414,7 +429,7 @@ static void gsmd_start_io(struct gsmd_port *port)
 	if (ret) {
 		pr_err("%s: unable to allocate out requests\n",
 				__func__);
-		return;
+		goto start_io_out;
 	}
 
 	ret = gsmd_alloc_requests(port->port_usb->in,
@@ -422,11 +437,17 @@ static void gsmd_start_io(struct gsmd_port *port)
 				TX_QUEUE_SIZE, TX_BUF_SIZE,
 				gsmd_write_complete);
 	if (ret) {
+		gsmd_free_requests(port->port_usb->out, &port->read_pool);
 		pr_err("%s: unable to allocate IN requests\n",
 				__func__);
-		gsmd_free_requests(port->port_usb->out, &port->read_pool);
-		return;
+		goto start_io_out;
 	}
+
+start_io_out:
+	spin_unlock_irqrestore(&port->port_lock, flags);
+
+	if (ret)
+		return;
 
 	gsmd_start_rx(port);
 }
@@ -496,36 +517,23 @@ static void gsmd_notify(void *priv, unsigned event)
 	}
 }
 
-#define MAX_SMD_RETRY_CNT	20
 static void gsmd_connect_work(struct work_struct *w)
 {
 	struct gsmd_port *port;
 	struct smd_port_info *pi;
 	int ret;
-	int retry_cnt = 0;
+	unsigned long flags;
 
 	port = container_of(w, struct gsmd_port, connect_work);
 	pi = port->pi;
 
 	pr_debug("%s: port:%p port#%d\n", __func__, port, port->port_num);
 
-	/* SMD driver comes online gets initialized and loads modem
-	 * 10 seconds after boot up. If USB cable is connected at boot-up,
-	 * this might result smd open failure. To work-around, retry
-	 * opening multiple times.
-	 */
-	do {
-		if (!port->port_usb)
-			return;
+	if (!test_bit(CH_READY, &pi->flags))
+		return;
 
-		ret = smd_named_open_on_edge(pi->name, SMD_APPS_MODEM,
-					&pi->ch, port, gsmd_notify);
-		if (!ret)
-			break;
-
-		retry_cnt++;
-		msleep(1000);
-	} while (retry_cnt < MAX_SMD_RETRY_CNT);
+	ret = smd_named_open_on_edge(pi->name, SMD_APPS_MODEM,
+				&pi->ch, port, gsmd_notify);
 
 	if (ret) {
 		pr_err("%s: unable to open smd port:%s err:%d\n",
@@ -533,19 +541,15 @@ static void gsmd_connect_work(struct work_struct *w)
 		return;
 	}
 
-	pr_debug("%s: SMD port open successful retrycnt:%d\n",
-			__func__, retry_cnt);
-
 	wait_event(pi->wait, test_bit(CH_OPENED, &pi->flags));
 
-	if (!port->port_usb)
-		return;
-
+	spin_lock_irqsave(&port->port_lock, flags);
 	/* update usb control signals to modem */
-	if (port->cbits_to_modem)
+	if (port->port_usb && port->cbits_to_modem)
 		smd_tiocmset(port->pi->ch,
 			port->cbits_to_modem,
 			~port->cbits_to_modem);
+	spin_unlock_irqrestore(&port->port_lock, flags);
 
 	gsmd_start_io(port);
 }
@@ -672,15 +676,13 @@ void gsmd_disconnect(struct gserial *gser, u8 portno)
 
 	/* disable endpoints, aborting down any active I/O */
 	usb_ep_disable(gser->out);
-	gser->out->driver_data = NULL;
-
 	usb_ep_disable(gser->in);
-	gser->in->driver_data = NULL;
 
 	spin_lock_irqsave(&port->port_lock, flags);
 	gsmd_free_requests(gser->out, &port->read_pool);
 	gsmd_free_requests(gser->out, &port->read_queue);
 	gsmd_free_requests(gser->in, &port->write_pool);
+	port->n_read = 0;
 	spin_unlock_irqrestore(&port->port_lock, flags);
 
 	if (!test_bit(CH_OPENED, &port->pi->flags))
@@ -693,7 +695,55 @@ void gsmd_disconnect(struct gserial *gser, u8 portno)
 			~port->cbits_to_modem);
 
 	smd_close(port->pi->ch);
-	port->pi->flags = 0;
+	clear_bit(CH_OPENED, &port->pi->flags);
+}
+
+#define SMD_CH_MAX_LEN	20
+static int gsmd_ch_probe(struct platform_device *pdev)
+{
+	struct gsmd_port *port;
+	struct smd_port_info *pi;
+	int i;
+	unsigned long flags;
+
+	pr_debug("%s: name:%s\n", __func__, pdev->name);
+
+	for (i = 0; i < n_ports; i++) {
+		port = ports[i].port;
+		pi = port->pi;
+
+		if (!strncmp(pi->name, pdev->name, SMD_CH_MAX_LEN)) {
+			set_bit(CH_READY, &pi->flags);
+			spin_lock_irqsave(&port->port_lock, flags);
+			if (port->port_usb)
+				queue_work(gsmd_wq, &port->connect_work);
+			spin_unlock_irqrestore(&port->port_lock, flags);
+			break;
+		}
+	}
+	return 0;
+}
+
+static int gsmd_ch_remove(struct platform_device *pdev)
+{
+	struct gsmd_port *port;
+	struct smd_port_info *pi;
+	int i;
+
+	pr_debug("%s: name:%s\n", __func__, pdev->name);
+
+	for (i = 0; i < n_ports; i++) {
+		port = ports[i].port;
+		pi = port->pi;
+
+		if (!strncmp(pi->name, pdev->name, SMD_CH_MAX_LEN)) {
+			clear_bit(CH_READY, &pi->flags);
+			clear_bit(CH_OPENED, &pi->flags);
+			smd_close(pi->ch);
+			break;
+		}
+	}
+	return 0;
 }
 
 static void gsmd_port_free(int portno)
@@ -707,6 +757,7 @@ static void gsmd_port_free(int portno)
 static int gsmd_port_alloc(int portno, struct usb_cdc_line_coding *coding)
 {
 	struct gsmd_port *port;
+	struct platform_driver *pdrv;
 
 	port = kzalloc(sizeof(struct gsmd_port), GFP_KERNEL);
 	if (!port)
@@ -728,6 +779,12 @@ static int gsmd_port_alloc(int portno, struct usb_cdc_line_coding *coding)
 	init_waitqueue_head(&port->pi->wait);
 
 	ports[portno].port = port;
+	pdrv = &ports[portno].pdrv;
+	pdrv->probe = gsmd_ch_probe;
+	pdrv->remove = gsmd_ch_remove;
+	pdrv->driver.name = port->pi->name;
+	pdrv->driver.owner = THIS_MODULE;
+	platform_driver_register(pdrv);
 
 	pr_debug("%s: port:%p portno:%d\n", __func__, port, portno);
 
@@ -757,9 +814,15 @@ static ssize_t debug_read_stats(struct file *file, char __user *ubuf,
 				"nbytes_tolaptop: %lu\n"
 				"nbytes_tomodem:  %lu\n"
 				"cbits_to_modem:  %u\n"
-				"cbits_to_laptop: %u\n",
+				"cbits_to_laptop: %u\n"
+				"n_read: %u\n"
+				"CH_OPENED: %d\n"
+				"CH_READY: %d\n",
 				i, port->nbytes_tolaptop, port->nbytes_tomodem,
-				port->cbits_to_modem, port->cbits_to_laptop);
+				port->cbits_to_modem, port->cbits_to_laptop,
+				port->n_read,
+				test_bit(CH_OPENED, &port->pi->flags),
+				test_bit(CH_READY, &port->pi->flags));
 		spin_unlock_irqrestore(&port->port_lock, flags);
 	}
 

@@ -20,50 +20,61 @@
 #include <linux/percpu.h>
 #include <linux/io.h>
 #include <linux/uaccess.h>
+#include <linux/wakelock.h>
+#include <linux/pm_qos_params.h>
 
 #include <asm/atomic.h>
 
 #include "cp14.h"
 
-#define LOG_BUF_LEN    32768
-#define ETM_NUM_REGS   128
-#define ETB_NUM_REGS   9
-#define ETB_RAM_SLOTS  2048 /* each slot is 4 bytes, 8kb total */
+#define LOG_BUF_LEN			32768
+#define ETM_NUM_REGS			128
+#define ETB_NUM_REGS			9
+/* each slot is 4 bytes, 8kb total */
+#define ETB_RAM_SLOTS			2048
 
-#define DATALOG_SYNC                 0xB5C7
-#define ETM_DUMP_MSG_ID              0x000A6960
-#define ETB_DUMP_MSG_ID              0x000A6961
+#define DATALOG_SYNC			0xB5C7
+#define ETM_DUMP_MSG_ID			0x000A6960
+#define ETB_DUMP_MSG_ID			0x000A6961
 
 /* ETM Registers */
-#define ETM_REG_CONTROL              0x00
-#define ETM_REG_STATUS               0x04
-#define ETB_REG_CONTROL              0x71
-#define ETB_REG_STATUS               0x72
-#define ETB_REG_COUNT                0x73
-#define ETB_REG_ADDRESS              0x74
-#define ETB_REG_DATA                 0x75
+#define ETM_REG_CONTROL			0x00
+#define ETM_REG_STATUS			0x04
+#define ETB_REG_CONTROL			0x71
+#define ETB_REG_STATUS			0x72
+#define ETB_REG_COUNT			0x73
+#define ETB_REG_ADDRESS			0x74
+#define ETB_REG_DATA			0x75
 
 /* Bitmasks for the ETM control register */
-#define ETM_CONTROL_POWERDOWN        0x00000001
-#define ETM_CONTROL_PROGRAM          0x00000400
+#define ETM_CONTROL_POWERDOWN		0x00000001
+#define ETM_CONTROL_PROGRAM		0x00000400
 
 /* Bitmasks for the ETM status register */
-#define ETM_STATUS_PROGRAMMING       0x00000002
+#define ETM_STATUS_PROGRAMMING		0x00000002
 
 /* ETB Status Register bit definitions */
-#define OV                           0x00200000
+#define OV				0x00200000
 
 /* ETB Control Register bit definitions */
-#define AIR                          0x00000008
-#define AIW                          0x00000004
-#define CPTM                         0x00000002
-#define CPTEN                        0x00000001
+#define AIR				0x00000008
+#define AIW				0x00000004
+#define CPTM				0x00000002
+#define CPTEN				0x00000001
 
-/* Bitmasks for the swconfig field of ETM_CONFIG */
-#define TRIGGER_ALL      0x00000002 /* ETM trigger propagated to ETM
-				     * instances on all cores */
+/* Bitmasks for the swconfig field of ETM_CONFIG
+ * ETM trigger propagated to ETM instances on all cores
+ */
+#define TRIGGER_ALL			0x00000002
+
+#define PROG_TIMEOUT_MS			500
 
 static int trace_enabled;
+static int *cpu_restore;
+static int cpu_to_dump;
+static int next_cpu_to_dump;
+static struct wake_lock etm_wake_lock;
+static struct pm_qos_request_list *etm_qos_req;
 static int trace_on_boot;
 module_param_named(
 	trace_on_boot, trace_on_boot, int, S_IRUGO
@@ -74,8 +85,7 @@ struct b {
 	uint32_t log_end;
 };
 
-static struct b b0;
-static struct b b1;
+static struct b buf[NR_CPUS];
 static struct b __percpu * *alloc_b;
 static atomic_t etm_dev_in_use;
 
@@ -180,9 +190,9 @@ static struct etm_config_struct etm_config = {
 static void emit_log_char(uint8_t c)
 {
 	int this_cpu = get_cpu();
-	struct b *myb = *per_cpu_ptr(alloc_b, this_cpu);
-	char *log_buf = myb->etm_log_buf;
-	int index = (myb->log_end)++ & (LOG_BUF_LEN - 1);
+	struct b *mybuf = *per_cpu_ptr(alloc_b, this_cpu);
+	char *log_buf = mybuf->etm_log_buf;
+	int index = (mybuf->log_end)++ & (LOG_BUF_LEN - 1);
 	log_buf[index] = c;
 	put_cpu();
 }
@@ -241,38 +251,41 @@ static void __cpu_disable_etb(void)
 static void __cpu_enable_etm(void)
 {
 	uint32_t etm_control;
-	uint32_t i;
+	unsigned long timeout = jiffies + msecs_to_jiffies(PROG_TIMEOUT_MS);
 
 	etm_control = etm_read_reg(ETM_REG_CONTROL);
 	etm_control &= ~ETM_CONTROL_PROGRAM;
-
 	etm_write_reg(ETM_REG_CONTROL, etm_control);
 
-	/* wait for prog bit to take effect (poll 250 times maximum) */
-	for (i = 0; i < 250; i++)
-		if (etm_read_reg(ETM_REG_STATUS) & ETM_STATUS_PROGRAMMING)
+	while ((etm_read_reg(ETM_REG_STATUS) & ETM_STATUS_PROGRAMMING) == 1) {
+		cpu_relax();
+		if (time_after(jiffies, timeout)) {
+			pr_err("etm: timeout while clearing prog bit\n");
 			break;
+		}
+	}
 }
 
 static void __cpu_disable_etm(void)
 {
 	uint32_t etm_control;
-	uint32_t i;
+	unsigned long timeout = jiffies + msecs_to_jiffies(PROG_TIMEOUT_MS);
 
 	etm_control = etm_read_reg(ETM_REG_CONTROL);
 	etm_control |= ETM_CONTROL_PROGRAM;
-
 	etm_write_reg(ETM_REG_CONTROL, etm_control);
 
-	/* wait for prog bit to take effect (poll 250 times maximum) */
-	for (i = 0; i < 250; i++)
-		if (etm_read_reg(ETM_REG_STATUS) & ETM_STATUS_PROGRAMMING)
+	while ((etm_read_reg(ETM_REG_STATUS) & ETM_STATUS_PROGRAMMING) == 0) {
+		cpu_relax();
+		if (time_after(jiffies, timeout)) {
+			pr_err("etm: timeout while setting prog bit\n");
 			break;
+		}
+	}
 }
 
 static void __cpu_enable_trace(void *unused)
 {
-	uint32_t i;
 	uint32_t etm_control;
 	uint32_t etm_trigger;
 	uint32_t etm_external_output;
@@ -282,15 +295,11 @@ static void __cpu_enable_trace(void *unused)
 	etm_read_reg(0xC5); /* clear sticky bit in PDSR */
 
 	__cpu_disable_etb();
+	__cpu_disable_etm();
 
-	etm_control = (etm_config.etm_00_control & ~ETM_CONTROL_POWERDOWN) |
-		ETM_CONTROL_PROGRAM;
+	etm_control = (etm_config.etm_00_control & ~ETM_CONTROL_POWERDOWN)
+						| ETM_CONTROL_PROGRAM;
 	etm_write_reg(0x00, etm_control);
-
-	/* wait for the prog bit to take effect (poll 250 times maximum) */
-	for (i = 0; i < 250; i++)
-		if (etm_read_reg(ETM_REG_STATUS) & ETM_STATUS_PROGRAMMING)
-			break;
 
 	etm_trigger = etm_config.etm_02_trigger_event;
 	etm_external_output = 0x406F; /* always FALSE */
@@ -365,12 +374,32 @@ static void __cpu_enable_trace(void *unused)
 
 static void __cpu_disable_trace(void *unused)
 {
+	uint32_t etm_control;
+
+	get_cpu();
+	etm_read_reg(0xC5); /* clear sticky bit in PDSR */
+
 	__cpu_disable_etm();
+
+	/* program trace enable to be low by using always false event */
+	etm_write_reg(0x08, 0x6F | BIT(14));
+
+	/* set the powerdown bit */
+	etm_control = etm_read_reg(ETM_REG_CONTROL);
+	etm_control |= ETM_CONTROL_POWERDOWN;
+	etm_write_reg(ETM_REG_CONTROL, etm_control);
+
+	__cpu_enable_etm();
 	__cpu_disable_etb();
+
+	put_cpu();
 }
 
 static void enable_trace(void)
 {
+	wake_lock(&etm_wake_lock);
+	pm_qos_update_request(etm_qos_req, 0);
+
 	if (etm_config.swconfig & TRIGGER_ALL) {
 		/* This register is accessible from either core.
 		 * CPU1_extout[0] -> CPU0_extin[0]
@@ -382,16 +411,42 @@ static void enable_trace(void)
 	__cpu_enable_trace(NULL);
 	smp_call_function(__cpu_enable_trace, NULL, 1);
 	put_cpu();
+
+	/* When the smp_call returns, we are guaranteed that all online
+	 * cpus are out of wfi/power_collapse and won't be allowed to enter
+	 * again due to the pm_qos latency request above.
+	 */
 	trace_enabled = 1;
+
+	pm_qos_update_request(etm_qos_req, PM_QOS_DEFAULT_VALUE);
+	wake_unlock(&etm_wake_lock);
 }
 
 static void disable_trace(void)
 {
+	int cpu;
+
+	wake_lock(&etm_wake_lock);
+	pm_qos_update_request(etm_qos_req, 0);
+
 	get_cpu();
 	__cpu_disable_trace(NULL);
 	smp_call_function(__cpu_disable_trace, NULL, 1);
 	put_cpu();
+
+	/* When the smp_call returns, we are guaranteed that all online
+	 * cpus are out of wfi/power_collapse and won't be allowed to enter
+	 * again due to the pm_qos latency request above.
+	 */
 	trace_enabled = 0;
+
+	for_each_possible_cpu(cpu)
+		*per_cpu_ptr(cpu_restore, cpu) = 0;
+
+	cpu_to_dump = next_cpu_to_dump = 0;
+
+	pm_qos_update_request(etm_qos_req, PM_QOS_DEFAULT_VALUE);
+	wake_unlock(&etm_wake_lock);
 }
 
 static void generate_etb_dump(void)
@@ -465,7 +520,14 @@ static void dump_all(void *unused)
 	put_cpu();
 }
 
-static int next_cpu_to_dump = -1;
+static void dump_trace(void)
+{
+	get_cpu();
+	dump_all(NULL);
+	smp_call_function(dump_all, NULL, 1);
+	put_cpu();
+}
+
 static int bytes_to_dump;
 static uint8_t *etm_buf_ptr;
 
@@ -481,15 +543,15 @@ static int etm_dev_open(struct inode *inode, struct file *file)
 static ssize_t etm_dev_read(struct file *file, char __user *data,
 				size_t len, loff_t *ppos)
 {
-	if (next_cpu_to_dump == -1) {
-		get_cpu();
-		dump_all(NULL);
-		smp_call_function(dump_all, NULL, 1);
-		put_cpu();
-		bytes_to_dump = b0.log_end;
-		b0.log_end = 0;
-		etm_buf_ptr = b0.etm_log_buf;
-		next_cpu_to_dump = 0;
+	if (cpu_to_dump == next_cpu_to_dump) {
+		if (cpu_to_dump == 0)
+			dump_trace();
+		bytes_to_dump = buf[cpu_to_dump].log_end;
+		buf[cpu_to_dump].log_end = 0;
+		etm_buf_ptr = buf[cpu_to_dump].etm_log_buf;
+		next_cpu_to_dump++;
+		if (next_cpu_to_dump >= num_possible_cpus())
+			next_cpu_to_dump = 0;
 	}
 
 	if (len > bytes_to_dump)
@@ -816,13 +878,10 @@ err_out:
 
 static int etm_dev_release(struct inode *inode, struct file *file)
 {
-	if (next_cpu_to_dump == 0) {
-		bytes_to_dump = b1.log_end;
-		b1.log_end = 0;
-		etm_buf_ptr = b1.etm_log_buf;
-		next_cpu_to_dump = 1;
-	} else
-		next_cpu_to_dump = -1;
+	if (cpu_to_dump == next_cpu_to_dump)
+		next_cpu_to_dump = 0;
+	cpu_to_dump = next_cpu_to_dump;
+
 	atomic_set(&etm_dev_in_use, 0);
 	pr_debug("%s: released\n", __func__);
 	return 0;
@@ -837,54 +896,103 @@ static const struct file_operations etm_dev_fops = {
 };
 
 static struct miscdevice etm_dev = {
-	.name = "etm",
-	.minor = 0,
+	.name = "msm_etm",
+	.minor = MISC_DYNAMIC_MINOR,
 	.fops = &etm_dev_fops,
 };
 
+/* etm_save_reg_check and etm_restore_reg_check should be fast
+ *
+ * These functions will be called either from:
+ * 1. per_cpu idle thread context for idle wfi and power collapses.
+ * 2. per_cpu idle thread context for hotplug/suspend power collapse for
+ *    nonboot cpus.
+ * 3. suspend thread context for core0.
+ *
+ * In all cases we are guaranteed to be running on the same cpu for the
+ * entire duration.
+ *
+ * Another assumption is that etm registers won't change after trace_enabled
+ * is set. Current usage model guarantees this doesn't happen.
+ */
+void etm_save_reg_check(void)
+{
+	if (trace_enabled) {
+		int cpu = smp_processor_id();
+
+		/* Don't save the registers if we just got called from per_cpu
+		 * idle thread context of a nonboot cpu after hotplug/suspend
+		 * power collapse. This is to prevent corruption due to saving
+		 * twice since nonboot cpus start out fresh without the
+		 * corresponding restore.
+		 */
+		if (!(*per_cpu_ptr(cpu_restore, cpu))) {
+			etm_save_reg();
+			*per_cpu_ptr(cpu_restore, cpu) = 1;
+		}
+	}
+}
+
+void etm_restore_reg_check(void)
+{
+	if (trace_enabled) {
+		int cpu = smp_processor_id();
+
+		etm_restore_reg();
+		*per_cpu_ptr(cpu_restore, cpu) = 0;
+	}
+}
+
 static int __init etm_init(void)
 {
-	int rv;
-	void __iomem *etm_buf_addr_base;
-	void *etm_dump_buf;
+	int ret, cpu;
 
-	rv = misc_register(&etm_dev);
-	if (rv)
+	ret = misc_register(&etm_dev);
+	if (ret)
 		return -ENODEV;
 
 	alloc_b = alloc_percpu(typeof(*alloc_b));
 	if (!alloc_b)
-		return -ENOMEM;
+		goto err1;
 
-	*per_cpu_ptr(alloc_b, 0) = &b0;
-	*per_cpu_ptr(alloc_b, 1) = &b1;
+	for_each_possible_cpu(cpu)
+		*per_cpu_ptr(alloc_b, cpu) = &buf[cpu];
+
+	cpu_restore = alloc_percpu(int);
+	if (!cpu_restore)
+		goto err2;
+
+	for_each_possible_cpu(cpu)
+		*per_cpu_ptr(cpu_restore, cpu) = 0;
+
+	wake_lock_init(&etm_wake_lock, WAKE_LOCK_SUSPEND, "msm_etm");
+	etm_qos_req = pm_qos_add_request(PM_QOS_CPU_DMA_LATENCY,
+						PM_QOS_DEFAULT_VALUE);
+
+	cpu_to_dump = next_cpu_to_dump = 0;
 
 	pr_info("ETM/ETB intialized.\n");
 
 	if (trace_on_boot)
 		enable_trace();
 
-	/* Allocate memory for ETB dump on wdog reset. */
-	etm_dump_buf = kmalloc(SZ_16K, GFP_KERNEL);
-	if (!etm_dump_buf) {
-		pr_err("Could not allocate etm dump buffer.\n");
-		return -ENOMEM;
-	}
-	etm_buf_addr_base = ioremap(0x2a05f000, SZ_4K);
-	if (!etm_buf_addr_base) {
-		pr_err("Could not map etm buffer dump address.\n");
-		kfree(etm_dump_buf);
-		return -ENOMEM;
-	}
-	writel(__pa(etm_dump_buf), etm_buf_addr_base + 0x10);
-	iounmap(etm_buf_addr_base);
-
 	return 0;
+
+err2:
+	free_percpu(alloc_b);
+err1:
+	misc_deregister(&etm_dev);
+	return -ENOMEM;
 }
 
 static void __exit etm_exit(void)
 {
 	disable_trace();
+	pm_qos_remove_request(etm_qos_req);
+	wake_lock_destroy(&etm_wake_lock);
+	free_percpu(cpu_restore);
+	free_percpu(alloc_b);
+	misc_deregister(&etm_dev);
 }
 
 module_init(etm_init);

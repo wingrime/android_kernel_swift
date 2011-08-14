@@ -44,6 +44,8 @@
 #define SDIO_MUX_HDR_CMD_OPEN    1
 #define SDIO_MUX_HDR_CMD_CLOSE   2
 
+#define LOW_WATERMARK            2
+#define HIGH_WATERMARK           4
 
 static int msm_sdio_dmux_debug_enable;
 module_param_named(debug_enable, msm_sdio_dmux_debug_enable,
@@ -95,6 +97,8 @@ struct sdio_ch_info {
 	void (*write_done)(void *, struct sk_buff *);
 	void *priv;
 	spinlock_t lock;
+	int num_tx_pkts;
+	int use_wm;
 };
 
 static struct sk_buff_head sdio_mux_write_pool;
@@ -104,6 +108,7 @@ static struct sdio_channel *sdio_mux_ch;
 static struct sdio_ch_info sdio_ch[SDIO_DMUX_NUM_CHANNELS];
 struct wake_lock sdio_mux_ch_wakelock;
 static int sdio_mux_initialized;
+static int fatal_error;
 
 struct sdio_mux_hdr {
 	uint16_t magic_num;
@@ -122,6 +127,7 @@ struct sdio_partial_pkt_info {
 
 static void sdio_mux_read_data(struct work_struct *work);
 static void sdio_mux_write_data(struct work_struct *work);
+static void sdio_mux_send_open_cmd(uint32_t id);
 
 static DEFINE_MUTEX(sdio_mux_lock);
 static DECLARE_WORK(work_sdio_mux_read, sdio_mux_read_data);
@@ -151,6 +157,7 @@ static inline void skb_set_data(struct sk_buff *skb,
 	skb->data = data;
 	skb->tail = skb->data + len;
 	skb->len  = len;
+	skb->truesize = len + sizeof(struct sk_buff);
 }
 
 static void sdio_mux_save_partial_pkt(struct sdio_mux_hdr *hdr,
@@ -224,6 +231,7 @@ static void *handle_sdio_mux_command(struct sdio_mux_hdr *hdr,
 {
 	void *rp;
 	unsigned long flags;
+	int send_open = 0;
 
 	DBG("%s: cmd %d ch %d\n", __func__, hdr->cmd, hdr->ch_id);
 	switch (hdr->cmd) {
@@ -233,7 +241,12 @@ static void *handle_sdio_mux_command(struct sdio_mux_hdr *hdr,
 	case SDIO_MUX_HDR_CMD_OPEN:
 		spin_lock_irqsave(&sdio_ch[hdr->ch_id].lock, flags);
 		sdio_ch[hdr->ch_id].status |= SDIO_CH_REMOTE_OPEN;
-		sdio_ch[hdr->ch_id].status &= ~SDIO_CH_IN_RESET;
+
+		if (sdio_ch_is_in_reset(hdr->ch_id)) {
+			DBG("%s: in reset - sending open cmd\n", __func__);
+			sdio_ch[hdr->ch_id].status &= ~SDIO_CH_IN_RESET;
+			send_open = 1;
+		}
 
 		/* notify client so it can update its status */
 		if (sdio_ch[hdr->ch_id].receive_cb)
@@ -245,6 +258,9 @@ static void *handle_sdio_mux_command(struct sdio_mux_hdr *hdr,
 					sdio_ch[hdr->ch_id].priv, NULL);
 		spin_unlock_irqrestore(&sdio_ch[hdr->ch_id].lock, flags);
 		rp = hdr + 1;
+		if (send_open)
+			sdio_mux_send_open_cmd(hdr->ch_id);
+
 		break;
 	case SDIO_MUX_HDR_CMD_CLOSE:
 		/* probably should drop pending write */
@@ -417,6 +433,20 @@ static int sdio_mux_write_cmd(void *data, uint32_t len)
 	return 0;
 }
 
+static void sdio_mux_send_open_cmd(uint32_t id)
+{
+	struct sdio_mux_hdr hdr = {
+		.magic_num = SDIO_MUX_HDR_MAGIC_NO,
+		.cmd = SDIO_MUX_HDR_CMD_OPEN,
+		.reserved = 0,
+		.ch_id = id,
+		.pkt_len = 0,
+		.pad_len = 0
+	};
+
+	sdio_mux_write_cmd((void *)&hdr, sizeof(hdr));
+}
+
 static void sdio_mux_write_data(struct work_struct *work)
 {
 	int rc, reschedule = 0;
@@ -445,6 +475,11 @@ static void sdio_mux_write_data(struct work_struct *work)
 		rc = sdio_mux_write(skb);
 		spin_lock_irqsave(&sdio_mux_write_lock, flags);
 		if (rc == 0) {
+
+			spin_lock(&sdio_ch[ch_id].lock);
+			sdio_ch[ch_id].num_tx_pkts--;
+			spin_unlock(&sdio_ch[ch_id].lock);
+
 			if (sdio_ch[ch_id].write_done)
 				sdio_ch[ch_id].write_done(
 						sdio_ch[ch_id].priv, skb);
@@ -454,6 +489,17 @@ static void sdio_mux_write_data(struct work_struct *work)
 			/* recoverable error - retry again later */
 			reschedule = 1;
 			break;
+		} else if (rc == -ENODEV) {
+			/*
+			 * sdio_al suffered some kind of fatal error
+			 * prevent future writes and clean up pending ones
+			 */
+			fatal_error = 1;
+			dev_kfree_skb_any(skb);
+			while ((skb = __skb_dequeue(&sdio_mux_write_pool)))
+				dev_kfree_skb_any(skb);
+			spin_unlock_irqrestore(&sdio_mux_write_lock, flags);
+			return;
 		} else {
 			/* unknown error condition - drop the
 			 * skb and reschedule for the
@@ -480,6 +526,10 @@ static void sdio_mux_write_data(struct work_struct *work)
 	}
 
 	if (notify) {
+		spin_lock(&sdio_ch[ch_id].lock);
+		sdio_ch[ch_id].num_tx_pkts--;
+		spin_unlock(&sdio_ch[ch_id].lock);
+
 		if (sdio_ch[ch_id].write_done)
 			sdio_ch[ch_id].write_done(
 				sdio_ch[ch_id].priv, skb);
@@ -515,6 +565,8 @@ int msm_sdio_dmux_write(uint32_t id, struct sk_buff *skb)
 		return -EINVAL;
 	if (!sdio_mux_initialized)
 		return -ENODEV;
+	if (fatal_error)
+		return -ENODEV;
 
 	DBG("%s: writing to ch %d len %d\n", __func__, id, skb->len);
 	spin_lock_irqsave(&sdio_ch[id].lock, flags);
@@ -528,6 +580,12 @@ int msm_sdio_dmux_write(uint32_t id, struct sk_buff *skb)
 		spin_unlock_irqrestore(&sdio_ch[id].lock, flags);
 		pr_err("%s: port not open: %d\n", __func__, sdio_ch[id].status);
 		return -ENODEV;
+	}
+	if (sdio_ch[id].use_wm &&
+			(sdio_ch[id].num_tx_pkts >= HIGH_WATERMARK)) {
+		spin_unlock_irqrestore(&sdio_ch[id].lock, flags);
+		pr_err("%s: watermark exceeded: %d\n", __func__, id);
+		return -EAGAIN;
 	}
 	spin_unlock_irqrestore(&sdio_ch[id].lock, flags);
 
@@ -566,6 +624,11 @@ int msm_sdio_dmux_write(uint32_t id, struct sk_buff *skb)
 	    __func__, skb->data, skb->tail, skb->len,
 	    hdr->pkt_len, hdr->pad_len);
 	__skb_queue_tail(&sdio_mux_write_pool, skb);
+
+	spin_lock(&sdio_ch[id].lock);
+	sdio_ch[id].num_tx_pkts++;
+	spin_unlock(&sdio_ch[id].lock);
+
 	queue_work(sdio_mux_workqueue, &work_sdio_mux_write);
 
 write_done:
@@ -577,7 +640,6 @@ int msm_sdio_dmux_open(uint32_t id, void *priv,
 			void (*receive_cb)(void *, struct sk_buff *),
 			void (*write_done)(void *, struct sk_buff *))
 {
-	struct sdio_mux_hdr hdr;
 	unsigned long flags;
 
 	DBG("%s: opening ch %d\n", __func__, id);
@@ -597,16 +659,11 @@ int msm_sdio_dmux_open(uint32_t id, void *priv,
 	sdio_ch[id].write_done = write_done;
 	sdio_ch[id].priv = priv;
 	sdio_ch[id].status |= SDIO_CH_LOCAL_OPEN;
+	sdio_ch[id].num_tx_pkts = 0;
+	sdio_ch[id].use_wm = 0;
 	spin_unlock_irqrestore(&sdio_ch[id].lock, flags);
 
-	hdr.magic_num = SDIO_MUX_HDR_MAGIC_NO;
-	hdr.cmd = SDIO_MUX_HDR_CMD_OPEN;
-	hdr.reserved = 0;
-	hdr.ch_id = id;
-	hdr.pkt_len = 0;
-	hdr.pad_len = 0;
-
-	sdio_mux_write_cmd((void *)&hdr, sizeof(hdr));
+	sdio_mux_send_open_cmd(id);
 
 open_done:
 	pr_info("%s: opened ch %d\n", __func__, id);
@@ -628,6 +685,7 @@ int msm_sdio_dmux_close(uint32_t id)
 	sdio_ch[id].receive_cb = NULL;
 	sdio_ch[id].priv = NULL;
 	sdio_ch[id].status &= ~SDIO_CH_LOCAL_OPEN;
+	sdio_ch[id].status &= ~SDIO_CH_IN_RESET;
 	spin_unlock_irqrestore(&sdio_ch[id].lock, flags);
 
 	hdr.magic_num = SDIO_MUX_HDR_MAGIC_NO;
@@ -655,6 +713,50 @@ static void sdio_mux_notify(void *_dev, unsigned event)
 	if ((event == SDIO_EVENT_DATA_READ_AVAIL) &&
 	    sdio_read_avail(sdio_mux_ch))
 		queue_work(sdio_mux_workqueue, &work_sdio_mux_read);
+}
+
+int msm_sdio_dmux_is_ch_full(uint32_t id)
+{
+	unsigned long flags;
+	int ret;
+
+	if (id >= SDIO_DMUX_NUM_CHANNELS)
+		return -EINVAL;
+
+	spin_lock_irqsave(&sdio_ch[id].lock, flags);
+	sdio_ch[id].use_wm = 1;
+	ret = sdio_ch[id].num_tx_pkts >= HIGH_WATERMARK;
+	DBG("%s: ch %d num tx pkts=%d, HWM=%d\n", __func__,
+			id, sdio_ch[id].num_tx_pkts, ret);
+	if (!sdio_ch_is_local_open(id)) {
+		ret = -ENODEV;
+		pr_err("%s: port not open: %d\n", __func__, sdio_ch[id].status);
+	}
+	spin_unlock_irqrestore(&sdio_ch[id].lock, flags);
+
+	return ret;
+}
+
+int msm_sdio_dmux_is_ch_low(uint32_t id)
+{
+	unsigned long flags;
+	int ret;
+
+	if (id >= SDIO_DMUX_NUM_CHANNELS)
+		return -EINVAL;
+
+	spin_lock_irqsave(&sdio_ch[id].lock, flags);
+	sdio_ch[id].use_wm = 1;
+	ret = sdio_ch[id].num_tx_pkts <= LOW_WATERMARK;
+	DBG("%s: ch %d num tx pkts=%d, LWM=%d\n", __func__,
+			id, sdio_ch[id].num_tx_pkts, ret);
+	if (!sdio_ch_is_local_open(id)) {
+		ret = -ENODEV;
+		pr_err("%s: port not open: %d\n", __func__, sdio_ch[id].status);
+	}
+	spin_unlock_irqrestore(&sdio_ch[id].lock, flags);
+
+	return ret;
 }
 
 #ifdef CONFIG_DEBUG_FS
@@ -759,19 +861,6 @@ static int sdio_dmux_remove(struct platform_device *pdev)
 			sdio_ch[i].status |= SDIO_CH_IN_RESET;
 			sdio_ch[i].status &= ~SDIO_CH_REMOTE_OPEN;
 
-			/* cancel any pending writes */
-			spin_lock_irqsave(&sdio_mux_write_lock,
-					write_lock_flags);
-			while ((skb = __skb_dequeue(&sdio_mux_write_pool))) {
-				if (sdio_ch[i].write_done)
-					sdio_ch[i].write_done(
-							sdio_ch[i].priv, skb);
-				else
-					dev_kfree_skb_any(skb);
-			}
-			spin_unlock_irqrestore(&sdio_mux_write_lock,
-					write_lock_flags);
-
 			/* notify client so it can update its status */
 			if (sdio_ch[i].receive_cb)
 				sdio_ch[i].receive_cb(
@@ -779,6 +868,19 @@ static int sdio_dmux_remove(struct platform_device *pdev)
 		}
 		spin_unlock_irqrestore(&sdio_ch[i].lock, ch_lock_flags);
 	}
+
+	/* cancel any pending writes */
+	spin_lock_irqsave(&sdio_mux_write_lock, write_lock_flags);
+	while ((skb = __skb_dequeue(&sdio_mux_write_pool))) {
+		i = ((struct sdio_mux_hdr *)skb->data)->ch_id;
+		if (sdio_ch[i].write_done)
+			sdio_ch[i].write_done(
+					sdio_ch[i].priv, skb);
+		else
+			dev_kfree_skb_any(skb);
+	}
+	spin_unlock_irqrestore(&sdio_mux_write_lock,
+			write_lock_flags);
 
 	return 0;
 }

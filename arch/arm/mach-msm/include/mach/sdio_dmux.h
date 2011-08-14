@@ -55,4 +55,8 @@ int msm_sdio_dmux_close(uint32_t id);
 
 int msm_sdio_dmux_write(uint32_t id, struct sk_buff *skb);
 
+int msm_sdio_dmux_is_ch_full(uint32_t id);
+
+int msm_sdio_dmux_is_ch_low(uint32_t id);
+
 #endif /* _SDIO_DMUX_H */

@@ -1511,7 +1511,9 @@ static struct platform_device ram_console_device = {
 static struct platform_device swift_keyled_device = {
 	.name = "swift-keyled",
 };
-
+ static struct platform_device swift_atcmd = {
+     .name = "alohag_atcmd",
+};
 static struct platform_device *devices[] __initdata = {
 	&msm_device_uart3,
 	&msm_device_smd,
@@ -1588,6 +1590,7 @@ static struct platform_device *devices[] __initdata = {
 	&mddi_ss_driveric_device,	
 	&swift_backlight_device,
 	&swift_keyled_device,
+	&swift_atcmd,
 };
 
 static struct msm_panel_common_pdata mdp_pdata = {

@@ -55,6 +55,8 @@ obj-$(CONFIG_IWM)	+= iwmc3200wifi/
 
 obj-$(CONFIG_BCM4329)	+= bcm4329/
 
+obj-$(CONFIG_BCM4325)	+= bcm4325/
+
 obj-$(CONFIG_LIBRA_SDIOIF)	+= libra/
 
 obj-$(CONFIG_WCNSS_WLAN)	+= wcnss/

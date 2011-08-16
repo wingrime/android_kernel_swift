@@ -1800,10 +1800,16 @@ void *qce_open(struct platform_device *pdev, int *rc)
 	pce_dev->pdev = &pdev->dev;
 	ce_clk = clk_get(pce_dev->pdev, "ce_clk");
 	if (IS_ERR(ce_clk)) {
+		kfree(pce_dev);
 		*rc = PTR_ERR(ce_clk);
 		return NULL;
 	}
 	pce_dev->ce_clk = ce_clk;
+	*rc = clk_enable(pce_dev->ce_clk);
+	if (*rc) {
+		kfree(pce_dev);
+		return NULL;
+	}
 
 	resource = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	if (!resource) {
@@ -1877,10 +1883,6 @@ void *qce_open(struct platform_device *pdev, int *rc)
 	pce_dev->chan_ce_in_state = QCE_CHAN_STATE_IDLE;
 	pce_dev->chan_ce_out_state = QCE_CHAN_STATE_IDLE;
 
-	*rc = clk_enable(pce_dev->ce_clk);
-	if (*rc)
-		return NULL;
-
 	if (_init_ce_engine(pce_dev)) {
 		*rc = -ENXIO;
 		clk_disable(pce_dev->ce_clk);
@@ -1914,8 +1916,8 @@ int qce_close(void *handle)
 	kfree(pce_dev->chan_ce_in_cmd);
 	kfree(pce_dev->chan_ce_out_cmd);
 
-	kfree(handle);
 	clk_put(pce_dev->ce_clk);
+	kfree(handle);
 	return 0;
 }
 EXPORT_SYMBOL(qce_close);
@@ -1943,8 +1945,7 @@ static void __exit _qce_exit(void)
 MODULE_LICENSE("GPL v2");
 MODULE_AUTHOR("Mona Hossain <mhossain@codeaurora.org>");
 MODULE_DESCRIPTION("Crypto Engine driver");
-MODULE_VERSION("1.06");
+MODULE_VERSION("1.13");
 
 module_init(_qce_init);
 module_exit(_qce_exit);
-

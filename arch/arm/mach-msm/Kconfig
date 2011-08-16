@@ -21,6 +21,7 @@ config ARCH_MSM7X25
 config ARCH_MSM7X27
 	bool "MSM7x27"
 	select ARCH_MSM_ARM11 if MSM_SOC_REV_NONE
+	select ARCH_HAS_BARRIERS if MSM_SOC_REV_NONE
 	select ARCH_MSM_CORTEX_A5 if MSM_SOC_REV_A
 	select MSM_VIC
 	select CPU_V6 if MSM_SOC_REV_NONE
@@ -77,6 +78,34 @@ config ARCH_MSM8X60
 	select MSM_SECURE_IO
 	select MSM_DALRPC
 	select MSM_QDSP6_APR
+	select ARCH_INLINE_SPIN_TRYLOCK
+	select ARCH_INLINE_SPIN_TRYLOCK_BH
+	select ARCH_INLINE_SPIN_LOCK
+	select ARCH_INLINE_SPIN_LOCK_BH
+	select ARCH_INLINE_SPIN_LOCK_IRQ
+	select ARCH_INLINE_SPIN_LOCK_IRQSAVE
+	select ARCH_INLINE_SPIN_UNLOCK
+	select ARCH_INLINE_SPIN_UNLOCK_BH
+	select ARCH_INLINE_SPIN_UNLOCK_IRQ
+	select ARCH_INLINE_SPIN_UNLOCK_IRQRESTORE
+	select ARCH_INLINE_READ_TRYLOCK
+	select ARCH_INLINE_READ_LOCK
+	select ARCH_INLINE_READ_LOCK_BH
+	select ARCH_INLINE_READ_LOCK_IRQ
+	select ARCH_INLINE_READ_LOCK_IRQSAVE
+	select ARCH_INLINE_READ_UNLOCK
+	select ARCH_INLINE_READ_UNLOCK_BH
+	select ARCH_INLINE_READ_UNLOCK_IRQ
+	select ARCH_INLINE_READ_UNLOCK_IRQRESTORE
+	select ARCH_INLINE_WRITE_TRYLOCK
+	select ARCH_INLINE_WRITE_LOCK
+	select ARCH_INLINE_WRITE_LOCK_BH
+	select ARCH_INLINE_WRITE_LOCK_IRQ
+	select ARCH_INLINE_WRITE_LOCK_IRQSAVE
+	select ARCH_INLINE_WRITE_UNLOCK
+	select ARCH_INLINE_WRITE_UNLOCK_BH
+	select ARCH_INLINE_WRITE_UNLOCK_IRQRESTORE
+	select MSM_SCHED_FAST_CPU_ONLINE
 
 config ARCH_MSM8960
 	bool "MSM8960"
@@ -421,6 +450,32 @@ config MACH_MSM8960_RUMI3
 	bool "MSM8960 RUMI3"
 	help
 	  Support for the Qualcomm MSM8960 RUMI3 emulator.
+
+config MACH_MSM8960_CDP
+	depends on ARCH_MSM8960
+	bool "MSM8960 CDP"
+	help
+	  Support for the Qualcomm MSM8960 CDP device.
+
+config MACH_MSM8960_MTP
+	depends on ARCH_MSM8960
+	bool "MSM8960 MTP"
+	help
+	  Support for the Qualcomm MSM8960 MTP device.
+
+config MACH_MSM8960_FLUID
+	depends on ARCH_MSM8960
+	bool "MSM8960 FLUID"
+	help
+	  Support for the Qualcomm MSM8960 FLUID device.
+
+config MSM_USE_TSIF1
+	depends on ARCH_MSM8X60
+	bool "MSM8x60 use TSIF1"
+	help
+	  Selects TSIF1 core to be used rather than TSIF0.
+	  The two TSIF cores share the same DM configuration
+	  so they cannot be used simultaneously.
 
 config MACH_MSM8X60_QT
 	depends on ARCH_MSM8X60
@@ -1381,7 +1436,6 @@ config MSM_DLOAD_MODE
 config MSM_ETM
 	tristate "Enable MSM ETM and ETB"
 	depends on ARCH_MSM8X60
-	select MSM_JTAG_V7
 	help
 		This enables embedded trace collection on Qualcomm v7 CPUs.
 
@@ -1443,5 +1497,13 @@ config MSM_AUDIO_QDSP6
         help
           Enable HW audio support in QDSP6.
           QDSP6 can support HW encoder & decoder and audio processing
+
+config MSM_SCHED_FAST_CPU_ONLINE
+	bool "Fast scheduler update for CPU online"
+	depends on ARCH_MSM8X60
+	default n
+	help
+	  Bypass scheduler domain reconstruction when onlining the second
+	  CPU on 8X60 to speed up operation.
 
 endif

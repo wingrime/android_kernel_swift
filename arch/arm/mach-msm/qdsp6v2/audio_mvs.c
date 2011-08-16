@@ -51,6 +51,7 @@ struct audio_mvs_info_type {
 
 	uint32_t mvs_mode;
 	uint32_t rate_type;
+	uint32_t dtx_mode;
 
 	struct list_head in_queue;
 	struct list_head free_in_queue;
@@ -572,7 +573,8 @@ static int audio_mvs_start(struct audio_mvs_info_type *audio)
 		voice_config_vocoder(
 		    audio_mvs_get_media_type(audio->mvs_mode, audio->rate_type),
 		    audio_mvs_get_rate(audio->mvs_mode, audio->rate_type),
-		    audio_mvs_get_network_type(audio->mvs_mode));
+		    audio_mvs_get_network_type(audio->mvs_mode),
+		    audio->dtx_mode);
 
 		audio->state = AUDIO_MVS_STARTED;
 	} else {
@@ -846,6 +848,7 @@ static long audio_mvs_ioctl(struct file *file,
 
 		config.mvs_mode = audio->mvs_mode;
 		config.rate_type = audio->rate_type;
+		config.dtx_mode = audio->dtx_mode;
 
 		mutex_unlock(&audio->lock);
 
@@ -870,6 +873,7 @@ static long audio_mvs_ioctl(struct file *file,
 			if (audio->state == AUDIO_MVS_STOPPED) {
 				audio->mvs_mode = config.mvs_mode;
 				audio->rate_type = config.rate_type;
+				audio->dtx_mode = config.dtx_mode;
 			} else {
 				pr_err("%s: Set confg called in state %d\n",
 				       __func__, audio->state);

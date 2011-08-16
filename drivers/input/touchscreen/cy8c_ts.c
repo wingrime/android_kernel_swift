@@ -3,7 +3,7 @@
  * drivers/input/touchscreen/cy8c_ts.c
  *
  * Copyright (C) 2009, 2010 Cypress Semiconductor, Inc.
- * Copyright (c) 2010, Code Aurora Forum. All rights reserved.
+ * Copyright (c) 2010, 2011 Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -237,7 +237,7 @@ static void process_tmg200_data(struct cy8c_ts *ts)
 				ts->touch_data[ts->dd->y_index+1]);
 		id = ts->touch_data[ts->dd->id_index];
 
-		report_data(ts, x, y, 255, id);
+		report_data(ts, x, y, 255, id - 1);
 
 		if (touches == 2) {
 			x = join_bytes(ts->touch_data[ts->dd->x_index+5],
@@ -246,7 +246,7 @@ static void process_tmg200_data(struct cy8c_ts *ts)
 				ts->touch_data[ts->dd->y_index+6]);
 			id = ts->touch_data[ts->dd->id_index+5];
 
-			report_data(ts, x, y, 255, id);
+			report_data(ts, x, y, 255, id - 1);
 		}
 	} else {
 		for (i = 0; i < ts->prev_touches; i++) {
@@ -418,12 +418,29 @@ static int cy8c_ts_suspend(struct device *dev)
 
 		enable_irq_wake(ts->pen_irq);
 	} else {
-		disable_irq_nosync(ts->pen_irq);
 
+		disable_irq_nosync(ts->pen_irq);
 		rc = cancel_delayed_work_sync(&ts->work);
 
-		if (rc)
+		if (rc) {
+			/* missed the worker, write to STATUS_REG to
+			   acknowledge interrupt */
+			rc = cy8c_ts_write_reg_u8(ts->client,
+				ts->dd->status_reg, ts->dd->update_data);
+			if (rc < 0) {
+				dev_err(&ts->client->dev,
+					"write failed, try once more\n");
+
+				rc = cy8c_ts_write_reg_u8(ts->client,
+					ts->dd->status_reg,
+					ts->dd->update_data);
+				if (rc < 0)
+					dev_err(&ts->client->dev,
+						"write failed, exiting\n");
+			}
+
 			enable_irq(ts->pen_irq);
+		}
 
 		gpio_free(ts->pdata->irq_gpio);
 
@@ -482,6 +499,21 @@ static int cy8c_ts_resume(struct device *dev)
 		}
 
 		enable_irq(ts->pen_irq);
+
+		/* Clear the status register of the TS controller */
+		rc = cy8c_ts_write_reg_u8(ts->client,
+			ts->dd->status_reg, ts->dd->update_data);
+		if (rc < 0) {
+			dev_err(&ts->client->dev,
+				"write failed, try once more\n");
+
+			rc = cy8c_ts_write_reg_u8(ts->client,
+				ts->dd->status_reg,
+				ts->dd->update_data);
+			if (rc < 0)
+				dev_err(&ts->client->dev,
+					"write failed, exiting\n");
+		}
 	}
 	return 0;
 err_gpio_free:

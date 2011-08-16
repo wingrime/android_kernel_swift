@@ -281,6 +281,22 @@ static int __devinit pmic8058_pwrkey_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, pwrkey);
 
+	/* Check if power-key is pressed at boot up */
+	err = pm8058_irq_get_rt_status(pwrkey->pm_chip, key_press_irq);
+	if (err < 0) {
+		dev_err(&pdev->dev, "Key-press status at boot failed rc=%d\n",
+									err);
+		goto unreg_input_dev;
+	}
+	if (err) {
+		if (!pwrkey->pdata->pwrkey_time_ms)
+			input_report_key(pwrkey->pwr, KEY_POWER, 1);
+		else
+			input_report_key(pwrkey->pwr, KEY_END, 1);
+		input_sync(pwrkey->pwr);
+		pwrkey->pressed_first = true;
+	}
+
 	err = request_threaded_irq(key_press_irq, NULL, pwrkey_press_irq,
 			 IRQF_TRIGGER_RISING, "pmic8058_pwrkey_press", pwrkey);
 	if (err < 0) {

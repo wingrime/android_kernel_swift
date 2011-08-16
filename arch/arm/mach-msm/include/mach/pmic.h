@@ -656,4 +656,5 @@ int pmic_hp_spkr_ctrl_prm_gain_input(enum hp_spkr_left_right left_right,
 							uint prm_gain_ctl);
 int pmic_hp_spkr_ctrl_aux_gain_input(enum hp_spkr_left_right left_right,
 							uint aux_gain_ctl);
+int pmic_xo_core_force_enable(uint enable);
 #endif

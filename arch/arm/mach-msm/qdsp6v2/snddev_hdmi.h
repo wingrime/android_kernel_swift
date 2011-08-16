@@ -36,5 +36,6 @@ struct snddev_hdmi_data {
 	u32 acdb_id;		/* Audio Cal purpose */
 	u8 channel_mode;
 	u32 default_sample_rate;
+	u32 on_apps;
 };
 #endif

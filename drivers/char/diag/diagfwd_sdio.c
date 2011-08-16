@@ -165,6 +165,19 @@ static int diag_sdio_probe(struct platform_device *pdev)
 	return err;
 }
 
+static int diag_sdio_remove(struct platform_device *pdev)
+{
+	queue_work(driver->diag_sdio_wq, &(driver->diag_remove_sdio_work));
+	return 0;
+}
+
+static void diag_remove_sdio_work_fn(struct work_struct *work)
+{
+	pr_debug("\n diag: sdio remove called");
+	/*Disable SDIO channel to prevent further read/write */
+	driver->sdio_ch = NULL;
+}
+
 static int diagfwd_sdio_runtime_suspend(struct device *dev)
 {
 	dev_dbg(dev, "pm_runtime: suspending...\n");
@@ -184,6 +197,7 @@ static const struct dev_pm_ops diagfwd_sdio_dev_pm_ops = {
 
 static struct platform_driver msm_sdio_ch_driver = {
 	.probe = diag_sdio_probe,
+	.remove = diag_sdio_remove,
 	.driver = {
 		   .name = "SDIO_DIAG",
 		   .owner = THIS_MODULE,
@@ -225,6 +239,7 @@ void diagfwd_sdio_init(void)
 	INIT_WORK(&(driver->diag_read_mdm_work), diag_read_mdm_work_fn);
 #endif
 	INIT_WORK(&(driver->diag_read_sdio_work), diag_read_sdio_work_fn);
+	INIT_WORK(&(driver->diag_remove_sdio_work), diag_remove_sdio_work_fn);
 	ret = platform_driver_register(&msm_sdio_ch_driver);
 	if (ret)
 		printk(KERN_INFO "DIAG could not register SDIO device");

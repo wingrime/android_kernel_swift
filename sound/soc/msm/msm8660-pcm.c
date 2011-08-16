@@ -23,8 +23,8 @@
 #include <sound/pcm_params.h>
 #include <sound/soc.h>
 #include <mach/audio_dma_msm8k.h>
+#include <sound/dai.h>
 #include "msm8660-pcm.h"
-#include "dai.h"
 
 static const struct snd_pcm_hardware msm_pcm_hardware = {
 	.info			=	SNDRV_PCM_INFO_MMAP |
@@ -33,7 +33,7 @@ static const struct snd_pcm_hardware msm_pcm_hardware = {
 					SNDRV_PCM_INFO_PAUSE |
 					SNDRV_PCM_INFO_RESUME,
 	.rates			=	SNDRV_PCM_RATE_8000_48000,
-	.formats =			SNDRV_PCM_FMTBIT_S16_LE,
+	.formats		=	SNDRV_PCM_FMTBIT_S16_LE,
 	.period_bytes_min =	32,
 	.period_bytes_max =	DMASZ/4,
 	.buffer_bytes_max =	DMASZ,

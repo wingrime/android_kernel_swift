@@ -164,6 +164,7 @@ static inline void smd_writel(unsigned int val,
 #define SMD_LOOPBACK_CID 100
 
 static LIST_HEAD(smd_ch_list_loopback);
+static irqreturn_t smsm_irq_handler(int irq, void *data);
 static void smd_fake_irq_handler(unsigned long arg);
 
 static inline unsigned int smd_readl(const void __iomem *addr)
@@ -336,6 +337,33 @@ struct smd_channel {
 	char is_pkt_ch;
 };
 
+struct edge_to_pid {
+	uint32_t	local_pid;
+	uint32_t	remote_pid;
+};
+
+/**
+ * Maps edge type to local and remote processor ID's.
+ */
+static struct edge_to_pid edge_to_pids[] = {
+	[SMD_APPS_MODEM] = {SMSM_APPS, SMSM_MODEM},
+	[SMD_APPS_QDSP] = {SMSM_APPS, SMSM_Q6},
+	[SMD_MODEM_QDSP] = {SMSM_MODEM, SMSM_Q6},
+	[SMD_APPS_DSPS] = {SMSM_APPS, SMSM_DSPS},
+	[SMD_MODEM_DSPS] = {SMSM_MODEM, SMSM_DSPS},
+	[SMD_QDSP_DSPS] = {SMSM_Q6, SMSM_DSPS},
+	[SMD_APPS_WCNSS] = {SMSM_APPS, SMSM_WCNSS},
+	[SMD_MODEM_WCNSS] = {SMSM_MODEM, SMSM_WCNSS},
+	[SMD_QDSP_WCNSS] = {SMSM_Q6, SMSM_WCNSS},
+	[SMD_DSPS_WCNSS] = {SMSM_DSPS, SMSM_WCNSS},
+};
+
+struct restart_notifier_block {
+	unsigned processor;
+	char *name;
+	struct notifier_block nb;
+};
+
 static struct platform_device loopback_tty_pdev = {.name = "LOOPBACK_TTY"};
 
 static LIST_HEAD(smd_ch_closed_list);
@@ -396,14 +424,91 @@ static void smd_channel_probe_worker(struct work_struct *work)
 	mutex_unlock(&smd_probe_lock);
 }
 
-void smd_channel_reset(void)
+/**
+ * Lookup processor ID and determine if it belongs to the proved edge
+ * type.
+ *
+ * @shared2:   Pointer to v2 shared channel structure
+ * @type:      Edge type
+ * @pid:       Processor ID of processor on edge
+ * @local_ch:  Channel that belongs to processor @pid
+ * @remote_ch: Other side of edge contained @pid
+ *
+ * Returns 0 for not on edge, 1 for found on edge
+ */
+static int pid_is_on_edge(struct smd_shared_v2 *shared2,
+		uint32_t type, uint32_t pid,
+		struct smd_half_channel **local_ch,
+		struct smd_half_channel **remote_ch
+		)
+{
+	int ret = 0;
+	struct edge_to_pid *edge;
+
+	*local_ch = 0;
+	*remote_ch = 0;
+
+	if (!shared2 || (type >= ARRAY_SIZE(edge_to_pids)))
+		return 0;
+
+	edge = &edge_to_pids[type];
+	if (edge->local_pid != edge->remote_pid) {
+		if (pid == edge->local_pid) {
+			*local_ch = &shared2->ch0;
+			*remote_ch = &shared2->ch1;
+			ret = 1;
+		} else if (pid == edge->remote_pid) {
+			*local_ch = &shared2->ch1;
+			*remote_ch = &shared2->ch0;
+			ret = 1;
+		}
+	}
+
+	return ret;
+}
+
+
+static void smd_channel_reset_state(struct smd_alloc_elm *shared,
+		unsigned new_state, unsigned pid)
+{
+	unsigned n;
+	struct smd_shared_v2 *shared2;
+	uint32_t type;
+	struct smd_half_channel *local_ch;
+	struct smd_half_channel *remote_ch;
+
+	for (n = 0; n < SMD_CHANNELS; n++) {
+		if (!shared[n].ref_count)
+			continue;
+		if (!shared[n].name[0])
+			continue;
+
+		type = SMD_CHANNEL_TYPE(shared[n].type);
+		shared2 = smem_alloc(SMEM_SMD_BASE_ID + n, sizeof(*shared2));
+		if (!shared2)
+			continue;
+
+		if (pid_is_on_edge(shared2, type, pid, &local_ch, &remote_ch)) {
+
+			/* force remote state for processor being restarted */
+			if (local_ch->state != SMD_SS_CLOSED) {
+				local_ch->state = new_state;
+				local_ch->fDSR = 0;
+				local_ch->fCTS = 0;
+				local_ch->fCD = 0;
+				local_ch->fSTATE = 1;
+			}
+		}
+	}
+}
+
+
+void smd_channel_reset(uint32_t restart_pid)
 {
 	struct smd_alloc_elm *shared;
 	unsigned n;
-	struct smd_shared_v1 *shared1;
-	struct smd_shared_v2 *shared2;
-	uint32_t type;
 	uint32_t *smem_lock;
+	unsigned long flags;
 
 	SMD_DBG("%s: starting reset\n", __func__);
 	shared = smem_find(ID_CH_ALLOC_TBL, sizeof(*shared) * 64);
@@ -412,75 +517,61 @@ void smd_channel_reset(void)
 		return;
 	}
 
-	/* This code has a race condition with non-RPC clients that
-	 * could result in clients attempting to read or write at the
-	 * same time that this code is clearing out the data
-	 * structures.
-	 *
-	 * Since this code is not yet active in the mainline, a
-	 * follow-up changelist will be done that will address
-	 * this issue, but it's important to get the RPC API
-	 * out to clients for integration while this effort is
-	 * done in parallel.
-	 */
-	mutex_lock(&smd_probe_lock);
-	for (n = 0; n < 64; n++) {
-
-		if (!shared[n].ref_count)
-			continue;
-		if (!shared[n].name[0])
-			continue;
-
-		type = SMD_CHANNEL_TYPE(shared[n].type);
-		shared2 = smem_alloc(SMEM_SMD_BASE_ID + n, sizeof(*shared2));
-		if (shared2) {
-			if ((type == SMD_APPS_MODEM) ||
-			    (type == SMD_APPS_QDSP) ||
-			    (type == SMD_APPS_DSPS) ||
-			    (type == SMD_APPS_WCNSS))
-				shared2->ch0.tail = shared2->ch0.head = 0;
-			else
-				memset(&shared2->ch0, 0,
-				       sizeof(struct smd_half_channel));
-			memset(&shared2->ch1, 0,
-			       sizeof(struct smd_half_channel));
-			continue;
-		}
-
-		shared1 = smem_alloc(SMEM_SMD_BASE_ID + n, sizeof(*shared1));
-		if (shared1) {
-			if ((type == SMD_APPS_MODEM) ||
-			    (type == SMD_APPS_QDSP) ||
-			    (type == SMD_APPS_DSPS) ||
-			    (type == SMD_APPS_WCNSS))
-				shared1->ch0.tail = shared1->ch0.head = 0;
-			else
-				memset(&shared1->ch0, 0,
-				       sizeof(struct smd_half_channel));
-			memset(&shared1->ch1, 0,
-			       sizeof(struct smd_half_channel));
-			continue;
-		}
-
-	}
-	mutex_unlock(&smd_probe_lock);
-
-	if (smsm_info.state)
-		memset(smsm_info.state, 0,
-		       sizeof(*smsm_info.state) * SMSM_NUM_ENTRIES);
-
 	smem_lock = smem_alloc(SMEM_SPINLOCK_ARRAY, 8 * sizeof(uint32_t));
 	if (smem_lock) {
+		SMD_DBG("%s: releasing locks\n", __func__);
 		for (n = 0; n < 8; n++) {
 			uint32_t pid = readl_relaxed(smem_lock);
-			if (pid && (pid != 1))
+			if (pid == (restart_pid + 1))
 				writel_relaxed(0, smem_lock);
 			smem_lock++;
 		}
 	}
 
-	/* notify clients of state change */
+	/* reset SMSM entry */
+	if (smsm_info.state) {
+		writel_relaxed(0, SMSM_STATE_ADDR(restart_pid));
+
+		/* clear apps SMSM to restart SMSM init handshake */
+		if (restart_pid == SMSM_MODEM)
+			writel_relaxed(0, SMSM_STATE_ADDR(SMSM_APPS));
+
+		/* notify SMSM processors */
+		smsm_irq_handler(0, 0);
+		MSM_TRIG_A2M_SMSM_INT;
+		MSM_TRIG_A2Q6_SMSM_INT;
+	}
+
+	/* change all remote states to CLOSING */
+	mutex_lock(&smd_probe_lock);
+	spin_lock_irqsave(&smd_lock, flags);
+	smd_channel_reset_state(shared, SMD_SS_CLOSING, restart_pid);
+	spin_unlock_irqrestore(&smd_lock, flags);
+	mutex_unlock(&smd_probe_lock);
+
+	/* notify SMD processors */
+	mb();
 	smd_fake_irq_handler(0);
+	notify_modem_smd();
+	notify_dsp_smd();
+	notify_dsps_smd();
+	notify_wcnss_smd();
+
+	/* change all remote states to CLOSED */
+	mutex_lock(&smd_probe_lock);
+	spin_lock_irqsave(&smd_lock, flags);
+	smd_channel_reset_state(shared, SMD_SS_CLOSED, restart_pid);
+	spin_unlock_irqrestore(&smd_lock, flags);
+	mutex_unlock(&smd_probe_lock);
+
+	/* notify SMD processors */
+	mb();
+	smd_fake_irq_handler(0);
+	notify_modem_smd();
+	notify_dsp_smd();
+	notify_dsps_smd();
+	notify_wcnss_smd();
+
 	SMD_DBG("%s: finished reset\n", __func__);
 }
 
@@ -545,6 +636,7 @@ static void ch_read_done(struct smd_channel *ch, unsigned count)
 {
 	BUG_ON(count > smd_stream_read_avail(ch));
 	ch->recv->tail = (ch->recv->tail + count) & ch->fifo_mask;
+	wmb();
 	ch->send->fTAIL = 1;
 }
 
@@ -638,6 +730,7 @@ static void ch_write_done(struct smd_channel *ch, unsigned count)
 {
 	BUG_ON(count > smd_stream_write_avail(ch));
 	ch->send->head = (ch->send->head + count) & ch->fifo_mask;
+	wmb();
 	ch->send->fHEAD = 1;
 }
 
@@ -1130,7 +1223,7 @@ static int smd_alloc_channel(struct smd_alloc_elm *alloc_elm)
 	mutex_unlock(&smd_creation_mutex);
 
 	platform_device_register(&ch->pdev);
-	if (!strcmp(ch->name, "LOOPBACK")) {
+	if (!strncmp(ch->name, "LOOPBACK", 8) && ch->type == SMD_APPS_MODEM) {
 		/* create a platform driver to be used by smd_tty driver
 		 * so that it can access the loopback port
 		 */
@@ -1615,8 +1708,10 @@ void *smem_get_entry(unsigned id, unsigned *size)
 	if (id >= SMEM_NUM_ITEMS)
 		return 0;
 
+	/* toc is in device memory and cannot be speculatively accessed */
 	if (toc[id].allocated) {
 		*size = toc[id].size;
+		barrier();
 		return (void *) (MSM_SHARED_RAM_BASE + toc[id].offset);
 	} else {
 		*size = 0;
@@ -1692,6 +1787,7 @@ static int smsm_init(void)
 						 SMSM_NUM_INTR_MUX *
 						 sizeof(uint32_t));
 
+	dsb();
 	return 0;
 }
 
@@ -1826,6 +1922,7 @@ int smsm_change_intr_mask(uint32_t smsm_entry,
 	new_mask = (old_mask & ~clear_mask) | set_mask;
 	smd_writel(new_mask, SMSM_INTR_MASK_ADDR(smsm_entry, SMSM_APPS));
 
+	dsb();
 	spin_unlock_irqrestore(&smem_lock, flags);
 
 	return 0;
@@ -2032,33 +2129,46 @@ static int __devinit msm_smd_probe(struct platform_device *pdev)
 	return 0;
 }
 
-static int modem_restart_notifier_cb(struct notifier_block *this,
+static int restart_notifier_cb(struct notifier_block *this,
 				  unsigned long code,
 				  void *data);
 
-static struct notifier_block nb = {
-	.notifier_call = modem_restart_notifier_cb,
+static struct restart_notifier_block restart_notifiers[] = {
+	{SMSM_MODEM, "modem", .nb.notifier_call = restart_notifier_cb},
+	{SMSM_Q6, "lpass", .nb.notifier_call = restart_notifier_cb},
 };
 
-static int modem_restart_notifier_cb(struct notifier_block *this,
+static int restart_notifier_cb(struct notifier_block *this,
 				  unsigned long code,
 				  void *data)
 {
-	switch (code) {
+	if (code == SUBSYS_AFTER_SHUTDOWN) {
+		struct restart_notifier_block *notifier;
 
-	case SUBSYS_AFTER_SHUTDOWN:
-		SMD_INFO("%s: Modem reset - resetting channel\n", __func__);
-		smd_channel_reset();
-		break;
+		notifier = container_of(this,
+				struct restart_notifier_block, nb);
+		SMD_INFO("%s: ssrestart for processor %d ('%s')\n",
+				__func__, notifier->processor,
+				notifier->name);
+
+		smd_channel_reset(notifier->processor);
 	}
 
 	return NOTIFY_DONE;
 }
 
-static void *restart_notifier_handle;
 static __init int modem_restart_late_init(void)
 {
-	restart_notifier_handle = subsys_notif_register_notifier("modem", &nb);
+	int i;
+	void *handle;
+	struct restart_notifier_block *nb;
+
+	for (i = 0; i < ARRAY_SIZE(restart_notifiers); i++) {
+		nb = &restart_notifiers[i];
+		handle = subsys_notif_register_notifier(nb->name, &nb->nb);
+		SMD_DBG("%s: registering notif for '%s', handle=%p\n",
+				__func__, nb->name, handle);
+	}
 	return 0;
 }
 late_initcall(modem_restart_late_init);

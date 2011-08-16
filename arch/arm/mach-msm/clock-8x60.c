@@ -24,6 +24,7 @@
 #include <linux/io.h>
 #include <linux/spinlock.h>
 #include <linux/delay.h>
+#include <linux/clk.h>
 #include <mach/msm_iomap.h>
 #include <mach/clk.h>
 #include <mach/msm_xo.h>
@@ -72,7 +73,6 @@
 #define PLLTEST_PAD_CFG_REG			REG(0x2FA4)
 #define PMEM_ACLK_CTL_REG			REG(0x25A0)
 #define PPSS_HCLK_CTL_REG			REG(0x2580)
-#define PRNG_CLK_NS_REG				REG(0x2E80)
 #define RINGOSC_NS_REG				REG(0x2DC0)
 #define RINGOSC_STATUS_REG			REG(0x2DCC)
 #define RINGOSC_TCXO_CTL_REG			REG(0x2DC4)
@@ -262,6 +262,7 @@
 #define TEST_TYPE_MM_LS		3
 #define TEST_TYPE_MM_HS		4
 #define TEST_TYPE_LPA		5
+#define TEST_TYPE_SC		6
 #define TEST_TYPE_SHIFT		24
 #define TEST_CLK_SEL_MASK	BM(23, 0)
 #define TEST_VECTOR(s, t)	(((t) << TEST_TYPE_SHIFT) | BVAL(23, 0, (s)))
@@ -270,6 +271,7 @@
 #define TEST_MM_LS(s)		TEST_VECTOR((s), TEST_TYPE_MM_LS)
 #define TEST_MM_HS(s)		TEST_VECTOR((s), TEST_TYPE_MM_HS)
 #define TEST_LPA(s)		TEST_VECTOR((s), TEST_TYPE_LPA)
+#define TEST_SC(s)		TEST_VECTOR((s), TEST_TYPE_SC)
 
 /*
  * SoC-specific Set-Rate Functions
@@ -511,11 +513,19 @@ static void set_rate_div_banked(struct clk_local *clk, struct clk_freq_tbl *nf)
 
 #define CLK_RESET(id, ns, r_m) \
 	[L_##id##_CLK] = { \
-		.type = RESET, \
+		.type = NOENABLE, \
 		.reset_reg = ns, \
 		.reset_mask = r_m, \
 		.parent = L_NONE_CLK, \
 		.current_freq = &local_dummy_freq, \
+	}
+
+#define CLK_MEASURE(id, tv) \
+	[L_##id##_CLK] = { \
+		.type = NOENABLE, \
+		.parent = L_NONE_CLK, \
+		.current_freq = &local_dummy_freq, \
+		.test_vector = tv, \
 	}
 
 /*
@@ -577,6 +587,33 @@ static void set_rate_div_banked(struct clk_local *clk, struct clk_freq_tbl *nf)
 /*
  * Clock Descriptions
  */
+
+/* ADM */
+#define CLK_ADM(id, br, h_r, h_c, h_b, tv) \
+	[L_##id##_CLK] = { \
+		.type = BASIC, \
+		.ns_reg = SC0_U_CLK_BRANCH_ENA_VOTE_REG, \
+		.cc_reg = SC0_U_CLK_BRANCH_ENA_VOTE_REG, \
+		.halt_reg = h_r, \
+		.halt_check = h_c, \
+		.halt_bit = h_b, \
+		.br_en_mask = br, \
+		.set_rate = set_rate_nop, \
+		.freq_tbl = clk_tbl_adm, \
+		.parent = L_NONE_CLK, \
+		.test_vector = tv, \
+		.current_freq = &local_dummy_freq, \
+	}
+#define F_ADM(f, s, v) \
+	{ \
+		.freq_hz = f, \
+		.src = SRC_##s, \
+		.sys_vdd = v, \
+	}
+static struct clk_freq_tbl clk_tbl_adm[] = {
+	F_ADM(1, BB_PXO, NONE),
+	F_END,
+};
 
 /* GSBI_UART */
 #define CLK_GSBI_UART(id, n, h_r, h_c, h_b, tv) \
@@ -707,30 +744,25 @@ static struct clk_freq_tbl clk_tbl_pdm[] = {
 #define CLK_PRNG(id) \
 	[L_##id##_CLK] = { \
 		.type = BASIC, \
-		.ns_reg = PRNG_CLK_NS_REG, \
 		.cc_reg = SC0_U_CLK_BRANCH_ENA_VOTE_REG, \
-		.reset_reg = PRNG_CLK_NS_REG, \
-		.reset_mask = BIT(12), \
 		.halt_reg = CLK_HALT_SFPB_MISC_STATE_REG, \
 		.halt_check = HALT_VOTED, \
 		.halt_bit = 10, \
 		.br_en_mask = BIT(10), \
-		.ns_mask = (BM(6, 3) | BM(2, 0)), \
 		.set_rate = set_rate_nop, \
 		.freq_tbl = clk_tbl_prng, \
 		.parent = L_NONE_CLK, \
 		.test_vector = TEST_PER_LS(0x7D), \
 		.current_freq = &local_dummy_freq, \
 	}
-#define F_PRNG(f, s, d, v) \
+#define F_PRNG(f, s, v) \
 	{ \
 		.freq_hz = f, \
 		.src = SRC_##s, \
-		.ns_val = NS_DIVSRC(6, 3, d, 2, 0, s), \
 		.sys_vdd = v, \
 	}
 static struct clk_freq_tbl clk_tbl_prng[] = {
-	F_PRNG(64000000, BB_PLL8,  6, NOMINAL),
+	F_PRNG(64000000, BB_PLL8, NOMINAL),
 	F_END,
 };
 
@@ -1920,15 +1952,13 @@ struct clk_local soc_clk_local_tbl[] = {
 		CLK_HALT_DFAB_STATE_REG, HALT,  7, TEST_PER_LS(0x1A)),
 
 	/* HW-Voteable Clocks */
-	CLK_NORATE(ADM0, SC0_U_CLK_BRANCH_ENA_VOTE_REG, BIT(2), NULL, 0,
-		CLK_HALT_MSS_SMPSS_MISC_STATE_REG, HALT_VOTED, 14,
+	CLK_ADM(ADM0, BIT(2), CLK_HALT_MSS_SMPSS_MISC_STATE_REG, HALT_VOTED, 14,
 		TEST_PER_HS(0x2A)),
+	CLK_ADM(ADM1, BIT(4), CLK_HALT_MSS_SMPSS_MISC_STATE_REG, HALT_VOTED, 12,
+		TEST_PER_HS(0x2B)),
 	CLK_NORATE(ADM0_P, SC0_U_CLK_BRANCH_ENA_VOTE_REG, BIT(3), NULL, 0,
 		CLK_HALT_MSS_SMPSS_MISC_STATE_REG, HALT_VOTED, 13,
 		TEST_PER_LS(0x80)),
-	CLK_NORATE(ADM1, SC0_U_CLK_BRANCH_ENA_VOTE_REG, BIT(4), NULL, 0,
-		CLK_HALT_MSS_SMPSS_MISC_STATE_REG, HALT_VOTED, 12,
-		TEST_PER_HS(0x2B)),
 	CLK_NORATE(ADM1_P, SC0_U_CLK_BRANCH_ENA_VOTE_REG, BIT(5), NULL, 0,
 		CLK_HALT_MSS_SMPSS_MISC_STATE_REG, HALT_VOTED, 11,
 		TEST_PER_LS(0x81)),
@@ -2103,6 +2133,22 @@ struct clk_local soc_clk_local_tbl[] = {
 		LCC_SPARE_I2S_SPKR_STATUS_REG, TEST_LPA(0x13)),
 
 	CLK_PCM(PCM),
+
+	/* Measurement-only Clocks */
+	CLK_MEASURE(SC0_DIV2_M,  TEST_SC(0x40)),
+	CLK_MEASURE(SC1_DIV2_M,  TEST_SC(0x41)),
+	CLK_MEASURE(L2_DIV2_M,   TEST_SC(0x42)),
+	CLK_MEASURE(AFAB_M,      TEST_PER_HS(0x07)),
+	CLK_MEASURE(SFAB_M,      TEST_PER_HS(0x18)),
+	CLK_MEASURE(EBI1_2X_M,   TEST_PER_HS(0x34)),
+	CLK_MEASURE(CFPB0_M,     TEST_PER_LS(0x33)),
+	CLK_MEASURE(CFPB1_M,     TEST_PER_LS(0x35)),
+	CLK_MEASURE(CFPB2_M,     TEST_PER_LS(0x37)),
+	CLK_MEASURE(DFAB_M,      TEST_PER_LS(0x25)),
+	CLK_MEASURE(SFPB_M,      TEST_PER_LS(0x78)),
+	CLK_MEASURE(MMFAB_M,     TEST_MM_HS(0x0F)),
+	CLK_MEASURE(SMI_DDR2X_M, TEST_MM_HS(0x24)),
+	CLK_MEASURE(MMFPB_M,     TEST_MM_LS(0x25)),
 };
 
 static struct msm_xo_voter *xo_pxo, *xo_cxo;
@@ -2276,7 +2322,7 @@ int soc_clk_measure_rate(unsigned id)
 	struct clk_local *clk = &soc_clk_local_tbl[id];
 	unsigned long flags;
 	uint32_t clk_sel, pdm_reg_backup, ringosc_reg_backup;
-	uint64_t raw_count_short, raw_count_full;
+	uint64_t raw_count_short, raw_count_full, full_measurement_ticks;
 	int ret;
 
 	spin_lock_irqsave(&local_clock_reg_lock, flags);
@@ -2286,26 +2332,37 @@ int soc_clk_measure_rate(unsigned id)
 	switch (clk->test_vector >> TEST_TYPE_SHIFT) {
 	case TEST_TYPE_PER_LS:
 		writel(0x4030D00|BVAL(7, 0, clk_sel), CLK_TEST_REG);
+		full_measurement_ticks = 0x10000;
 		break;
 	case TEST_TYPE_PER_HS:
 		writel(0x4020000|BVAL(16, 10, clk_sel), CLK_TEST_REG);
+		full_measurement_ticks = 0x10000;
 		break;
 	case TEST_TYPE_MM_LS:
 		writel(0x4030D97, CLK_TEST_REG);
 		writel(BVAL(6, 1, clk_sel)|BIT(0), DBG_CFG_REG_LS_REG);
+		full_measurement_ticks = 0x10000;
 		break;
 	case TEST_TYPE_MM_HS:
 		writel(0x402B800, CLK_TEST_REG);
 		writel(BVAL(6, 1, clk_sel)|BIT(0), DBG_CFG_REG_HS_REG);
+		full_measurement_ticks = 0x10000;
 		break;
 	case TEST_TYPE_LPA:
 		writel(0x4030D98, CLK_TEST_REG);
 		writel(BVAL(6, 1, clk_sel)|BIT(0), LCC_CLK_LS_DEBUG_CFG_REG);
+		full_measurement_ticks = 0x10000;
+		break;
+	case TEST_TYPE_SC:
+		writel(0x5020000|BVAL(16, 10, clk_sel), CLK_TEST_REG);
+		full_measurement_ticks = 0x4000;
 		break;
 	default:
 		ret = -EPERM;
 		goto err;
 	}
+	/* Make sure test vector is set before continuing. */
+	dsb();
 
 	/* Enable CXO/4 and RINGOSC branch and root. */
 	pdm_reg_backup = readl(PDM_CLK_NS_REG);
@@ -2322,8 +2379,8 @@ int soc_clk_measure_rate(unsigned id)
 
 	/* Run a short measurement. (~1 ms) */
 	raw_count_short = run_measurement(0x1000);
-	/* Run a full measurement. (~14 ms) */
-	raw_count_full = run_measurement(0x10000);
+	/* Run a full measurement. (up to ~14 ms) */
+	raw_count_full = run_measurement(full_measurement_ticks);
 
 	writel(ringosc_reg_backup, RINGOSC_NS_REG);
 	writel(pdm_reg_backup, PDM_CLK_NS_REG);
@@ -2334,7 +2391,7 @@ int soc_clk_measure_rate(unsigned id)
 	else {
 		/* Compute rate in Hz. */
 		raw_count_full = ((raw_count_full * 10) + 15) * 4800000;
-		do_div(raw_count_full, ((0x10000 * 10) + 35));
+		do_div(raw_count_full, ((full_measurement_ticks * 10) + 35));
 		ret = (int)raw_count_full;
 	}
 
@@ -2379,6 +2436,9 @@ int soc_clk_reset(unsigned id, enum clk_reset_action action)
 
 	spin_unlock_irqrestore(&local_clock_reg_lock, flags);
 
+	/* Make sure write is issued before returning. */
+	dsb();
+
 	return ret;
 }
 
@@ -2403,15 +2463,11 @@ static void reg_init(void)
 	writel(0, MM_PLL2_MODE_REG); /* PXO */
 	writel(0x00800000, MM_PLL2_CONFIG_REG); /* Enable main out. */
 
-	/* TODO:
-	 * The ADM clock votes below should removed once all users of the ADMs
-	 * begin voting for the clocks appropriately.
-	 */
 	/* The clock driver doesn't use SC1's voting register to control
 	 * HW-voteable clocks.  Clear its bits so that disabling bits in the
 	 * SC0 register will cause the corresponding clocks to be disabled. */
 	rmwreg(BIT(12)|BIT(11), SC0_U_CLK_BRANCH_ENA_VOTE_REG, BM(12, 11));
-	writel(BIT(12)|BIT(11)|BM(5, 2), SC1_U_CLK_BRANCH_ENA_VOTE_REG);
+	writel_relaxed(BIT(12)|BIT(11), SC1_U_CLK_BRANCH_ENA_VOTE_REG);
 	/* Let sc_aclk and sc_clk halt when both Scorpions are collapsed. */
 	writel(BIT(12)|BIT(11), SC0_U_CLK_SLEEP_ENA_VOTE_REG);
 	writel(BIT(12)|BIT(11), SC1_U_CLK_SLEEP_ENA_VOTE_REG);
@@ -2423,8 +2479,8 @@ static void reg_init(void)
 	 * gating for all clocks. Also set VFE_AHB's FORCE_CORE_ON bit to
 	 * prevent its memory from being collapsed when the clock is halted.
 	 * The sleep and wake-up delays are set to safe values. */
-	rmwreg(0x00000003, AHB_EN_REG,  0x0F7FFFFF);
-	rmwreg(0x000007F9, AHB_EN2_REG, 0x7FFFBFFF);
+	rmwreg(0x00000003, AHB_EN_REG,  0x6C000003);
+	writel(0x000007F9, AHB_EN2_REG);
 
 	/* Deassert all locally-owned MM AHB resets. */
 	rmwreg(0, SW_RESET_AHB_REG, 0xFFF7DFFF);
@@ -2432,7 +2488,7 @@ static void reg_init(void)
 	/* Initialize MM AXI registers: Enable HW gating for all clocks that
 	 * support it. Also set FORCE_CORE_ON bits, and any sleep and wake-up
 	 * delays to safe values. */
-	rmwreg(0x000207F9, MAXI_EN_REG,  0x0FFFFFFF);
+	rmwreg(0x100207F9, MAXI_EN_REG,  0x1803FFFF);
 	/* MAXI_EN2_REG is owned by the RPM.  Don't touch it. */
 	writel(0x3FE7FCFF, MAXI_EN3_REG);
 	writel(0x000001D8, SAXI_EN_REG);
@@ -2440,24 +2496,23 @@ static void reg_init(void)
 	/* Initialize MM CC registers: Set MM FORCE_CORE_ON bits so that core
 	 * memories retain state even when not clocked. Also, set sleep and
 	 * wake-up delays to safe values. */
-	writel(0x00000000, CSI_CC_REG);
-	rmwreg(0x00000000, MISC_CC_REG,  0xFEFFF3FF);
-	rmwreg(0x000007FD, MISC_CC2_REG, 0xFFFF7FFF);
-	writel(0x80FF0000, GFX2D0_CC_REG);
-	writel(0x80FF0000, GFX2D1_CC_REG);
-	writel(0x80FF0000, GFX3D_CC_REG);
-	writel(0x80FF0000, IJPEG_CC_REG);
-	writel(0x80FF0000, JPEGD_CC_REG);
-	/* MDP and PIXEL clocks may be running at boot, don't turn them off. */
-	rmwreg(0x80FF0000, MDP_CC_REG,   BM(31, 29) | BM(23, 16));
-	rmwreg(0x80FF0000, PIXEL_CC_REG, BM(31, 29) | BM(23, 16));
-	writel(0x000004FF, PIXEL_CC2_REG);
-	writel(0x80FF0000, ROT_CC_REG);
-	writel(0x80FF0000, TV_CC_REG);
-	writel(0x000004FF, TV_CC2_REG);
-	writel(0xC0FF0000, VCODEC_CC_REG);
-	writel(0x80FF0000, VFE_CC_REG);
-	writel(0x80FF0000, VPE_CC_REG);
+	rmwreg(0x00000000, CSI_CC_REG,    0x00000018);
+	rmwreg(0x00000400, MISC_CC_REG,   0x017C0400);
+	rmwreg(0x000007FD, MISC_CC2_REG,  0x70C2E7FF);
+	rmwreg(0x80FF0000, GFX2D0_CC_REG, 0xE0FF0010);
+	rmwreg(0x80FF0000, GFX2D1_CC_REG, 0xE0FF0010);
+	rmwreg(0x80FF0000, GFX3D_CC_REG,  0xE0FF0010);
+	rmwreg(0x80FF0000, IJPEG_CC_REG,  0xE0FF0018);
+	rmwreg(0x80FF0000, JPEGD_CC_REG,  0xE0FF0018);
+	rmwreg(0x80FF0000, MDP_CC_REG,    0xE1FF0010);
+	rmwreg(0x80FF0000, PIXEL_CC_REG,  0xE1FF0010);
+	rmwreg(0x000004FF, PIXEL_CC2_REG, 0x000007FF);
+	rmwreg(0x80FF0000, ROT_CC_REG,    0xE0FF0010);
+	rmwreg(0x80FF0000, TV_CC_REG,     0xE1FFC010);
+	rmwreg(0x000004FF, TV_CC2_REG,    0x000027FF);
+	rmwreg(0xC0FF0000, VCODEC_CC_REG, 0xE0FF0010);
+	rmwreg(0x80FF0000, VFE_CC_REG,    0xE0FFC010);
+	rmwreg(0x80FF0000, VPE_CC_REG,    0xE0FF0010);
 
 	/* De-assert MM AXI resets to all hardware blocks. */
 	writel(0, SW_RESET_AXI_REG);
@@ -2472,6 +2527,8 @@ static void reg_init(void)
 	writel(BIT(12), SW_RESET_CORE_REG);
 	udelay(5);
 	writel(0, SW_RESET_CORE_REG);
+	/* Make sure reset is de-asserted before clock is disabled. */
+	mb();
 	local_clk_disable(C(GFX3D));
 
 	/* Enable TSSC and PDM PXO sources. */
@@ -2501,6 +2558,8 @@ void __init msm_clk_soc_init(void)
 	reg_init();
 
 	/* Initialize rates for clocks that only support one. */
+	local_clk_set_rate(C(ADM0), 1);
+	local_clk_set_rate(C(ADM1), 1);
 	local_clk_set_rate(C(PDM), 27000000);
 	local_clk_set_rate(C(PRNG), 64000000);
 	local_clk_set_rate(C(MDP_VSYNC), 27000000);
@@ -2520,7 +2579,25 @@ void __init msm_clk_soc_init(void)
 
 static int msm_clk_soc_late_init(void)
 {
-	return local_unvote_sys_vdd(HIGH);
+	int rc;
+
+	/* Vote for MMFPB to be at least 64MHz when an Apps CPU is active. */
+	struct clk *mmfpb_a_clk = clk_get(NULL, "mmfpb_a_clk");
+	if (WARN(IS_ERR(mmfpb_a_clk), "mmfpb_a_clk not found (%ld)\n",
+			PTR_ERR(mmfpb_a_clk)))
+		return PTR_ERR(mmfpb_a_clk);
+	rc = clk_set_min_rate(mmfpb_a_clk, 64000000);
+	if (WARN(rc, "mmfpb_a_clk rate was not set (%d)\n", rc))
+		return rc;
+	rc = clk_enable(mmfpb_a_clk);
+	if (WARN(rc, "mmfpb_a_clk not enabled (%d)\n", rc))
+		return rc;
+
+	/* Remove temporary vote for HIGH vdd_dig. */
+	rc = local_unvote_sys_vdd(HIGH);
+	WARN(rc, "local_unvote_sys_vdd(HIGH) failed (%d)\n", rc);
+
+	return rc;
 }
 late_initcall(msm_clk_soc_late_init);
 

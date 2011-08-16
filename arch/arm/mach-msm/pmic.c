@@ -119,6 +119,7 @@
 #define HP_SPKR_MUTE_EN_PROC 92
 #define SPKR_BYPASS_EN_PROC 93
 #define HP_SPKR_AUX_IN_EN_PROC 94
+#define XO_CORE_FORCE_ENABLE 96
 
 /* rpc related */
 #define PMIC_RPC_TIMEOUT (5*HZ)
@@ -1211,3 +1212,9 @@ int pmic_hp_spkr_ctrl_aux_gain_input(enum hp_spkr_left_right left_right,
 			HP_SPKR_CTRL_AUX_GAIN_INPUT_PROC);
 }
 EXPORT_SYMBOL(pmic_hp_spkr_ctrl_aux_gain_input);
+
+int pmic_xo_core_force_enable(uint enable)
+{
+	return pmic_rpc_set_only(enable, 0, 0, 0, 1, XO_CORE_FORCE_ENABLE);
+}
+EXPORT_SYMBOL(pmic_xo_core_force_enable);

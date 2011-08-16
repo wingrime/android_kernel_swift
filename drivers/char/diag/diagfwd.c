@@ -751,63 +751,61 @@ static int diag_process_apps_pkt(unsigned char *buf, int len)
 	}
 #endif
 	/* Check for registered clients and forward packet to user-space */
-	else{
-		cmd_code = (int)(*(char *)buf);
-		temp++;
-		subsys_id = (int)(*(char *)temp);
-		temp++;
-		subsys_cmd_code = *(uint16_t *)temp;
-		temp += 2;
+	cmd_code = (int)(*(char *)buf);
+	temp++;
+	subsys_id = (int)(*(char *)temp);
+	temp++;
+	subsys_cmd_code = *(uint16_t *)temp;
+	temp += 2;
 
-		for (i = 0; i < diag_max_registration; i++) {
-			if (driver->table[i].process_id != 0) {
-				if (driver->table[i].cmd_code ==
-				     cmd_code && driver->table[i].subsys_id ==
-				     subsys_id &&
-				    driver->table[i].cmd_code_lo <=
-				     subsys_cmd_code &&
-					  driver->table[i].cmd_code_hi >=
-				     subsys_cmd_code){
+	for (i = 0; i < diag_max_registration; i++) {
+		if (driver->table[i].process_id != 0) {
+			if (driver->table[i].cmd_code ==
+				 cmd_code && driver->table[i].subsys_id ==
+				 subsys_id &&
+				driver->table[i].cmd_code_lo <=
+				 subsys_cmd_code &&
+				  driver->table[i].cmd_code_hi >=
+				 subsys_cmd_code){
+				driver->pkt_length = len;
+				diag_update_pkt_buffer(buf);
+				diag_update_sleeping_process(
+					driver->table[i].process_id);
+					return 0;
+				} /* end of if */
+			else if (driver->table[i].cmd_code == 255
+				  && cmd_code == 75) {
+				if (driver->table[i].subsys_id ==
+					subsys_id &&
+				   driver->table[i].cmd_code_lo <=
+					subsys_cmd_code &&
+					 driver->table[i].cmd_code_hi >=
+					subsys_cmd_code){
 					driver->pkt_length = len;
 					diag_update_pkt_buffer(buf);
 					diag_update_sleeping_process(
-						driver->table[i].process_id);
-						return 0;
-				    } /* end of if */
-				else if (driver->table[i].cmd_code == 255
-					  && cmd_code == 75) {
-					if (driver->table[i].subsys_id ==
-					    subsys_id &&
-					   driver->table[i].cmd_code_lo <=
-					    subsys_cmd_code &&
-					     driver->table[i].cmd_code_hi >=
-					    subsys_cmd_code){
-						driver->pkt_length = len;
-						diag_update_pkt_buffer(buf);
-						diag_update_sleeping_process(
-							driver->table[i].
-							process_id);
-						return 0;
-					}
-				} /* end of else-if */
-				else if (driver->table[i].cmd_code == 255 &&
-					  driver->table[i].subsys_id == 255) {
-					if (driver->table[i].cmd_code_lo <=
-							 cmd_code &&
-						     driver->table[i].
-						    cmd_code_hi >= cmd_code){
-						driver->pkt_length = len;
-						diag_update_pkt_buffer(buf);
-						diag_update_sleeping_process
-							(driver->table[i].
-							 process_id);
-						return 0;
-					}
-				} /* end of else-if */
-			} /* if(driver->table[i].process_id != 0) */
-		}  /* for (i = 0; i < diag_max_registration; i++) */
-	} /* else */
-		return packet_type;
+						driver->table[i].
+						process_id);
+					return 0;
+				}
+			} /* end of else-if */
+			else if (driver->table[i].cmd_code == 255 &&
+				  driver->table[i].subsys_id == 255) {
+				if (driver->table[i].cmd_code_lo <=
+						 cmd_code &&
+						 driver->table[i].
+						cmd_code_hi >= cmd_code){
+					driver->pkt_length = len;
+					diag_update_pkt_buffer(buf);
+					diag_update_sleeping_process
+						(driver->table[i].
+						 process_id);
+					return 0;
+				}
+			} /* end of else-if */
+		} /* if(driver->table[i].process_id != 0) */
+	}  /* for (i = 0; i < diag_max_registration; i++) */
+	return packet_type;
 }
 
 void diag_process_hdlc(void *data, unsigned len)

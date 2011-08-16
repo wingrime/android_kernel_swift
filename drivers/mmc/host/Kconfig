@@ -511,13 +511,6 @@ config MMC_MSM_SDC5_DUMMY52_REQUIRED
 	  all data commands.  Required for some SDIO cards.
 	  If unsure, say N.
 
-config MMC_MSM_SPS_SUPPORT
-	bool "Use SPS BAM as data mover"
-	depends on MMC_MSM && SPS
-	default n
-	help
-	  Select Y to use SPS BAM as data mover
-
 config MMC_TMIO
 	tristate "Toshiba Mobile IO Controller (TMIO) MMC/SD function support"
 	depends on MFD_TMIO || MFD_ASIC3 || MFD_SH_MOBILE_SDHI

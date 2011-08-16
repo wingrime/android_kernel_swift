@@ -61,6 +61,10 @@ struct msm_camera_device_platform_data {
 	void (*camera_gpio_off)(void);
 	struct msm_camera_io_ext ioext;
 	struct msm_camera_io_clk ioclk;
+	uint8_t csid_core;
+#ifdef CONFIG_MSM_BUS_SCALING
+	struct msm_bus_scale_pdata *cam_bus_scale_table;
+#endif
 };
 enum msm_camera_csi_data_format {
 	CSI_8BIT,
@@ -287,6 +291,10 @@ struct mipi_dsi_platform_data {
 	int (*dsi_power_save)(int on);
 };
 
+struct mipi_dsi_novatek_platform_data {
+	int fpga_3d_config_addr;
+};
+
 struct msm_fb_platform_data {
 	int (*detect_client)(const char *name);
 	int mddi_prescan;
@@ -325,7 +333,7 @@ struct msm_i2c_ssbi_platform_data {
 	enum msm_ssbi_controller_type controller_type;
 };
 
-#ifdef CONFIG_USB_PEHCI_HCD
+#if defined(CONFIG_USB_PEHCI_HCD) || defined(CONFIG_USB_PEHCI_HCD_MODULE)
 struct isp1763_platform_data {
 	unsigned reset_gpio;
 	int (*setup_gpio)(int enable);

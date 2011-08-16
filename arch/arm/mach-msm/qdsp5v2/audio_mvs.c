@@ -236,7 +236,7 @@ struct audio_mvs_cb_func_args {
 struct audio_mvs_frame_info_hdr {
 	uint32_t frame_mode;
 	uint32_t mvs_mode;
-	uint32_t buf_free_cnt;
+	uint16_t buf_free_cnt;
 };
 
 struct audio_mvs_ul_reply {
@@ -257,6 +257,26 @@ struct audio_mvs_dl_cb_func_args {
 	uint32_t amr_frame;
 	uint32_t amr_mode;
 };
+/*general codec parameters includes AMR, G711A, PCM
+G729, VOC and HR vocoders
+*/
+struct gnr_cdc_param {
+	uint32_t param1;
+	uint32_t param2;
+	uint32_t valid_pkt_status_ptr;
+	uint32_t pkt_status;
+};
+/*G711 codec parameter*/
+struct g711_param {
+	uint32_t param1;
+	uint32_t valid_pkt_status_ptr;
+	uint32_t pkt_status;
+};
+
+union codec_param {
+	struct gnr_cdc_param gnr_arg;
+	struct g711_param g711_arg;
+};
 
 struct audio_mvs_dl_reply {
 	struct rpc_reply_hdr reply_hdr;
@@ -268,12 +288,7 @@ struct audio_mvs_dl_reply {
 	uint32_t frame_mode_again;
 
 	struct audio_mvs_frame_info_hdr frame_info_hdr;
-
-	uint32_t param1;
-	uint32_t param2;
-
-	uint32_t valid_pkt_status_ptr;
-	uint32_t pkt_status;
+	union codec_param cdc_param;
 };
 
 struct audio_mvs_buf_node {
@@ -1036,49 +1051,102 @@ static void audio_mvs_process_rpc_request(uint32_t procedure,
 
 			pr_debug("%s:frame mode %d\n", __func__, frame_mode);
 			if (frame_mode == MVS_FRAME_MODE_AMR_DL) {
-				dl_reply.param1 = cpu_to_be32(
+				dl_reply.cdc_param.gnr_arg.param1 = cpu_to_be32(
 					buf_node->frame.frame_type);
-				dl_reply.param2 = cpu_to_be32(audio->rate_type);
+				dl_reply.cdc_param.gnr_arg.param2 =
+						cpu_to_be32(audio->rate_type);
+				dl_reply.cdc_param.\
+						gnr_arg.valid_pkt_status_ptr =
+							cpu_to_be32(0x00000001);
+				dl_reply.cdc_param.gnr_arg.pkt_status =
+					cpu_to_be32(AUDIO_MVS_PKT_NORMAL);
 			} else if (frame_mode == MVS_FRAME_MODE_PCM_DL) {
-				dl_reply.param1 = 0;
-				dl_reply.param2 = 0;
+				dl_reply.cdc_param.gnr_arg.param1 = 0;
+				dl_reply.cdc_param.gnr_arg.param2 = 0;
+				dl_reply.cdc_param.\
+						gnr_arg.valid_pkt_status_ptr =
+							cpu_to_be32(0x00000001);
+				dl_reply.cdc_param.gnr_arg.pkt_status =
+					cpu_to_be32(AUDIO_MVS_PKT_NORMAL);
 			} else if (frame_mode == MVS_FRAME_MODE_VOC_RX) {
-				dl_reply.param1 = cpu_to_be32(audio->rate_type);
-				dl_reply.param2 = 0;
+				dl_reply.cdc_param.gnr_arg.param1 =
+						cpu_to_be32(audio->rate_type);
+				dl_reply.cdc_param.gnr_arg.param2 = 0;
+				dl_reply.cdc_param.\
+						gnr_arg.valid_pkt_status_ptr =
+							cpu_to_be32(0x00000001);
+				dl_reply.cdc_param.gnr_arg.pkt_status =
+					cpu_to_be32(AUDIO_MVS_PKT_NORMAL);
 			} else if (frame_mode == MVS_FRAME_MODE_G711_DL) {
-				dl_reply.param1 = cpu_to_be32(
-				       buf_node->frame.frame_type);
-				dl_reply.param2 = cpu_to_be32(audio->rate_type);
+				dl_reply.cdc_param.g711_arg.param1 =
+				cpu_to_be32(buf_node->frame.frame_type);
+				dl_reply.cdc_param.\
+						g711_arg.valid_pkt_status_ptr =
+							cpu_to_be32(0x00000001);
+				dl_reply.cdc_param.g711_arg.pkt_status =
+					cpu_to_be32(AUDIO_MVS_PKT_NORMAL);
 			} else if (frame_mode == MVS_FRAME_MODE_G729A_DL) {
-				dl_reply.param1 = cpu_to_be32(
+				dl_reply.cdc_param.gnr_arg.param1 = cpu_to_be32(
 				       buf_node->frame.frame_type);
-				dl_reply.param2 = cpu_to_be32(audio->rate_type);
+				dl_reply.cdc_param.gnr_arg.param2 =
+						cpu_to_be32(audio->rate_type);
+				dl_reply.cdc_param.\
+						gnr_arg.valid_pkt_status_ptr =
+							cpu_to_be32(0x00000001);
+				dl_reply.cdc_param.gnr_arg.pkt_status =
+					cpu_to_be32(AUDIO_MVS_PKT_NORMAL);
 			} else if (frame_mode == MVS_FRAME_MODE_G722_DL) {
-				dl_reply.param1 = cpu_to_be32(
+				dl_reply.cdc_param.gnr_arg.param1 = cpu_to_be32(
 				      buf_node->frame.frame_type);
-				dl_reply.param2 = cpu_to_be32(audio->rate_type);
+				dl_reply.cdc_param.gnr_arg.param2 =
+						cpu_to_be32(audio->rate_type);
+				dl_reply.cdc_param.\
+						gnr_arg.valid_pkt_status_ptr =
+							cpu_to_be32(0x00000001);
+				dl_reply.cdc_param.gnr_arg.pkt_status =
+					cpu_to_be32(AUDIO_MVS_PKT_NORMAL);
 			} else if (frame_mode == MVS_FRAME_MODE_G711A_DL) {
-				dl_reply.param1 = cpu_to_be32(
+				dl_reply.cdc_param.gnr_arg.param1 = cpu_to_be32(
 				       buf_node->frame.frame_type);
-				dl_reply.param2 = cpu_to_be32(audio->rate_type);
+				dl_reply.cdc_param.gnr_arg.param2 =
+						cpu_to_be32(audio->rate_type);
+				dl_reply.cdc_param.\
+						gnr_arg.valid_pkt_status_ptr =
+							cpu_to_be32(0x00000001);
+				dl_reply.cdc_param.gnr_arg.pkt_status =
+					cpu_to_be32(AUDIO_MVS_PKT_NORMAL);
 			} else if ((frame_mode == MVS_FRAME_MODE_GSM_DL) ||
 				   (frame_mode == MVS_FRAME_MODE_HR_DL)) {
-				dl_reply.param1 = cpu_to_be32(
+				dl_reply.cdc_param.gnr_arg.param1 = cpu_to_be32(
 				       buf_node->frame.frame_type);
-				dl_reply.param2 = cpu_to_be32(audio->rate_type);
+				dl_reply.cdc_param.gnr_arg.param2 =
+						cpu_to_be32(audio->rate_type);
+				dl_reply.cdc_param.\
+						gnr_arg.valid_pkt_status_ptr =
+							cpu_to_be32(0x00000001);
+				dl_reply.cdc_param.gnr_arg.pkt_status =
+					cpu_to_be32(AUDIO_MVS_PKT_NORMAL);
 			} else {
-				pr_debug("%s: DL Unknown frame mode %d\n",
+				pr_err("%s: DL Unknown frame mode %d\n",
 				       __func__, frame_mode);
 			}
-
-			dl_reply.pkt_status = cpu_to_be32(AUDIO_MVS_PKT_NORMAL);
-
 			list_add_tail(&buf_node->list, &audio->free_in_queue);
 		} else {
 			pr_debug("%s: No DL data available to send to MVS\n",
 				 __func__);
-
-			dl_reply.pkt_status = cpu_to_be32(AUDIO_MVS_PKT_SLOW);
+			if (frame_mode == MVS_FRAME_MODE_G711_DL) {
+				dl_reply.cdc_param.\
+						g711_arg.valid_pkt_status_ptr =
+							cpu_to_be32(0x00000001);
+				dl_reply.cdc_param.g711_arg.pkt_status =
+						cpu_to_be32(AUDIO_MVS_PKT_SLOW);
+			} else {
+				dl_reply.cdc_param.\
+						gnr_arg.valid_pkt_status_ptr =
+							cpu_to_be32(0x00000001);
+				dl_reply.cdc_param.gnr_arg.pkt_status =
+						cpu_to_be32(AUDIO_MVS_PKT_SLOW);
+			}
 		}
 
 		mutex_unlock(&audio->in_lock);
@@ -1092,8 +1160,6 @@ static void audio_mvs_process_rpc_request(uint32_t procedure,
 			cpu_to_be32(audio->frame_mode);
 		dl_reply.frame_info_hdr.mvs_mode = cpu_to_be32(audio->mvs_mode);
 		dl_reply.frame_info_hdr.buf_free_cnt = 0;
-
-		dl_reply.valid_pkt_status_ptr = cpu_to_be32(0x00000001);
 
 		rc = msm_rpc_write(audio->rpc_endpt,
 				   &dl_reply,

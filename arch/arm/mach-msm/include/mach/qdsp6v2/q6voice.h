@@ -663,6 +663,7 @@ struct mvs_driver_info {
 	uint32_t media_type;
 	uint32_t rate;
 	uint32_t network_type;
+	uint32_t dtx_mode;
 	ul_cb_fn ul_cb;
 	dl_cb_fn dl_cb;
 	void *private_data;
@@ -750,7 +751,8 @@ void voice_register_mvs_cb(ul_cb_fn ul_cb,
 
 void voice_config_vocoder(uint32_t media_type,
 			  uint32_t rate,
-			  uint32_t network_type);
+			  uint32_t network_type,
+			  uint32_t dtx_mode);
 
 int voice_start_record(uint32_t rec_mode, uint32_t set);
 

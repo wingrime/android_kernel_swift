@@ -53,6 +53,8 @@
 uint32_t cyttsp_tsdebug1 = 0xff;
 module_param_named(tsdebug1, cyttsp_tsdebug1, uint, 0664);
 
+#define FW_FNAME_LEN 40
+
 /* CY TTSP I2C Driver private data */
 struct cyttsp {
 	struct i2c_client *client;
@@ -71,6 +73,7 @@ struct cyttsp {
 	bool cyttsp_update_fw;
 	bool cyttsp_fwloader_mode;
 	bool is_suspended;
+	char fw_fname[FW_FNAME_LEN];
 #ifdef CONFIG_HAS_EARLYSUSPEND
 	struct early_suspend early_suspend;
 #endif /* CONFIG_HAS_EARLYSUSPEND */
@@ -261,6 +264,7 @@ static const struct cmd_record initiate_rec = {
 
 #define BL_REC1_ADDR          0x0780
 #define BL_REC2_ADDR          0x07c0
+#define BL_CHECKSUM_MASK      0x01
 
 #define ID_INFO_REC           ":40078000"
 #define ID_INFO_OFFSET_IN_REC 77
@@ -643,7 +647,7 @@ static void cyttspfw_flash_start(struct cyttsp *ts, const u8 *data,
 				int data_len, u8 *buf, bool force)
 {
 	int rc;
-	u8 ttspver_hi = 0, ttspver_lo = 0;
+	u8 ttspver_hi = 0, ttspver_lo = 0, fw_upgrade = 0;
 	u8 appid_hi = 0, appid_lo = 0;
 	u8 appver_hi = 0, appver_lo = 0;
 	u8 cid_0 = 0, cid_1 = 0, cid_2 = 0;
@@ -690,24 +694,39 @@ static void cyttspfw_flash_start(struct cyttsp *ts, const u8 *data,
 				g_bl_data.appver_hi, g_bl_data.appver_lo);
 	pr_info("New firmware: %d.%d.%d", appid_lo, appver_hi, appver_lo);
 
-	if (force || ttspver_hi != g_bl_data.ttspver_hi ||
-			ttspver_lo != g_bl_data.ttspver_lo ||
-			appid_hi != g_bl_data.appid_hi ||
-			appid_lo != g_bl_data.appid_lo ||
-			appver_hi != g_bl_data.appver_hi ||
-			appver_lo != g_bl_data.appver_lo ||
-			cid_0 != g_bl_data.cid_0 ||
-			cid_1 != g_bl_data.cid_1 ||
-			cid_2 != g_bl_data.cid_2) {
-		pr_info("%s: firmware upgrade started\n", __func__);
-		/* flash the firmware */
+	if (force)
+		fw_upgrade = 1;
+	else if (!(g_bl_data.bl_status & BL_CHECKSUM_MASK) &&
+			(appid_lo == ts->platform_data->correct_fw_ver))
+		fw_upgrade = 1;
+	else
+		if ((appid_hi == g_bl_data.appid_hi) &&
+			(appid_lo == g_bl_data.appid_lo)) {
+			if (appver_hi > g_bl_data.appver_hi) {
+				fw_upgrade = 1;
+			} else if ((appver_hi == g_bl_data.appver_hi) &&
+					 (appver_lo > g_bl_data.appver_lo)) {
+					fw_upgrade = 1;
+				} else {
+					fw_upgrade = 0;
+					pr_info("%s: Firmware version "
+					"lesser/equal to existing firmware, "
+					"upgrade not needed\n", __func__);
+				}
+		} else {
+			fw_upgrade = 0;
+			pr_info("%s: Firware versions do not match, "
+						"cannot upgrade\n", __func__);
+		}
+
+	if (fw_upgrade) {
+		pr_info("%s: Starting firmware upgrade\n", __func__);
 		rc = cyttspfw_flash_firmware(ts, data, data_len);
 		if (rc < 0)
 			pr_err("%s: firmware upgrade failed\n", __func__);
 		else
 			pr_info("%s: firmware upgrade success\n", __func__);
-	} else
-		pr_info("%s: no firmware upgrade needed\n", __func__);
+	}
 
 	/* enter bootloader idle mode */
 	cyttsp_soft_reset(ts);
@@ -777,9 +796,10 @@ static void cyttspfw_upgrade(struct device *dev, bool force)
 		}
 	}
 
-	retval = request_firmware(&cyttsp_fw, "cyttsp.fw", dev);
+	retval = request_firmware(&cyttsp_fw, ts->fw_fname, dev);
 	if (retval < 0) {
-		pr_err("%s: cyttsp.fw request failed(%d)\n", __func__, retval);
+		pr_err("%s: %s request failed(%d)\n", __func__,
+						ts->fw_fname, retval);
 	} else {
 		/* check and start upgrade */
 		cyttspfw_upgrade_start(ts, cyttsp_fw->data,
@@ -792,7 +812,7 @@ static ssize_t cyttsp_update_fw_show(struct device *dev,
 				struct device_attribute *attr, char *buf)
 {
 	struct cyttsp *ts = dev_get_drvdata(dev);
-	return sprintf(buf, "%d\n", ts->cyttsp_fwloader_mode);
+	return snprintf(buf, 2, "%d\n", ts->cyttsp_fwloader_mode);
 }
 
 static ssize_t cyttsp_force_update_fw_store(struct device *dev,
@@ -851,6 +871,32 @@ static ssize_t cyttsp_update_fw_store(struct device *dev,
 
 static DEVICE_ATTR(cyttsp_update_fw, 0777, cyttsp_update_fw_show,
 					cyttsp_update_fw_store);
+
+static ssize_t cyttsp_fw_name_show(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	struct cyttsp *ts = dev_get_drvdata(dev);
+	return snprintf(buf, FW_FNAME_LEN - 1, "%s\n", ts->fw_fname);
+}
+
+static ssize_t cyttsp_fw_name_store(struct device *dev,
+				struct device_attribute *attr,
+				const char *buf, size_t size)
+{
+	struct cyttsp *ts = dev_get_drvdata(dev);
+
+	if (size > FW_FNAME_LEN - 1)
+		return -EINVAL;
+
+	strncpy(ts->fw_fname, buf, size);
+	if (ts->fw_fname[size-1] == '\n')
+		ts->fw_fname[size-1] = 0;
+
+	return size;
+}
+
+static DEVICE_ATTR(cyttsp_fw_name, 0777, cyttsp_fw_name_show,
+					cyttsp_fw_name_store);
 
 /* The cyttsp_xy_worker function reads the XY coordinates and sends them to
  * the input layer.  It is scheduled from the interrupt (or timer).
@@ -2464,11 +2510,22 @@ static int cyttsp_initialize(struct i2c_client *client, struct cyttsp *ts)
 	}
 	if (ts->platform_data->correct_fw_ver) {
 		if (g_bl_data.appid_lo != ts->platform_data->correct_fw_ver)
-			printk(KERN_INFO "Please update touchscreen firmware\n");
+			pr_warn("%s: Invalid firmware version detected;"
+				" Please update.\n", __func__);
 	}
+
+	retval = device_create_file(&client->dev,
+				&dev_attr_cyttsp_fw_name);
+	if (retval) {
+		cyttsp_alert("sysfs entry for file name selection failed\n");
+		goto error_rm_dev_file_fupdate_fw;
+	}
+
 	cyttsp_info("%s: Successful registration\n", CY_I2C_NAME);
 	goto success;
 
+error_rm_dev_file_fupdate_fw:
+	device_remove_file(&client->dev, &dev_attr_cyttsp_force_update_fw);
 error_rm_dev_file_update_fw:
 	device_remove_file(&client->dev, &dev_attr_cyttsp_update_fw);
 error_rm_dev_file_fw_ver:
@@ -2514,6 +2571,13 @@ static int __devinit cyttsp_probe(struct i2c_client *client,
 		/* register driver_data */
 		ts->client = client;
 		ts->platform_data = client->dev.platform_data;
+
+		if (ts->platform_data->fw_fname)
+			strncpy(ts->fw_fname, ts->platform_data->fw_fname,
+							FW_FNAME_LEN - 1);
+		else
+			strncpy(ts->fw_fname, "cyttsp.hex", FW_FNAME_LEN - 1);
+
 		i2c_set_clientdata(client, ts);
 
 		error = cyttsp_initialize(client, ts);
@@ -2702,6 +2766,7 @@ static int __devexit cyttsp_remove(struct i2c_client *client)
 	device_remove_file(&client->dev, &dev_attr_cyttsp_fw_ver);
 	device_remove_file(&client->dev, &dev_attr_cyttsp_update_fw);
 	device_remove_file(&client->dev, &dev_attr_cyttsp_force_update_fw);
+	device_remove_file(&client->dev, &dev_attr_cyttsp_fw_name);
 
 	/* Start cleaning up by removing any delayed work and the timer */
 	if (cancel_delayed_work((struct delayed_work *)&ts->work) < CY_OK)

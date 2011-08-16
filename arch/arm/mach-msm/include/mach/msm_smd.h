@@ -109,9 +109,6 @@ void smd_enable_read_intr(smd_channel_t *ch);
  */
 void smd_disable_read_intr(smd_channel_t *ch);
 
-/* cleanup smd ports required during modem restart */
-void smd_channel_reset(void);
-
 /* Starts a packet transaction.  The size of the packet may exceed the total
  * size of the smd ring buffer.
  *

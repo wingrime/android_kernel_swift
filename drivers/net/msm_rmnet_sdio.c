@@ -372,7 +372,13 @@ static void sdio_write_done(void *dev, struct sk_buff *skb)
 
 	if (!p->in_reset) {
 		DBG1("%s: write complete skb=%p\n",	__func__, skb);
-		netif_wake_queue(dev);
+
+		if (netif_queue_stopped(dev) &&
+				msm_sdio_dmux_is_ch_low(p->ch_id)) {
+			DBG0("%s: Low WM hit, waking queue=%p\n",
+					__func__, skb);
+			netif_wake_queue(dev);
+		}
 	} else {
 		DBG1("%s: write in reset skb=%p\n",	__func__, skb);
 	}
@@ -452,14 +458,20 @@ static int rmnet_change_mtu(struct net_device *dev, int new_mtu)
 
 static int rmnet_xmit(struct sk_buff *skb, struct net_device *dev)
 {
+	struct rmnet_private *p = netdev_priv(dev);
+
 	if (netif_queue_stopped(dev)) {
 		pr_err("[%s]fatal: rmnet_xmit called when "
 			"netif_queue is stopped", dev->name);
 		return 0;
 	}
 
-	netif_stop_queue(dev);
 	_rmnet_xmit(skb, dev);
+
+	if (msm_sdio_dmux_is_ch_full(p->ch_id)) {
+		netif_stop_queue(dev);
+		DBG0("%s: High WM hit, stopping queue=%p\n",	__func__, skb);
+	}
 
 	return 0;
 }

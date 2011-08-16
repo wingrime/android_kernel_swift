@@ -82,6 +82,7 @@ struct dsps_regulator_info {
 /**
  * DSPS Platform data.
  *
+ * @pil_name - peripheral image name
  * @clks - array of clocks.
  * @clks_num - number of clocks in array.
  * @gpios - array of gpios.
@@ -91,6 +92,7 @@ struct dsps_regulator_info {
  * @signature - signature for validity check.
  */
 struct msm_dsps_platform_data {
+	const char *pil_name;
 	struct dsps_clk_info *clks;
 	int clks_num;
 	struct dsps_gpio_info *gpios;

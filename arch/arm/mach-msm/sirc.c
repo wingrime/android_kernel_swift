@@ -1,6 +1,6 @@
 /* linux/arch/arm/mach-msm/irq.c
  *
- * Copyright (c) 2009-2010 Code Aurora Forum. All rights reserved.
+ * Copyright (c) 2009-2011 Code Aurora Forum. All rights reserved.
  * Copyright (C) 2009 Google, Inc.
  *
  * This software is licensed under the terms of the GNU General Public
@@ -18,6 +18,7 @@
 #include <linux/irq.h>
 #include <linux/interrupt.h>
 #include <asm/irq.h>
+#include <asm/io.h>
 #include <mach/fiq.h>
 #include <mach/msm_iomap.h>
 
@@ -56,6 +57,7 @@ static void sirc_irq_mask(unsigned int irq)
 	mask = 1 << (irq - FIRST_SIRC_IRQ);
 	writel(mask, sirc_regs.int_enable_clear);
 	int_enable &= ~mask;
+	dsb();
 	return;
 }
 
@@ -67,6 +69,7 @@ static void sirc_irq_unmask(unsigned int irq)
 
 	mask = 1 << (irq - FIRST_SIRC_IRQ);
 	writel(mask, sirc_regs.int_enable_set);
+	dsb();
 	int_enable |= mask;
 	return;
 }
@@ -77,6 +80,7 @@ static void sirc_irq_ack(unsigned int irq)
 
 	mask = 1 << (irq - FIRST_SIRC_IRQ);
 	writel(mask, sirc_regs.int_clear);
+	dsb();
 	return;
 }
 
@@ -119,6 +123,7 @@ static int sirc_irq_set_type(unsigned int irq, unsigned int flow_type)
 	}
 
 	writel(val, sirc_regs.int_type);
+	dsb();
 
 	return 0;
 }
@@ -137,6 +142,7 @@ void sirc_fiq_select(int irq, bool enable)
 	else
 		val &= ~mask;
 	writel(val, SPSS_SIRC_INT_SELECT);
+	dsb();
 	local_irq_restore(flags);
 }
 #endif
@@ -177,6 +183,7 @@ void msm_sirc_enter_sleep(void)
 	save_type     = readl(sirc_regs.int_type);
 	save_polarity = readl(sirc_regs.int_polarity);
 	writel(wake_enable, sirc_regs.int_enable);
+	dsb();
 	return;
 }
 
@@ -185,6 +192,7 @@ void msm_sirc_exit_sleep(void)
 	writel(save_type, sirc_regs.int_type);
 	writel(save_polarity, sirc_regs.int_polarity);
 	writel(int_enable, sirc_regs.int_enable);
+	dsb();
 	return;
 }
 

@@ -13,6 +13,10 @@
 #ifndef __ARCH_ARM_MACH_MSM_MSM_WATCHDOG_H
 #define __ARCH_ARM_MACH_MSM_MSM_WATCHDOG_H
 
+#ifdef CONFIG_MSM_WATCHDOG
 void pet_watchdog(void);
+#else
+static inline void pet_watchdog(void) { }
+#endif
 
 #endif

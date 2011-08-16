@@ -173,7 +173,7 @@ static int bq27541_battery_voltage(struct bq27541_device_info *di)
 		return ret;
 	}
 
-	return volt * 1000;
+	return volt;
 }
 
 static void bq27541_cntl_cmd(struct bq27541_device_info *di,
@@ -318,8 +318,8 @@ static void bq27541_hw_config(struct work_struct *work)
 	di  = container_of(work, struct bq27541_device_info, hw_config.work);
 	ret = bq27541_chip_config(di);
 	if (ret) {
-		dev_err(di->dev, "Failed to config Bq27541\n");
-		return;
+		dev_err(di->dev, "Failed to config Bq27541\n"
+			"The battery might be depleted\n");
 	}
 	msm_battery_gauge_register(&bq27541_batt_gauge);
 

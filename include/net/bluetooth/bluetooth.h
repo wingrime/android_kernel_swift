@@ -38,6 +38,7 @@
 
 /* Reserv for core and drivers use */
 #define BT_SKB_RESERVE	8
+#define BT_SKB_RESERVE_80211	32
 
 #define BTPROTO_L2CAP	0
 #define BTPROTO_HCI	1
@@ -90,6 +91,11 @@ struct bt_security {
  *   Channel move requests from the remote device are allowed
  */
 #define BT_AMP_POLICY_PREFER_BR_EDR    2
+
+#define BT_POWER	8
+struct bt_power {
+	__u8 force_active;
+};
 
 #define BT_INFO(fmt, arg...) printk(KERN_INFO "Bluetooth: " fmt "\n" , ## arg)
 #define BT_ERR(fmt, arg...)  printk(KERN_ERR "%s: " fmt "\n" , __func__ , ## arg)
@@ -181,6 +187,7 @@ struct bt_skb_cb {
 	__u16 expect;
 	__u8 retries;
 	struct bt_l2cap_control control;
+	__u8 force_active;
 };
 #define bt_cb(skb) ((struct bt_skb_cb *)((skb)->cb))
 

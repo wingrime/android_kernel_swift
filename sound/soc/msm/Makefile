@@ -59,3 +59,6 @@ obj-$(CONFIG_SND_VOIP_PCM) += snd-soc-msm-voip.o
 
 snd-soc-msm8660-qrdc-objs := msm8660-qrdc.o
 obj-$(CONFIG_SND_SOC_MSM8660_QRDC) += snd-soc-msm8660-qrdc.o
+
+snd-soc-msm8660-dma-objs := msm8660-dma.o
+obj-$(CONFIG_SND_SOC_MSM8X60) += snd-soc-msm8660-dma.o

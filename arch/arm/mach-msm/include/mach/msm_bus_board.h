@@ -135,7 +135,8 @@ int msm_bus_board_get_iid(int id);
 
 #define FAB_MAX_BW_BYTES(width, clk) ((uint32_t)(width) * (uint32_t)(clk))
 #define FAB_BW_128K(bw) ((uint16_t)((bw) >> 17))
-#define BW_TO_CLK_FREQ_HZ(width, bw) ((unsigned long)((bw) / (width)))
+#define BW_TO_CLK_FREQ_HZ(width, bw) ((unsigned long)\
+		DIV_ROUND_UP((bw), (width)))
 /* 8 bytes per clock @ 133 MHz */
 #define SYSFAB_MAX_BW_BYTES FAB_MAX_BW_BYTES(8, 133000000)
 /* 16 bytes per clock @ 166 MHz */

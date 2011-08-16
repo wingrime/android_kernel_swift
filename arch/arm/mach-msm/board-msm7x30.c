@@ -391,6 +391,7 @@ static int cyttsp_platform_resume(struct i2c_client *client)
 }
 
 static struct cyttsp_platform_data cyttsp_data = {
+	.fw_fname = "cyttsp_7630_fluid.hex",
 	.panel_maxx = 479,
 	.panel_maxy = 799,
 	.disp_maxx = 469,
@@ -403,7 +404,7 @@ static struct cyttsp_platform_data cyttsp_data = {
 	.use_mt = CY_USE_MT,
 	.use_hndshk = CY_SEND_HNDSHK,
 	.use_trk_id = CY_USE_TRACKING_ID,
-	.use_sleep = CY_USE_SLEEP,
+	.use_sleep = CY_USE_DEEP_SLEEP_SEL | CY_USE_LOW_POWER_SEL,
 	.use_gestures = CY_USE_GESTURES,
 	/* activate up to 4 groups
 	 * and set active distance
@@ -4139,11 +4140,15 @@ static struct kgsl_device_platform_data kgsl_3d0_pdata = {
 			},
 			{
 				.gpu_freq = 192000000,
+				.bus_freq = 153000000,
+			},
+			{
+				.gpu_freq = 192000000,
 				.bus_freq = 0,
 			},
 		},
 		.init_level = 0,
-		.num_levels = 2,
+		.num_levels = 3,
 		.set_grp_async = set_grp3d_async,
 		.idle_timeout = HZ/20,
 		.nap_allowed = true,
@@ -5610,7 +5615,7 @@ static struct sdio_al_platform_data sdio_al_pdata = {
 	.peer_sdioc_version_minor = 0x0001,
 	.peer_sdioc_version_major = 0x0003,
 	.peer_sdioc_boot_version_minor = 0x0001,
-	.peer_sdioc_boot_version_major = 0x0002,
+	.peer_sdioc_boot_version_major = 0x0003,
 };
 
 struct platform_device msm_device_sdio_al = {

@@ -470,7 +470,16 @@ static int mipi_dsi_off(struct platform_device *pdev)
 	mfd = platform_get_drvdata(pdev);
 	pinfo = &mfd->panel_info;
 
+	mutex_lock(&mfd->dma->ov_mutex);
+
 	mdp4_overlay_dsi_state_set(ST_DSI_SUSPEND);
+
+	/* need dsi clock to perform shutdown */
+	/* make sure mdp dma is not running */
+	if (mfd->panel_info.type == MIPI_CMD_PANEL) {
+		mdp4_dsi_cmd_dma_busy_wait(mfd);
+		mdp4_dsi_blt_dmap_busy_wait(mfd);
+	}
 
 	/* change to DSI_CMD_MODE since it needed to
 	 * tx DCS dsiplay off comamnd to panel
@@ -487,13 +496,6 @@ static int mipi_dsi_off(struct platform_device *pdev)
 	}
 
 	ret = panel_next_off(pdev);
-
-	mutex_lock(&mfd->dma->ov_mutex);
-
-	/* make sure mdp dma is not running */
-	if (mfd->panel_info.type == MIPI_CMD_PANEL)
-		mdp4_dsi_cmd_dma_busy_wait(mfd);
-
 
 #ifdef CONFIG_MSM_BUS_SCALING
 	mdp_bus_scale_update_request(0);
@@ -633,8 +635,6 @@ static int mipi_dsi_on(struct platform_device *pdev)
 	}
 
 	mipi_dsi_host_init(mipi);
-
-	mipi_dsi_cmd_bta_sw_trigger(); /* clean up ack_err_status */
 
 	ret = panel_next_on(pdev);
 
@@ -825,17 +825,17 @@ static int mipi_dsi_probe(struct platform_device *pdev)
 
 	if (mfd->panel_info.type == MIPI_VIDEO_PANEL) {
 		if (lanes > 0) {
-			pll_divider_config.clk_rate =
+			mfd->panel_info.clk_rate =
 			((h_period * v_period * (mipi->frame_rate) * bpp * 8)
 			   / lanes);
 		} else {
 			pr_err("%s: forcing mipi_dsi lanes to 1\n", __func__);
-			pll_divider_config.clk_rate =
+			mfd->panel_info.clk_rate =
 				(h_period * v_period
 					 * (mipi->frame_rate) * bpp * 8);
 		}
-	} else
-		pll_divider_config.clk_rate = mfd->panel_info.clk_rate;
+	}
+	pll_divider_config.clk_rate = mfd->panel_info.clk_rate;
 
 	rc = mipi_dsi_clk_div_config(bpp, lanes, &dsi_pclk_rate);
 	if (rc)

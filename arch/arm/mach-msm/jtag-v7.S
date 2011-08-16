@@ -21,23 +21,24 @@
  */
 #include <linux/linkage.h>
 #include <asm/assembler.h>
+#include <linux/threads.h>
 
-#if (CONFIG_NR_CPUS > 2)
-#error Code only written and tested for 1 or 2 CPUs.
+#if (NR_CPUS > 2)
+#error code only tested for 1 or 2 CPUs.
 #endif
 
-#define MAX_ETM_REGS 56
-#define MAX_JTAG_REGS 32
-/* Add 2 slots to store the register count for JTAG and ETM state */
-#define MAX_DEBUG_REGS (MAX_ETM_REGS + MAX_JTAG_REGS + 2)
-#define MAX_DEBUG_STATE_SIZE (MAX_DEBUG_REGS * 4)
+/* Add 1 slot to store the register count for JTAG state */
+#define MAX_JTAG_REGS (32 + 1)
+#define MAX_DEBUG_STATE_SIZE (MAX_JTAG_REGS * 4)
 
 ENTRY(msm_save_jtag_debug)
 	ldr     r3, =dbg_state        /* store state at dbg_state */
-#if defined(CONFIG_NR_CPUS) && (CONFIG_NR_CPUS >= 2)
+#if (NR_CPUS >= 2)
 	mrc	p15, 0, r2, c0, c0, 5 /* MPIDR */
-	ands	r2, r2, #15	      /* What CPU am I */
-	addne	r3, r3, #MAX_DEBUG_STATE_SIZE
+	and	r2, r2, #15	      /* What CPU am I */
+	ldr     r1, =MAX_DEBUG_STATE_SIZE
+	mul     r2, r2, r1
+	add	r3, r3, r2
 #endif
 
 	/* save jtag state */
@@ -57,26 +58,6 @@ ENTRY(msm_save_jtag_debug)
 	bne     1b
 
 	mcr     p14, 0, r1, c1, c0, 4 /* unlock DBGOSLAR */
-
-	/* save etm state */
-	mrc	p14, 1, r0, c1, c5, 4 /* read ETM PDSR to clear sticky bit */
-	isb
-	ldr     r1, =0xc5ACCE55       /* set ETMOSLAR lock */
-	mcr     p14, 1, r1, c1, c0, 4
-	isb
-
-	mrc     p14, 1, r1, c1, c2, 4 /* ETMOSSRR state register count */
-	cmp     r1, #(MAX_ETM_REGS)   /* check for state overflow */
-	movgt   r1, #0                /* if not enough space, don't save */
-	str     r1,[r3],#4            /* save count for restore */
-
-1:	cmp     r1, #0
-	mrcne   p14, 1, r2, c1, c2, 4 /* ETMOSSRR state value */
-	strne   r2, [r3], #4          /* push value */
-	subne   r1, r1, #1
-	bne     1b
-
-	mcr     p14, 1, r1, c1, c0, 4 /* r1 = 0, unlock ETMOSLAR */
 	isb
 
 	bx      lr
@@ -84,10 +65,12 @@ ENTRY(msm_save_jtag_debug)
 ENTRY(msm_restore_jtag_debug)
 	/* restore debug registers after power collapse  */
 	ldr     r3, =dbg_state        /* load state from dbg_state */
-#if defined(CONFIG_NR_CPUS) && (CONFIG_NR_CPUS >= 2)
+#if (NR_CPUS >= 2)
 	mrc	p15, 0, r2, c0, c0, 5 /* MPIDR */
-	ands	r2, r2, #15	      /* What CPU am I */
-	addne	r3, r3, #MAX_DEBUG_STATE_SIZE
+	and	r2, r2, #15	      /* What CPU am I */
+	ldr     r1, =MAX_DEBUG_STATE_SIZE
+	mul     r2, r2, r1
+	add	r3, r3, r2
 #endif
 
 	/* restore jtag state */
@@ -111,10 +94,12 @@ ENTRY(msm_restore_jtag_debug)
 	bne     1b
 
 	ldr     r3, =dbg_state        /* load state from dbg_state */
-#if defined(CONFIG_NR_CPUS) && (CONFIG_NR_CPUS >= 2)
+#if (NR_CPUS >= 2)
 	mrc	p15, 0, r2, c0, c0, 5 /* MPIDR */
-	ands	r2, r2, #15	      /* What CPU am I */
-	addne	r3, r3, #MAX_DEBUG_STATE_SIZE
+	and	r2, r2, #15	      /* What CPU am I */
+	ldr     r1, =MAX_DEBUG_STATE_SIZE
+	mul     r2, r2, r1
+	add	r3, r3, r2
 #endif
 	ldr     r1, =0xc5ACCE55       /* set DBGOSLAR lock */
 	mcr     p14, 0, r1, c1, c0, 4
@@ -134,35 +119,10 @@ msm_pm_dbg_restore_end:
 	mcr     p14, 0, r1, c1, c0, 4 /* unlock DBGOSLAR */
 	isb
 
-	/* restore etm state */
-	mrc	p14, 1, r0, c1, c5, 4 /* read ETM PDSR to clear sticky bit */
-	isb
-	ldr     r1, =0xc5ACCE55       /* set ETMOSLAR lock */
-	mcr     p14, 1, r1, c1, c0, 4
-	isb
-
-	mrc     p14, 1, r1, c1, c2, 4 /* ETMOSSRR dummy read (required)*/
-	ldr     r1, [r3], #4          /* load saved count */
-	cmp     r1, #0                /* skip if none stored */
-	beq     msm_pm_etm_restore_end
-
-1:	ldr     r2,[r3],#4
-	mcr     p14, 1, r2, c1, c2, 4 /* ETMOSSRR write state value */
-	subs    r1, r1, #1
-	bne     1b
-msm_pm_etm_restore_end:
-	mcr     p14, 1, r1, c1, c0, 4 /* r1 = 0, unlock ETMOSLAR */
-	isb
-
 	bx      lr
 
 
 	.data
 
 dbg_state:
-#if defined(CONFIG_NR_CPUS) && (CONFIG_NR_CPUS >= 2)
-	.space	MAX_DEBUG_STATE_SIZE * 2 /* This code only supports 2 cores */
-#else
-	.space  MAX_DEBUG_STATE_SIZE
-#endif
-
+	.space	MAX_DEBUG_STATE_SIZE * NR_CPUS

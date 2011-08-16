@@ -48,10 +48,9 @@ static unsigned long  tout_expired;
 
 static int vsync_start_y_adjust = 4;
 
-#define OVERLAY_BLT_EMBEDDED
-
-
 struct timer_list dsi_clock_timer;
+
+static int writeback_offset;
 
 void mdp4_overlay_dsi_state_set(int state)
 {
@@ -121,6 +120,7 @@ void mdp4_mipi_vsync_enable(struct msm_fb_data_type *mfd,
 void mdp4_overlay_update_dsi_cmd(struct msm_fb_data_type *mfd)
 {
 	MDPIBUF *iBuf = &mfd->ibuf;
+	struct fb_info *fbi;
 	uint8 *src;
 	int ptype;
 	struct mdp4_overlay_pipe *pipe;
@@ -160,27 +160,11 @@ void mdp4_overlay_update_dsi_cmd(struct msm_fb_data_type *mfd)
 
 		dsi_pipe = pipe; /* keep it */
 
-#ifdef OVERLAY_BLT_EMBEDDED
-		{
-			char *src;
-			struct fb_info *fbi;
-			int bpp, off;
-
-
-			fbi = mfd->fbi;
-			bpp = fbi->var.bits_per_pixel / 8;
-			src = (uint8 *) iBuf->buf;
-			pipe->blt_base = (ulong) iBuf->buf;
-			off = ALIGN(fbi->var.xres, 32) * fbi->var.yres
-						* bpp * 2;
-			off += (1920 * 1080 * 2 * 1); /* hdmi */
-			pipe->blt_base += off;
-
-			pr_info("%s: base=%x offset=%x\n",
-				__func__, (int) pipe->blt_base, (int)off);
-
-		}
-#endif
+		fbi = mfd->fbi;
+		bpp = fbi->var.bits_per_pixel / 8;
+		src = (uint8 *) iBuf->buf;
+		writeback_offset = mdp4_overlay_writeback_setup(
+						fbi, pipe, src, bpp);
 
 		/*
 		 * configure dsi stream id
@@ -247,7 +231,9 @@ void mdp4_overlay_update_dsi_cmd(struct msm_fb_data_type *mfd)
 	wmb();
 }
 
-void mdp4_dsi_cmd_3d(struct msm_fb_data_type *mfd, struct msmfb_overlay_3d *r3d)
+/* 3D side by side */
+void mdp4_dsi_cmd_3d_sbys(struct msm_fb_data_type *mfd,
+				struct msmfb_overlay_3d *r3d)
 {
 	struct fb_info *fbi;
 	struct mdp4_overlay_pipe *pipe;
@@ -314,10 +300,11 @@ void mdp4_dsi_cmd_3d(struct msm_fb_data_type *mfd, struct msmfb_overlay_3d *r3d)
 
 	/* MDP cmd block disable */
 	mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_OFF, FALSE);
+
+	wmb();
 }
 
-
-#ifdef OVERLAY_BLT_EMBEDDED
+#ifdef CONFIG_FB_MSM_OVERLAY_WRITEBACK
 int mdp4_dsi_overlay_blt_start(struct msm_fb_data_type *mfd)
 {
 	unsigned long flag;
@@ -358,36 +345,42 @@ int mdp4_dsi_overlay_blt_stop(struct msm_fb_data_type *mfd)
 
 	return -EBUSY;
 }
-#endif
 
-void mdp4_dsi_overlay_blt(ulong addr)
+int mdp4_dsi_overlay_blt_offset(struct msm_fb_data_type *mfd,
+					struct msmfb_overlay_blt *req)
 {
-#ifdef OVERLAY_BLT_EMBEDDED
-	pr_info("%s: Error, Embedded bBLT used\n", __func__);
-	return;
-#else
-	unsigned long flag;
+	req->offset = writeback_offset;
+	req->width = dsi_pipe->src_width;
+	req->height = dsi_pipe->src_height;
+	req->bpp = dsi_pipe->bpp;
 
-	pr_info("%s: addr=%x\n", __func__, (int)addr);
+	return sizeof(*req);
+}
 
-	if (addr) {
-		spin_lock_irqsave(&mdp_spin_lock, flag);
-		dsi_pipe->blt_cnt = 0;
-		dsi_pipe->blt_end = 0;
-		dsi_pipe->ov_cnt = 0;
-		dsi_pipe->dmap_cnt = 0;
-		dsi_pipe->blt_addr = addr;
-		spin_unlock_irqrestore(&mdp_spin_lock, flag);
-		mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_ON, FALSE);
-	} else {
-		spin_lock_irqsave(&mdp_spin_lock, flag);
-		dsi_pipe->blt_end = 1;	/* mark as end */
-		spin_unlock_irqrestore(&mdp_spin_lock, flag);
-		mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_OFF, FALSE);
-	}
-#endif
+void mdp4_dsi_overlay_blt(struct msm_fb_data_type *mfd,
+					struct msmfb_overlay_blt *req)
+{
+	if (req->enable)
+		mdp4_dsi_overlay_blt_start(mfd);
+	else if (req->enable == 0)
+		mdp4_dsi_overlay_blt_stop(mfd);
 
 }
+#else
+int mdp4_dsi_overlay_blt_offset(struct msm_fb_data_type *mfd,
+					struct msmfb_overlay_blt *req)
+{
+	return 0;
+}
+int mdp4_dsi_overlay_blt_start(struct msm_fb_data_type *mfd)
+{
+	return -EBUSY;
+}
+int mdp4_dsi_overlay_blt_stop(struct msm_fb_data_type *mfd)
+{
+	return -EBUSY;
+}
+#endif
 
 void mdp4_blt_xy_update(struct mdp4_overlay_pipe *pipe)
 {
@@ -432,14 +425,10 @@ void mdp4_dma_p_done_dsi(struct mdp_dma_data *dma)
 {
 	int diff;
 
-	mdp_disable_irq_nosync(MDP_DMA2_TERM);  /* disable intr */
-
 	dsi_pipe->dmap_cnt++;
 	diff = dsi_pipe->ov_cnt - dsi_pipe->dmap_cnt;
 	pr_debug("%s: ov_cnt=%d dmap_cnt=%d\n",
 			__func__, dsi_pipe->ov_cnt, dsi_pipe->dmap_cnt);
-
-	mdp_pipe_ctrl(MDP_OVERLAY0_BLOCK, MDP_BLOCK_POWER_OFF, TRUE);
 
 	if (diff <= 0) {
 		spin_lock(&mdp_spin_lock);
@@ -455,6 +444,7 @@ void mdp4_dma_p_done_dsi(struct mdp_dma_data *dma)
 			outp32(MDP_INTR_ENABLE, mdp_intr_mask);
 		}
 		mdp_pipe_ctrl(MDP_OVERLAY0_BLOCK, MDP_BLOCK_POWER_OFF, TRUE);
+		mdp_disable_irq_nosync(MDP_DMA2_TERM);  /* disable intr */
 		return;
 	}
 
@@ -468,9 +458,10 @@ void mdp4_dma_p_done_dsi(struct mdp_dma_data *dma)
 	pr_debug("%s: kickoff dmap\n", __func__);
 
 	mdp4_blt_xy_update(dsi_pipe);
-	mdp_enable_irq(MDP_DMA2_TERM);	/* enable intr */
+
 	/* kick off dmap */
 	outpdw(MDP_BASE + 0x000c, 0x0);
+	wmb();
 	/* trigger dsi cmd engine */
 	mipi_dsi_cmd_mdp_sw_trigger();
 
@@ -483,11 +474,7 @@ void mdp4_dma_p_done_dsi(struct mdp_dma_data *dma)
  */
 void mdp4_overlay0_done_dsi_cmd(struct mdp_dma_data *dma)
 {
-
 	int diff;
-
-
-	mdp_disable_irq_nosync(MDP_OVERLAY0_TERM);
 
 	if (dsi_pipe->blt_addr == 0) {
 		mdp_pipe_ctrl(MDP_OVERLAY0_BLOCK, MDP_BLOCK_POWER_OFF, TRUE);
@@ -497,7 +484,7 @@ void mdp4_overlay0_done_dsi_cmd(struct mdp_dma_data *dma)
 		complete(&dma->comp);
 		if (busy_wait_cnt)
 			busy_wait_cnt--;
-		mdp_pipe_ctrl(MDP_OVERLAY0_BLOCK, MDP_BLOCK_POWER_OFF, TRUE);
+		mdp_disable_irq_nosync(MDP_OVERLAY0_TERM);
 		return;
 	}
 
@@ -516,8 +503,10 @@ void mdp4_overlay0_done_dsi_cmd(struct mdp_dma_data *dma)
 	dsi_pipe->blt_cnt++;
 
 	diff = dsi_pipe->ov_cnt - dsi_pipe->dmap_cnt;
-	if (diff >= 2)
+	if (diff >= 2) {
+		mdp_disable_irq_nosync(MDP_OVERLAY0_TERM);
 		return;
+	}
 
 	spin_lock(&mdp_spin_lock);
 	dma->busy = FALSE;
@@ -531,10 +520,13 @@ void mdp4_overlay0_done_dsi_cmd(struct mdp_dma_data *dma)
 
 	mdp4_blt_xy_update(dsi_pipe);
 	mdp_enable_irq(MDP_DMA2_TERM);	/* enable intr */
+	wmb();	/* make sure registers updated */
 	/* kick off dmap */
 	outpdw(MDP_BASE + 0x000c, 0x0);
+	wmb();
 	/* trigger dsi cmd engine */
 	mipi_dsi_cmd_mdp_sw_trigger();
+	mdp_disable_irq_nosync(MDP_OVERLAY0_TERM);
 }
 
 void mdp4_dsi_cmd_overlay_restore(void)
@@ -543,10 +535,8 @@ void mdp4_dsi_cmd_overlay_restore(void)
 	if (dsi_mfd && dsi_pipe) {
 		mdp4_dsi_cmd_dma_busy_wait(dsi_mfd);
 		mdp4_overlay_update_dsi_cmd(dsi_mfd);
-
-		if (dsi_pipe->blt_addr)
-			mdp4_dsi_blt_dmap_busy_wait(dsi_mfd);
 		mdp4_dsi_cmd_overlay_kickoff(dsi_mfd, dsi_pipe);
+		dsi_mfd->dma_update_flag = 1;
 	}
 }
 
@@ -647,6 +637,9 @@ void mdp4_dsi_cmd_overlay_kickoff(struct msm_fb_data_type *mfd,
 	unsigned long flag;
 
 
+	/* change mdp clk */
+	mdp4_set_perf_level();
+
 	mdp4_overlay_dsi_state_set(ST_DSI_PLAYING);
 
 	spin_lock_irqsave(&mdp_spin_lock, flag);
@@ -654,11 +647,14 @@ void mdp4_dsi_cmd_overlay_kickoff(struct msm_fb_data_type *mfd,
 	mfd->dma->busy = TRUE;
 	if (dsi_pipe->blt_addr)
 		mfd->dma->dmap_busy = TRUE;
-	/* start OVERLAY pipe */
-	spin_unlock_irqrestore(&mdp_spin_lock, flag);
-	mdp_pipe_kickoff(MDP_OVERLAY0_TERM, mfd);
 
-	if (pipe->blt_addr == 0) {
+	wmb();	/* make sure all registers updated */
+	spin_unlock_irqrestore(&mdp_spin_lock, flag);
+	/* start OVERLAY pipe */
+	mdp_pipe_kickoff(MDP_OVERLAY0_TERM, mfd);
+	wmb();
+
+	if (dsi_pipe->blt_addr == 0) {
 		/* trigger dsi cmd engine */
 		mipi_dsi_cmd_mdp_sw_trigger();
 	}
@@ -687,6 +683,5 @@ void mdp4_dsi_cmd_overlay(struct msm_fb_data_type *mfd)
 			complete(&mfd->pan_comp);
 		}
 	}
-	mdp4_overlay_resource_release();
 	mutex_unlock(&mfd->dma->ov_mutex);
 }

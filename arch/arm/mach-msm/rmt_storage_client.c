@@ -32,6 +32,7 @@
 #include <linux/rmt_storage_client.h>
 #include <linux/debugfs.h>
 #include <linux/slab.h>
+#include <linux/delay.h>
 #include <asm/uaccess.h>
 #include <asm/pgtable.h>
 #include <mach/msm_rpcrouter.h>
@@ -115,8 +116,15 @@ struct rmt_shrd_mem {
 
 static struct rmt_storage_srv *rmt_storage_get_srv(uint32_t prog);
 static uint32_t rmt_storage_get_sid(const char *path);
+#ifdef CONFIG_MSM_SDIO_SMEM
+static void rmt_storage_sdio_smem_work(struct work_struct *work);
+#endif
 
 static struct rmt_storage_client_info *rmc;
+
+#ifdef CONFIG_MSM_SDIO_SMEM
+DECLARE_DELAYED_WORK(sdio_smem_work, rmt_storage_sdio_smem_work);
+#endif
 
 #ifdef CONFIG_MSM_SDIO_SMEM
 #define MDM_LOCAL_BUF_SZ	0xC0000
@@ -713,7 +721,7 @@ static int sdio_smem_cb(int event)
 	return 0;
 }
 
-static int sdio_smem_probe(struct platform_device *pdev)
+static int rmt_storage_sdio_smem_probe(struct platform_device *pdev)
 {
 	int ret = 0;
 	struct rmt_shrd_mem_param *shrd_mem;
@@ -737,13 +745,28 @@ static int sdio_smem_probe(struct platform_device *pdev)
 	return ret;
 }
 
+static int rmt_storage_sdio_smem_remove(struct platform_device *pdev)
+{
+	sdio_smem_unregister_client();
+	queue_delayed_work(rmc->workq, &sdio_smem_work, 0);
+	return 0;
+}
+
+static int sdio_smem_drv_registered;
 static struct platform_driver sdio_smem_drv = {
-	.probe		= sdio_smem_probe,
+	.probe		= rmt_storage_sdio_smem_probe,
+	.remove		= rmt_storage_sdio_smem_remove,
 	.driver		= {
 		.name	= "SDIO_SMEM_CLIENT",
 		.owner	= THIS_MODULE,
 	},
 };
+
+static void rmt_storage_sdio_smem_work(struct work_struct *work)
+{
+	platform_driver_unregister(&sdio_smem_drv);
+	sdio_smem_drv_registered = 0;
+}
 #endif
 
 static int rmt_storage_event_alloc_rmt_buf_cb(
@@ -796,10 +819,14 @@ static int rmt_storage_event_alloc_rmt_buf_cb(
 
 #ifdef CONFIG_MSM_SDIO_SMEM
 	if (rs_client->srv->prog == MDM_RMT_STORAGE_APIPROG) {
-		ret = platform_driver_register(&sdio_smem_drv);
-		if (ret)
-			pr_err("%s: Unable to register sdio smem client\n",
-			       __func__);
+		if (!sdio_smem_drv_registered) {
+			ret = platform_driver_register(&sdio_smem_drv);
+			if (!ret)
+				sdio_smem_drv_registered = 1;
+			else
+				pr_err("%s: Cant register sdio smem client\n",
+				       __func__);
+		}
 	}
 #endif
 	event_args->id = RMT_STORAGE_NOOP;
@@ -1138,6 +1165,7 @@ static int rmt_storage_reg_cb(struct msm_rpc_client *client,
 {
 	struct rmt_storage_reg_cb_args args;
 	int rc, cb_id;
+	int retries = 10;
 
 	cb_id = msm_rpc_add_cb_func(client, callback);
 	if ((cb_id < 0) && (cb_id != MSM_RPC_CLIENT_NULL_CB_ID))
@@ -1146,8 +1174,14 @@ static int rmt_storage_reg_cb(struct msm_rpc_client *client,
 	args.event = event;
 	args.cb_id = cb_id;
 
-	rc = msm_rpc_client_req2(client, proc, rmt_storage_arg_cb,
-			&args, NULL, NULL, -1);
+	while (retries) {
+		rc = msm_rpc_client_req2(client, proc, rmt_storage_arg_cb,
+					 &args, NULL, NULL, -1);
+		if (rc != -ETIMEDOUT)
+			break;
+		retries--;
+		udelay(1000);
+	}
 	if (rc)
 		pr_err("%s: Failed to register callback for event %d\n",
 				__func__, event);
@@ -1277,13 +1311,13 @@ static int rmt_storage_get_ramfs(struct rmt_storage_srv *srv)
 }
 
 static ssize_t
-set_force_sync(struct device *dev, struct device_attribute *attr,
-		const char *buf, size_t count)
+show_force_sync(struct device *dev, struct device_attribute *attr,
+		char *buf)
 {
 	struct platform_device *pdev;
 	struct rpcsvr_platform_device *rpc_pdev;
 	struct rmt_storage_srv *srv;
-	int value, rc;
+	int rc = 0;
 
 	pdev = container_of(dev, struct platform_device, dev);
 	rpc_pdev = container_of(pdev, struct rpcsvr_platform_device, base);
@@ -1294,13 +1328,8 @@ set_force_sync(struct device *dev, struct device_attribute *attr,
 		return -EINVAL;
 	}
 
-	sscanf(buf, "%d", &value);
-	if (!!value) {
-		rc = rmt_storage_force_sync(srv->rpc_client);
-		if (rc)
-			return rc;
-	}
-	return count;
+	rc = rmt_storage_force_sync(srv->rpc_client);
+	return rc;
 }
 
 /* Returns -EINVAL for invalid sync token and an error value for any failure
@@ -1377,7 +1406,7 @@ static void rmt_storage_set_client_status(struct rmt_storage_srv *srv,
 	spin_unlock(&rmc->lock);
 }
 
-static DEVICE_ATTR(force_sync, S_IRUGO | S_IWUSR, NULL, set_force_sync);
+static DEVICE_ATTR(force_sync, S_IRUGO | S_IWUSR, show_force_sync, NULL);
 static DEVICE_ATTR(sync_sts, S_IRUGO | S_IWUSR, show_sync_sts, NULL);
 static struct attribute *dev_attrs[] = {
 	&dev_attr_force_sync.attr,

@@ -158,7 +158,7 @@ static struct gpiomux_setting ebi2_cs3 = {
 	.pull = GPIOMUX_PULL_UP,
 };
 
-#ifdef CONFIG_USB_PEHCI_HCD
+#if defined(CONFIG_USB_PEHCI_HCD) || defined(CONFIG_USB_PEHCI_HCD_MODULE)
 static struct gpiomux_setting ebi2_cs4 = {
 	.func = GPIOMUX_FUNC_1,
 	.drv = GPIOMUX_DRV_8MA,
@@ -172,7 +172,7 @@ static struct gpiomux_setting ebi2_adv = {
 	.pull = GPIOMUX_PULL_UP,
 };
 
-#ifdef CONFIG_USB_PEHCI_HCD
+#if defined(CONFIG_USB_PEHCI_HCD) || defined(CONFIG_USB_PEHCI_HCD_MODULE)
 static struct gpiomux_setting usb_isp1763_actv_cfg = {
 	.func = GPIOMUX_FUNC_GPIO,
 	.drv = GPIOMUX_DRV_8MA,
@@ -231,7 +231,7 @@ static struct gpiomux_setting sdcc2_clk_actv_cfg = {
 static struct gpiomux_setting sdcc2_suspend_config = {
 	.func = GPIOMUX_FUNC_GPIO,
 	.drv = GPIOMUX_DRV_2MA,
-	.pull = GPIOMUX_PULL_NONE,
+	.pull = GPIOMUX_PULL_UP,
 };
 
 static struct gpiomux_setting sdcc5_dat_0_3_cmd_actv_cfg = {
@@ -249,7 +249,7 @@ static struct gpiomux_setting sdcc5_clk_actv_cfg = {
 static struct gpiomux_setting sdcc5_suspend_config = {
 	.func = GPIOMUX_FUNC_GPIO,
 	.drv = GPIOMUX_DRV_2MA,
-	.pull = GPIOMUX_PULL_NONE,
+	.pull = GPIOMUX_PULL_UP,
 };
 
 static struct gpiomux_setting aux_pcm_active_config = {
@@ -340,6 +340,12 @@ static struct gpiomux_setting mdm2ap_sync_suspend_cfg = {
 	.func = GPIOMUX_FUNC_GPIO,
 	.drv = GPIOMUX_DRV_2MA,
 	.pull = GPIOMUX_PULL_NONE,
+};
+
+static struct gpiomux_setting tm_active = {
+	.func = GPIOMUX_FUNC_GPIO,
+	.drv = GPIOMUX_DRV_2MA,
+	.pull = GPIOMUX_PULL_UP,
 };
 
 static struct gpiomux_setting tm_suspended = {
@@ -497,7 +503,7 @@ static struct gpiomux_setting mdm2ap_vfr_suspend_cfg = {
 static struct gpiomux_setting mdm2ap_errfatal_cfg = {
 	.func = GPIOMUX_FUNC_GPIO,
 	.drv = GPIOMUX_DRV_16MA,
-	.pull = GPIOMUX_PULL_NONE,
+	.pull = GPIOMUX_PULL_DOWN,
 };
 
 static struct gpiomux_setting ap2mdm_kpdpwr_n_cfg = {
@@ -676,7 +682,7 @@ static struct msm_gpiomux_config msm8x60_ebi2_configs[] __initdata = {
 			[GPIOMUX_SUSPENDED] = &ebi2_a_d,
 		},
 	},
-#ifdef CONFIG_USB_PEHCI_HCD
+#if defined(CONFIG_USB_PEHCI_HCD) || defined(CONFIG_USB_PEHCI_HCD_MODULE)
 	/* ISP VDD_3V3_EN */
 	{
 		.gpio      = 132,
@@ -807,7 +813,7 @@ static struct msm_gpiomux_config msm8x60_ebi2_configs[] __initdata = {
 	},
 };
 
-#ifdef CONFIG_USB_PEHCI_HCD
+#if defined(CONFIG_USB_PEHCI_HCD) || defined(CONFIG_USB_PEHCI_HCD_MODULE)
 static struct msm_gpiomux_config msm8x60_isp_usb_configs[] __initdata = {
 	{
 		.gpio      = 117,
@@ -868,7 +874,7 @@ static struct msm_gpiomux_config msm8x60_uart_configs[] __initdata = {
 			[GPIOMUX_SUSPENDED] = &console_uart,
 		},
 	},
-#ifndef CONFIG_USB_PEHCI_HCD
+#if !defined(CONFIG_USB_PEHCI_HCD) && !defined(CONFIG_USB_PEHCI_HCD_MODULE)
 	/* USB ISP1763 may also use 117 GPIO */
 	{
 		.gpio      = 117,
@@ -961,6 +967,7 @@ static struct msm_gpiomux_config msm8x60_tmg200_configs[] __initdata = {
 	{
 		.gpio = 61,
 		.settings = {
+			[GPIOMUX_ACTIVE] = &tm_active,
 			[GPIOMUX_SUSPENDED] = &tm_suspended,
 		},
 	},
@@ -1832,7 +1839,7 @@ msm8x60_surf_ffa_gpiomux_cfgs[] __initdata = {
 	{msm8x60_gsbi_configs, ARRAY_SIZE(msm8x60_gsbi_configs)},
 	{msm8x60_ebi2_configs, ARRAY_SIZE(msm8x60_ebi2_configs)},
 	{msm8x60_uart_configs, ARRAY_SIZE(msm8x60_uart_configs)},
-#ifdef CONFIG_USB_PEHCI_HCD
+#if defined(CONFIG_USB_PEHCI_HCD) || defined(CONFIG_USB_PEHCI_HCD_MODULE)
 	{msm8x60_isp_usb_configs, ARRAY_SIZE(msm8x60_isp_usb_configs)},
 #endif
 	{msm8x60_ts_configs, ARRAY_SIZE(msm8x60_ts_configs)},

@@ -31,6 +31,7 @@
 #define MIPI_DSI_H
 
 #include <mach/scm-io.h>
+#include <linux/list.h>
 
 #ifdef BIT
 #undef BIT
@@ -81,6 +82,11 @@ enum {
 	EV_DSI_DONE,
 	EV_DSI_TOUT,
 	EV_DSI_NUM
+};
+
+enum {
+	LANDSCAPE = 1,
+	PORTRAIT = 2,
 };
 
 #define DSI_NON_BURST_SYNCH_PULSE	0
@@ -196,6 +202,15 @@ struct dsi_cmd_desc {
 };
 
 
+typedef void (*kickoff_act)(void *);
+
+struct dsi_kickoff_action {
+	struct list_head act_entry;
+	kickoff_act	action;
+	void *data;
+};
+
+
 char *mipi_dsi_buf_reserve_hdr(struct dsi_buf *dp, int hlen);
 char *mipi_dsi_buf_init(struct dsi_buf *dp);
 void mipi_dsi_init(void);
@@ -221,6 +236,12 @@ void mipi_dsi_set_tear_on(struct msm_fb_data_type *mfd);
 void mipi_dsi_set_tear_off(struct msm_fb_data_type *mfd);
 void mipi_dsi_clk_enable(void);
 void mipi_dsi_clk_disable(void);
+void mipi_dsi_pre_kickoff_action(void);
+void mipi_dsi_post_kickoff_action(void);
+void mipi_dsi_pre_kickoff_add(struct dsi_kickoff_action *act);
+void mipi_dsi_post_kickoff_add(struct dsi_kickoff_action *act);
+void mipi_dsi_pre_kickoff_del(struct dsi_kickoff_action *act);
+void mipi_dsi_post_kickoff_del(struct dsi_kickoff_action *act);
 
 irqreturn_t mipi_dsi_isr(int irq, void *ptr);
 

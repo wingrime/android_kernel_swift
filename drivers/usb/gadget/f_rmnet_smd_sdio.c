@@ -27,6 +27,11 @@
 #include <linux/netdevice.h>
 #include <linux/interrupt.h>
 
+#include <linux/fs.h>
+#include <linux/miscdevice.h>
+#include <linux/uaccess.h>
+#include <asm/ioctls.h>
+
 #include <linux/usb/cdc.h>
 #include <linux/usb/composite.h>
 #include <linux/usb/ch9.h>
@@ -57,8 +62,23 @@ MODULE_PARM_DESC(rmnet_smd_data_ch, "RmNet data SMD channel");
 #define RMNET_SDIO_MAX_NFY_SZE  sizeof(struct usb_cdc_notification)
 
 #define RMNET_SDIO_RX_REQ_MAX             16
-#define RMNET_SDIO_RX_REQ_SIZE            4096
+#define RMNET_SDIO_RX_REQ_SIZE            2048
 #define RMNET_SDIO_TX_REQ_MAX             100
+
+#define RMNET_SDIO_TX_PKT_DROP_THRESHOLD		1000
+#define RMNET_SDIO_RX_PKT_FLOW_CTRL_EN_THRESHOLD	1000
+#define RMNET_SDIO_RX_PKT_FLOW_CTRL_DISABLE		500
+
+static uint32_t sdio_tx_pkt_drop_thld = RMNET_SDIO_TX_PKT_DROP_THRESHOLD;
+module_param(sdio_tx_pkt_drop_thld, uint, S_IRUGO | S_IWUSR);
+
+static uint32_t sdio_rx_fctrl_en_thld =
+		RMNET_SDIO_RX_PKT_FLOW_CTRL_EN_THRESHOLD;
+module_param(sdio_rx_fctrl_en_thld, uint, S_IRUGO | S_IWUSR);
+
+static uint32_t sdio_rx_fctrl_dis_thld = RMNET_SDIO_RX_PKT_FLOW_CTRL_DISABLE;
+module_param(sdio_rx_fctrl_dis_thld, uint, S_IRUGO | S_IWUSR);
+
 
 #define RMNET_SMD_RX_REQ_MAX		8
 #define RMNET_SMD_RX_REQ_SIZE		2048
@@ -66,8 +86,7 @@ MODULE_PARM_DESC(rmnet_smd_data_ch, "RmNet data SMD channel");
 #define RMNET_SMD_TX_REQ_SIZE		2048
 #define RMNET_SMD_TXN_MAX		2048
 
-/* QMI requests & responses buffer*/
-struct rmnet_sdio_qmi_buf {
+struct rmnet_ctrl_pkt {
 	void *buf;
 	int len;
 	struct list_head list;
@@ -79,25 +98,34 @@ enum usb_rmnet_xport_type {
 	USB_RMNET_XPORT_SMD,
 };
 
-struct rmnet_sdio_dev {
-	/* QMI lists */
-	struct list_head qmi_req_q;
-	struct list_head qmi_resp_q;
+struct rmnet_ctrl_dev {
+	struct list_head tx_q;
+	wait_queue_head_t tx_wait_q;
+	unsigned long tx_len;
 
-	/* Tx/Rx lists */
-	struct list_head tx_idle;
-	struct list_head rx_idle;
-	struct list_head rx_queue;
+	struct list_head rx_q;
+	unsigned long rx_len;
 
-	u8 dmux_write_done;
 	unsigned long cbits_to_modem;
 
-	struct work_struct ctl_rx_work;
+	unsigned	opened;
+};
+
+struct rmnet_sdio_dev {
+	/* Tx/Rx lists */
+	struct list_head tx_idle;
+	struct sk_buff_head    tx_skb_queue;
+	struct list_head rx_idle;
+	struct sk_buff_head    rx_skb_queue;
+
+
+
 	struct work_struct data_rx_work;
-	struct work_struct set_modem_ctl_bits_work;
 
 	struct delayed_work open_work;
 	atomic_t sdio_open;
+
+	unsigned int dpkts_pending_atdmux;
 };
 
 /* Data SMD channel */
@@ -133,6 +161,7 @@ struct rmnet_dev {
 
 	struct rmnet_smd_dev smd_dev;
 	struct rmnet_sdio_dev sdio_dev;
+	struct rmnet_ctrl_dev ctrl_dev;
 
 	u8 ifc_id;
 	enum usb_rmnet_xport_type xport;
@@ -146,9 +175,13 @@ struct rmnet_dev {
 	unsigned long dpkts_tomsm;
 	unsigned long dpkts_tomdm;
 	unsigned long dpkts_tolaptop;
+	unsigned long tx_drp_cnt;
 	unsigned long cpkts_tolaptop;
 	unsigned long cpkts_tomdm;
+	unsigned long cpkts_drp_cnt;
 };
+
+static struct rmnet_dev *_dev;
 
 static struct usb_interface_descriptor rmnet_interface_desc = {
 	.bLength =              USB_DT_INTERFACE_SIZE,
@@ -230,7 +263,7 @@ static struct usb_descriptor_header *rmnet_hs_function[] = {
 /* String descriptors */
 
 static struct usb_string rmnet_string_defs[] = {
-	[0].s = "QMI RmNet",
+	[0].s = "RmNet",
 	{  } /* end of list */
 };
 
@@ -256,29 +289,32 @@ static char *xport_to_str(enum usb_rmnet_xport_type t)
 	}
 }
 
-static struct rmnet_sdio_qmi_buf *
-rmnet_alloc_qmi(unsigned len, gfp_t kmalloc_flags)
-
+static struct rmnet_ctrl_pkt *rmnet_alloc_ctrl_pkt(unsigned len, gfp_t flags)
 {
-	struct rmnet_sdio_qmi_buf *qmi;
+	struct rmnet_ctrl_pkt *cpkt;
 
-	qmi = kmalloc(sizeof(struct rmnet_sdio_qmi_buf), kmalloc_flags);
-	if (qmi != NULL) {
-		qmi->buf = kmalloc(len, kmalloc_flags);
-		if (qmi->buf == NULL) {
-			kfree(qmi);
-			qmi = NULL;
-		}
+	cpkt = kzalloc(sizeof(struct rmnet_ctrl_pkt), flags);
+	if (!cpkt)
+		return 0;
+
+	cpkt->buf = kzalloc(len, flags);
+	if (!cpkt->buf) {
+		kfree(cpkt);
+		return 0;
 	}
 
-	return qmi ? qmi : ERR_PTR(-ENOMEM);
+	cpkt->len = len;
+
+	return cpkt;
+
 }
 
-static void rmnet_free_qmi(struct rmnet_sdio_qmi_buf *qmi)
+static void rmnet_free_ctrl_pkt(struct rmnet_ctrl_pkt *cpkt)
 {
-	kfree(qmi->buf);
-	kfree(qmi);
+	kfree(cpkt->buf);
+	kfree(cpkt);
 }
+
 /*
  * Allocate a usb_request and its buffer.  Returns a pointer to the
  * usb_request or a pointer with an error code if there is an error.
@@ -342,9 +378,13 @@ static void rmnet_sdio_start_rx(struct rmnet_dev *dev)
 	struct list_head *pool;
 	unsigned long flags;
 
-	pool = &sdio_dev->rx_idle;
+	if (!atomic_read(&dev->online)) {
+		pr_debug("%s: USB not connected\n", __func__);
+		return;
+	}
 
 	spin_lock_irqsave(&dev->lock, flags);
+	pool = &sdio_dev->rx_idle;
 	while (!list_empty(pool)) {
 		req = list_first_entry(pool, struct usb_request, list);
 		list_del(&req->list);
@@ -362,76 +402,104 @@ static void rmnet_sdio_start_rx(struct rmnet_dev *dev)
 	spin_unlock_irqrestore(&dev->lock, flags);
 }
 
+static void rmnet_sdio_start_tx(struct rmnet_dev *dev)
+{
+	unsigned long			flags;
+	int				status;
+	struct sk_buff			*skb;
+	struct usb_request		*req;
+	struct rmnet_sdio_dev *sdio_dev = &dev->sdio_dev;
+	struct usb_composite_dev	*cdev = dev->cdev;
+
+
+	if (!atomic_read(&dev->online))
+		return;
+
+	spin_lock_irqsave(&dev->lock, flags);
+	while (!list_empty(&sdio_dev->tx_idle)) {
+		skb = __skb_dequeue(&sdio_dev->tx_skb_queue);
+		if (!skb) {
+			spin_unlock_irqrestore(&dev->lock, flags);
+			return;
+		}
+
+		req = list_first_entry(&sdio_dev->tx_idle,
+				struct usb_request, list);
+		req->context = skb;
+		req->buf = skb->data;
+		req->length = skb->len;
+
+		list_del(&req->list);
+		spin_unlock(&dev->lock);
+		status = usb_ep_queue(dev->epin, req, GFP_ATOMIC);
+		spin_lock(&dev->lock);
+		if (status) {
+			/* USB still online, queue requests back */
+			if (atomic_read(&dev->online)) {
+				ERROR(cdev, "rmnet tx data enqueue err %d\n",
+						status);
+				list_add_tail(&req->list, &sdio_dev->tx_idle);
+				__skb_queue_head(&sdio_dev->tx_skb_queue, skb);
+			} else {
+				req->buf = 0;
+				rmnet_free_req(dev->epin, req);
+				dev_kfree_skb_any(skb);
+			}
+			break;
+		}
+		dev->dpkts_tolaptop++;
+	}
+	spin_unlock_irqrestore(&dev->lock, flags);
+}
+
 static void rmnet_sdio_data_receive_cb(void *priv, struct sk_buff *skb)
 {
 	struct rmnet_dev *dev = priv;
 	struct rmnet_sdio_dev *sdio_dev = &dev->sdio_dev;
-	struct usb_composite_dev *cdev = dev->cdev;
-	struct usb_request *req;
 	unsigned long flags;
-	int status;
 
-	spin_lock_irqsave(&dev->lock, flags);
-	if (list_empty(&sdio_dev->tx_idle)) {
-		spin_unlock_irqrestore(&dev->lock, flags);
-		ERROR(cdev, "rmnet data Tx req full\n");
+	if (!skb)
+		return;
+	if (!atomic_read(&dev->online)) {
+		dev_kfree_skb_any(skb);
 		return;
 	}
-	req = list_first_entry(&sdio_dev->tx_idle, struct usb_request, list);
-	list_del(&req->list);
-	spin_unlock_irqrestore(&dev->lock, flags);
-
-	req->context = skb;
-	req->buf = skb->data;
-	req->length = skb->len;
-
-	status = usb_ep_queue(dev->epin, req, GFP_KERNEL);
-	if (status) {
-		ERROR(cdev, "rmnet tx data enqueue err %d\n", status);
-		spin_lock_irqsave(&dev->lock, flags);
-		list_add_tail(&req->list, &sdio_dev->tx_idle);
+	spin_lock_irqsave(&dev->lock, flags);
+	if (sdio_dev->tx_skb_queue.qlen > sdio_tx_pkt_drop_thld) {
+		pr_err_ratelimited("%s: tx pkt dropped: tx_drop_cnt:%lu\n",
+			__func__, dev->tx_drp_cnt);
+		dev->tx_drp_cnt++;
 		spin_unlock_irqrestore(&dev->lock, flags);
+		dev_kfree_skb_any(skb);
+		return;
 	}
-	dev->dpkts_tolaptop++;
+	__skb_queue_tail(&sdio_dev->tx_skb_queue, skb);
+	spin_unlock_irqrestore(&dev->lock, flags);
+	rmnet_sdio_start_tx(dev);
 }
 
 static void rmnet_sdio_data_write_done(void *priv, struct sk_buff *skb)
 {
 	struct rmnet_dev *dev = priv;
 	struct rmnet_sdio_dev *sdio_dev = &dev->sdio_dev;
-	struct usb_composite_dev *cdev = dev->cdev;
-	unsigned long flags;
+
+	if (!skb)
+		return;
 
 	dev_kfree_skb_any(skb);
+	/* this function is called from
+	 * sdio mux from spin_lock_irqsave
+	 */
+	spin_lock(&dev->lock);
+	sdio_dev->dpkts_pending_atdmux--;
 
-	spin_lock_irqsave(&dev->lock, flags);
-	sdio_dev->dmux_write_done = 1;
-
-	if (!atomic_read(&dev->online)) {
-		DBG(cdev, "USB disconnected\n");
-		spin_unlock_irqrestore(&dev->lock, flags);
+	if (sdio_dev->dpkts_pending_atdmux >= sdio_rx_fctrl_dis_thld) {
+		spin_unlock(&dev->lock);
 		return;
 	}
+	spin_unlock(&dev->lock);
 
-	if (!list_empty(&sdio_dev->rx_queue)) {
-		sdio_dev->dmux_write_done = 0;
-		queue_work(dev->wq, &sdio_dev->data_rx_work);
-	}
-	spin_unlock_irqrestore(&dev->lock, flags);
-}
-
-static void rmnet_sdio_set_modem_ctl_bits_work(struct work_struct *w)
-{
-	struct rmnet_dev *dev = container_of(w, struct rmnet_dev,
-			sdio_dev.set_modem_ctl_bits_work);
-	struct rmnet_sdio_dev *sdio_dev = &dev->sdio_dev;
-
-	if (!atomic_read(&sdio_dev->sdio_open))
-		return;
-
-	sdio_cmux_tiocmset(rmnet_sdio_ctl_ch,
-			sdio_dev->cbits_to_modem,
-			~sdio_dev->cbits_to_modem);
+	rmnet_sdio_start_rx(dev);
 }
 
 static void rmnet_sdio_data_rx_work(struct work_struct *w)
@@ -440,37 +508,25 @@ static void rmnet_sdio_data_rx_work(struct work_struct *w)
 			sdio_dev.data_rx_work);
 	struct rmnet_sdio_dev *sdio_dev = &dev->sdio_dev;
 	struct usb_composite_dev *cdev = dev->cdev;
-	struct usb_request *req;
+
 	struct sk_buff *skb;
 	int ret;
 	unsigned long flags;
 
 	spin_lock_irqsave(&dev->lock, flags);
-
-	if (list_empty(&sdio_dev->rx_queue)) {
+	while ((skb = __skb_dequeue(&sdio_dev->rx_skb_queue))) {
 		spin_unlock_irqrestore(&dev->lock, flags);
-		return;
-	}
-
-	req = list_first_entry(&sdio_dev->rx_queue,
-		struct usb_request, list);
-
-	list_del(&req->list);
-	spin_unlock_irqrestore(&dev->lock, flags);
-
-	skb = req->context;
-	ret = msm_sdio_dmux_write(rmnet_sdio_data_ch, skb);
-	if (ret < 0) {
-		ERROR(cdev, "rmnet SDIO data write failed\n");
-		dev_kfree_skb_any(skb);
+		ret = msm_sdio_dmux_write(rmnet_sdio_data_ch, skb);
 		spin_lock_irqsave(&dev->lock, flags);
-		list_add_tail(&req->list, &sdio_dev->rx_idle);
-		spin_unlock_irqrestore(&dev->lock, flags);
-	} else {
-		dev->dpkts_tomdm++;
-		rmnet_sdio_rx_submit(dev, req, GFP_KERNEL);
+		if (ret < 0) {
+			ERROR(cdev, "rmnet SDIO data write failed\n");
+			dev_kfree_skb_any(skb);
+		} else {
+			dev->dpkts_tomdm++;
+			sdio_dev->dpkts_pending_atdmux++;
+		}
 	}
-
+	spin_unlock_irqrestore(&dev->lock, flags);
 }
 
 static void
@@ -499,29 +555,41 @@ rmnet_sdio_complete_epout(struct usb_ep *ep, struct usb_request *req)
 	case -ECONNRESET:
 	case -ESHUTDOWN:
 		/* connection gone */
-		break;
+		dev_kfree_skb_any(skb);
+		req->buf = 0;
+		rmnet_free_req(ep, req);
+		return;
 	default:
 		/* unexpected failure */
 		ERROR(cdev, "RMNET %s response error %d, %d/%d\n",
 			ep->name, status,
 			req->actual, req->length);
+		dev_kfree_skb_any(skb);
 		break;
 	}
 
 	spin_lock(&dev->lock);
 	if (queue) {
-		list_add_tail(&req->list, &sdio_dev->rx_queue);
-		if (sdio_dev->dmux_write_done) {
-			sdio_dev->dmux_write_done = 0;
-			queue_work(dev->wq, &sdio_dev->data_rx_work);
-		}
-	} else {
+		__skb_queue_tail(&sdio_dev->rx_skb_queue, skb);
+		queue_work(dev->wq, &sdio_dev->data_rx_work);
+	}
+
+	if (sdio_dev->dpkts_pending_atdmux >= sdio_rx_fctrl_en_thld) {
 		list_add_tail(&req->list, &sdio_dev->rx_idle);
+		spin_unlock(&dev->lock);
+		return;
 	}
 	spin_unlock(&dev->lock);
+
+	status = rmnet_sdio_rx_submit(dev, req, GFP_ATOMIC);
+	if (status) {
+		ERROR(cdev, "rmnet data rx enqueue err %d\n", status);
+		list_add_tail(&req->list, &sdio_dev->rx_idle);
+	}
 }
 
-static void rmnet_sdio_complete_epin(struct usb_ep *ep, struct usb_request *req)
+static void
+rmnet_sdio_complete_epin(struct usb_ep *ep, struct usb_request *req)
 {
 	struct rmnet_dev *dev = ep->driver_data;
 	struct rmnet_sdio_dev *sdio_dev = &dev->sdio_dev;
@@ -552,6 +620,8 @@ static void rmnet_sdio_complete_epin(struct usb_ep *ep, struct usb_request *req)
 	list_add_tail(&req->list, &sdio_dev->tx_idle);
 	spin_unlock(&dev->lock);
 	dev_kfree_skb_any(skb);
+
+	rmnet_sdio_start_tx(dev);
 }
 
 static int rmnet_sdio_enable(struct rmnet_dev *dev)
@@ -701,7 +771,8 @@ static void rmnet_smd_data_rx_tlet(unsigned long arg)
  * We will not write into SMD directly untill rx_queue is
  * empty to strictly follow the ordering requests.
  */
-static void rmnet_smd_complete_epout(struct usb_ep *ep, struct usb_request *req)
+static void
+rmnet_smd_complete_epout(struct usb_ep *ep, struct usb_request *req)
 {
 	struct rmnet_dev *dev = req->context;
 	struct rmnet_smd_dev *smd_dev = &dev->smd_dev;
@@ -841,7 +912,9 @@ static int rmnet_smd_enable(struct rmnet_dev *dev)
 	int i, ret;
 	struct usb_request *req;
 
-	/* Data channel for network packets */
+	if (test_bit(CH_OPENED, &smd_dev->smd_data.flags))
+		goto smd_alloc_req;
+
 	ret = smd_open(rmnet_smd_data_ch, &smd_dev->smd_data.ch,
 			dev, rmnet_smd_notify);
 	if (ret) {
@@ -856,6 +929,7 @@ static int rmnet_smd_enable(struct rmnet_dev *dev)
 	 * If the memory allocation fails, all the allocated
 	 * requests will be freed upon cable disconnect.
 	 */
+smd_alloc_req:
 	for (i = 0; i < RMNET_SMD_RX_REQ_MAX; i++) {
 		req = rmnet_alloc_req(dev->epout, RMNET_SMD_RX_REQ_SIZE,
 				GFP_KERNEL);
@@ -898,9 +972,6 @@ static void rmnet_notify_complete(struct usb_ep *ep, struct usb_request *req)
 		/* FALLTHROUGH */
 	case 0:
 
-		/* handle multiple pending QMI_RESPONSE_AVAILABLE
-		 * notifications by resending until we're done
-		 */
 		if (atomic_dec_and_test(&dev->notify_count))
 			break;
 
@@ -913,7 +984,7 @@ static void rmnet_notify_complete(struct usb_ep *ep, struct usb_request *req)
 	}
 }
 
-static void qmi_response_available(struct rmnet_dev *dev)
+static void ctrl_response_available(struct rmnet_dev *dev)
 {
 	struct usb_composite_dev *cdev = dev->cdev;
 	struct usb_request              *req = dev->notify_req;
@@ -939,94 +1010,6 @@ static void qmi_response_available(struct rmnet_dev *dev)
 }
 
 #define MAX_CTRL_PKT_SIZE	4096
-static void rmnet_sdio_ctl_receive_cb(void *data, int size, void *priv)
-{
-	struct rmnet_dev *dev = priv;
-	struct rmnet_sdio_dev *sdio_dev = &dev->sdio_dev;
-	struct usb_composite_dev *cdev = dev->cdev;
-	struct rmnet_sdio_qmi_buf *qmi_resp;
-	unsigned long flags;
-
-	if (!size || !data)
-		return;
-
-	if (size > MAX_CTRL_PKT_SIZE) {
-		ERROR(cdev, "ctrl pkt size:%d exceeds max pkt size:%d\n",
-				size, MAX_CTRL_PKT_SIZE);
-		return;
-	}
-
-	if (!atomic_read(&dev->online)) {
-		DBG(cdev, "USB disconnected\n");
-		return;
-	}
-
-	qmi_resp = rmnet_alloc_qmi(size, GFP_KERNEL);
-	if (IS_ERR(qmi_resp)) {
-		DBG(cdev, "unable to allocate memory for QMI resp\n");
-		return;
-	}
-	memcpy(qmi_resp->buf, data, size);
-	qmi_resp->len = size;
-	spin_lock_irqsave(&dev->lock, flags);
-	list_add_tail(&qmi_resp->list, &sdio_dev->qmi_resp_q);
-	spin_unlock_irqrestore(&dev->lock, flags);
-
-	qmi_response_available(dev);
-}
-
-static void rmnet_sdio_ctl_write_done(void *data, int size, void *priv)
-{
-	struct rmnet_dev *dev = priv;
-	struct usb_composite_dev *cdev = dev->cdev;
-
-	VDBG(cdev, "rmnet control write done = %d bytes\n", size);
-}
-
-static void rmnet_sdio_sts_callback(int id, void *priv)
-{
-	struct rmnet_dev *dev = priv;
-	struct usb_composite_dev *cdev = dev->cdev;
-
-	DBG(cdev, "rmnet_sts_callback: id: %d\n", id);
-}
-
-static void rmnet_sdio_control_rx_work(struct work_struct *w)
-{
-	struct rmnet_dev *dev = container_of(w, struct rmnet_dev,
-			sdio_dev.ctl_rx_work);
-	struct rmnet_sdio_dev *sdio_dev = &dev->sdio_dev;
-	struct usb_composite_dev *cdev = dev->cdev;
-	struct rmnet_sdio_qmi_buf *qmi_req;
-	unsigned long flags;
-	int ret;
-
-	while (1) {
-		spin_lock_irqsave(&dev->lock, flags);
-		if (list_empty(&sdio_dev->qmi_req_q))
-			goto unlock;
-
-		qmi_req = list_first_entry(&sdio_dev->qmi_req_q,
-					struct rmnet_sdio_qmi_buf, list);
-		list_del(&qmi_req->list);
-		spin_unlock_irqrestore(&dev->lock, flags);
-
-		ret = sdio_cmux_write(rmnet_sdio_ctl_ch, qmi_req->buf,
-					qmi_req->len);
-		if (ret != qmi_req->len) {
-			ERROR(cdev, "rmnet control SDIO write failed\n");
-			return;
-		}
-		dev->cpkts_tomdm++;
-		/*
-		 * cmux_write API copies the buffer and gives it to sdio_al.
-		 * Hence freeing the memory before write is completed.
-		 */
-		rmnet_free_qmi(qmi_req);
-	}
-unlock:
-	spin_unlock_irqrestore(&dev->lock, flags);
-}
 
 static void rmnet_response_complete(struct usb_ep *ep, struct usb_request *req)
 {
@@ -1047,45 +1030,56 @@ static void rmnet_response_complete(struct usb_ep *ep, struct usb_request *req)
 
 static void rmnet_command_complete(struct usb_ep *ep, struct usb_request *req)
 {
-	struct rmnet_dev *dev = req->context;
-	struct usb_composite_dev *cdev = dev->cdev;
-	struct rmnet_sdio_dev *sdio_dev = &dev->sdio_dev;
-	struct rmnet_sdio_qmi_buf *qmi_req;
-	int len = req->actual;
+	struct rmnet_dev		*dev = req->context;
+	struct usb_composite_dev	*cdev = dev->cdev;
+	struct rmnet_ctrl_dev		*ctrl_dev = &dev->ctrl_dev;
+	struct rmnet_ctrl_pkt		*cpkt;
+	int				len = req->actual;
 
 	if (req->status < 0) {
 		ERROR(cdev, "rmnet command error %d\n", req->status);
 		return;
 	}
 
-	qmi_req = rmnet_alloc_qmi(len, GFP_ATOMIC);
-	if (IS_ERR(qmi_req)) {
-		ERROR(cdev, "unable to allocate memory for QMI req\n");
+	cpkt = rmnet_alloc_ctrl_pkt(len, GFP_ATOMIC);
+	if (!cpkt) {
+		ERROR(cdev, "unable to allocate memory for ctrl req\n");
 		return;
 	}
-	memcpy(qmi_req->buf, req->buf, len);
-	qmi_req->len = len;
+
 	spin_lock(&dev->lock);
-	list_add_tail(&qmi_req->list, &sdio_dev->qmi_req_q);
+	if (!ctrl_dev->opened) {
+		spin_unlock(&dev->lock);
+		kfree(cpkt);
+		dev->cpkts_drp_cnt++;
+		pr_err_ratelimited(
+			"%s: ctrl pkts dropped: cpkts_drp_cnt: %lu\n",
+			__func__, dev->cpkts_drp_cnt);
+		return;
+	}
+
+	memcpy(cpkt->buf, req->buf, len);
+
+	list_add_tail(&cpkt->list, &ctrl_dev->tx_q);
+	ctrl_dev->tx_len++;
 	spin_unlock(&dev->lock);
-	queue_work(dev->wq, &sdio_dev->ctl_rx_work);
+
+	/* wakeup read thread */
+	wake_up(&ctrl_dev->tx_wait_q);
 }
 
 static int
 rmnet_setup(struct usb_function *f, const struct usb_ctrlrequest *ctrl)
 {
 	struct rmnet_dev *dev = container_of(f, struct rmnet_dev, function);
-	struct rmnet_sdio_dev *sdio_dev = &dev->sdio_dev;
+	struct rmnet_ctrl_dev *ctrl_dev = &dev->ctrl_dev;
 	struct usb_composite_dev *cdev = f->config->cdev;
 	struct usb_request      *req = cdev->req;
 	int                     ret = -EOPNOTSUPP;
 	u16                     w_index = le16_to_cpu(ctrl->wIndex);
 	u16                     w_value = le16_to_cpu(ctrl->wValue);
 	u16                     w_length = le16_to_cpu(ctrl->wLength);
-	struct rmnet_sdio_qmi_buf *resp;
-
-	if (!atomic_read(&sdio_dev->sdio_open))
-		return 0;
+	struct rmnet_ctrl_pkt	*cpkt;
 
 	if (!atomic_read(&dev->online))
 		return -ENOTCONN;
@@ -1110,26 +1104,27 @@ rmnet_setup(struct usb_function *f, const struct usb_ctrlrequest *ctrl)
 			unsigned len;
 
 			spin_lock(&dev->lock);
-			if (list_empty(&sdio_dev->qmi_resp_q)) {
-				DBG(cdev, "qmi resp queue empty"
+			if (list_empty(&ctrl_dev->rx_q)) {
+				DBG(cdev, "ctrl resp queue empty"
 					" %02x.%02x v%04x i%04x l%d\n",
 					ctrl->bRequestType, ctrl->bRequest,
 					w_value, w_index, w_length);
 				spin_unlock(&dev->lock);
 				goto invalid;
-			}
 
-			resp = list_first_entry(&sdio_dev->qmi_resp_q,
-				struct rmnet_sdio_qmi_buf, list);
-			list_del(&resp->list);
+			}
+			cpkt = list_first_entry(&ctrl_dev->rx_q,
+					struct rmnet_ctrl_pkt, list);
+			list_del(&cpkt->list);
+			ctrl_dev->rx_len--;
 			spin_unlock(&dev->lock);
 
-			len = min_t(unsigned, w_length, resp->len);
-			memcpy(req->buf, resp->buf, len);
+			len = min_t(unsigned, w_length, cpkt->len);
+			memcpy(req->buf, cpkt->buf, len);
 			ret = len;
 			req->complete = rmnet_response_complete;
 			req->context = dev;
-			rmnet_free_qmi(resp);
+			rmnet_free_ctrl_pkt(cpkt);
 
 			dev->cpkts_tolaptop++;
 		}
@@ -1146,10 +1141,9 @@ rmnet_setup(struct usb_function *f, const struct usb_ctrlrequest *ctrl)
 		 * request will be sent with DTR being '1'.
 		 */
 		if (w_value & ACM_CTRL_DTR)
-			sdio_dev->cbits_to_modem |= TIOCM_DTR;
+			ctrl_dev->cbits_to_modem |= TIOCM_DTR;
 		else
-			sdio_dev->cbits_to_modem &= ~TIOCM_DTR;
-		queue_work(dev->wq, &sdio_dev->set_modem_ctl_bits_work);
+			ctrl_dev->cbits_to_modem &= ~TIOCM_DTR;
 
 		ret = 0;
 
@@ -1180,10 +1174,12 @@ invalid:
 static void rmnet_free_buf(struct rmnet_dev *dev)
 {
 	struct rmnet_sdio_dev *sdio_dev = &dev->sdio_dev;
+	struct rmnet_ctrl_dev *ctrl_dev = &dev->ctrl_dev;
 	struct rmnet_smd_dev *smd_dev = &dev->smd_dev;
-	struct rmnet_sdio_qmi_buf *qmi;
+	struct rmnet_ctrl_pkt *cpkt;
 	struct usb_request *req;
 	struct list_head *pool;
+	struct sk_buff *skb;
 	unsigned long flags;
 
 	spin_lock_irqsave(&dev->lock, flags);
@@ -1205,14 +1201,11 @@ static void rmnet_free_buf(struct rmnet_dev *dev)
 		rmnet_free_req(dev->epin, req);
 	}
 
-	/* free all usb requests in SDIO rx queue */
-	pool = &sdio_dev->rx_queue;
-	while (!list_empty(pool)) {
-		req = list_first_entry(pool, struct usb_request, list);
-		list_del(&req->list);
-		req->buf = NULL;
-		rmnet_free_req(dev->epin, req);
-	}
+	while ((skb = __skb_dequeue(&sdio_dev->tx_skb_queue)))
+		dev_kfree_skb_any(skb);
+
+	while ((skb = __skb_dequeue(&sdio_dev->rx_skb_queue)))
+		dev_kfree_skb_any(skb);
 
 	/* free all usb requests in SMD tx pool */
 	pool = &smd_dev->tx_idle;
@@ -1238,24 +1231,22 @@ static void rmnet_free_buf(struct rmnet_dev *dev)
 		rmnet_free_req(dev->epin, req);
 	}
 
-	/* free all buffers in qmi request queue */
-	pool = &sdio_dev->qmi_req_q;
+	pool = &ctrl_dev->tx_q;
 	while (!list_empty(pool)) {
-		qmi = list_first_entry(pool, struct rmnet_sdio_qmi_buf, list);
-		list_del(&qmi->list);
-		rmnet_free_qmi(qmi);
+		cpkt = list_first_entry(pool, struct rmnet_ctrl_pkt, list);
+		list_del(&cpkt->list);
+		rmnet_free_ctrl_pkt(cpkt);
+		ctrl_dev->tx_len--;
 	}
 
-	/* free all buffers in qmi response queue */
-	pool = &sdio_dev->qmi_resp_q;
+	pool = &ctrl_dev->rx_q;
 	while (!list_empty(pool)) {
-		qmi = list_first_entry(pool, struct rmnet_sdio_qmi_buf, list);
-		list_del(&qmi->list);
-		rmnet_free_qmi(qmi);
+		cpkt = list_first_entry(pool, struct rmnet_ctrl_pkt, list);
+		list_del(&cpkt->list);
+		rmnet_free_ctrl_pkt(cpkt);
+		ctrl_dev->rx_len--;
 	}
 	spin_unlock_irqrestore(&dev->lock, flags);
-
-	rmnet_free_req(dev->epnotify, dev->notify_req);
 }
 
 static void rmnet_disconnect_work(struct work_struct *w)
@@ -1263,23 +1254,39 @@ static void rmnet_disconnect_work(struct work_struct *w)
 	struct rmnet_dev *dev = container_of(w, struct rmnet_dev,
 			disconnect_work);
 	struct rmnet_smd_dev *smd_dev = &dev->smd_dev;
+	struct rmnet_ctrl_dev *ctrl_dev = &dev->ctrl_dev;
 
 	if (dev->xport == USB_RMNET_XPORT_SMD) {
 		tasklet_kill(&smd_dev->smd_data.rx_tlet);
 		tasklet_kill(&smd_dev->smd_data.tx_tlet);
-
-		smd_close(smd_dev->smd_data.ch);
-		smd_dev->smd_data.flags = 0;
 	}
 
 	rmnet_free_buf(dev);
 	dev->xport = 0;
+
+	/* wakeup read thread */
+	wake_up(&ctrl_dev->tx_wait_q);
+}
+
+static void rmnet_suspend(struct usb_function *f)
+{
+	struct rmnet_dev *dev = container_of(f, struct rmnet_dev, function);
+	struct rmnet_ctrl_dev *ctrl_dev = &dev->ctrl_dev;
+
+	if (!atomic_read(&dev->online))
+		return;
+	/* This is a workaround for Windows Host bug during suspend.
+	 * Windows 7/xp Hosts are suppose to drop DTR, when Host suspended.
+	 * Since it is not being done, Hence exclusively dropping the DTR
+	 * from function driver suspend.
+	 */
+	ctrl_dev->cbits_to_modem &= ~TIOCM_DTR;
 }
 
 static void rmnet_disable(struct usb_function *f)
 {
 	struct rmnet_dev *dev = container_of(f, struct rmnet_dev, function);
-	struct rmnet_sdio_dev *sdio_dev = &dev->sdio_dev;
+	struct rmnet_ctrl_dev *ctrl_dev = &dev->ctrl_dev;
 
 	if (!atomic_read(&dev->online))
 		return;
@@ -1288,6 +1295,8 @@ static void rmnet_disable(struct usb_function *f)
 
 	usb_ep_fifo_flush(dev->epnotify);
 	usb_ep_disable(dev->epnotify);
+	rmnet_free_req(dev->epnotify, dev->notify_req);
+
 	usb_ep_fifo_flush(dev->epout);
 	usb_ep_disable(dev->epout);
 
@@ -1295,8 +1304,7 @@ static void rmnet_disable(struct usb_function *f)
 	usb_ep_disable(dev->epin);
 
 	/* cleanup work */
-	sdio_dev->cbits_to_modem = 0;
-	queue_work(dev->wq, &sdio_dev->set_modem_ctl_bits_work);
+	ctrl_dev->cbits_to_modem = 0;
 	queue_work(dev->wq, &dev->disconnect_work);
 }
 
@@ -1311,47 +1319,34 @@ static void rmnet_open_sdio_work(struct work_struct *w)
 	int ret;
 	static int retry_cnt;
 
-	/* Control channel for QMI messages */
-	ret = sdio_cmux_open(rmnet_sdio_ctl_ch, rmnet_sdio_ctl_receive_cb,
-				rmnet_sdio_ctl_write_done,
-				rmnet_sdio_sts_callback, dev);
-	if (ret) {
-		retry_cnt++;
-		pr_debug("%s: usb rmnet sdio open retry_cnt:%d\n",
-				__func__, retry_cnt);
-
-		if (retry_cnt > SDIO_OPEN_MAX_RETRY) {
-			ERROR(cdev, "Unable to open control SDIO channel\n");
-			return;
-		}
-		queue_delayed_work(dev->wq, &sdio_dev->open_work,
-					SDIO_OPEN_RETRY_DELAY);
-		return;
-	}
 	/* Data channel for network packets */
 	ret = msm_sdio_dmux_open(rmnet_sdio_data_ch, dev,
 				rmnet_sdio_data_receive_cb,
 				rmnet_sdio_data_write_done);
 	if (ret) {
-		ERROR(cdev, "Unable to open SDIO DATA channel\n");
-		goto ctl_close;
+		if (retry_cnt > SDIO_OPEN_MAX_RETRY) {
+			ERROR(cdev, "Unable to open SDIO DATA channel\n");
+			return;
+		}
+		retry_cnt++;
+		queue_delayed_work(dev->wq, &sdio_dev->open_work,
+					SDIO_OPEN_RETRY_DELAY);
+		return;
 	}
 
-	sdio_dev->dmux_write_done = 1;
+
 	atomic_set(&sdio_dev->sdio_open, 1);
 	pr_info("%s: usb rmnet sdio channels are open retry_cnt:%d\n",
 				__func__, retry_cnt);
 	retry_cnt = 0;
 	return;
-
-ctl_close:
-	sdio_cmux_close(rmnet_sdio_ctl_ch);
 }
 
 static int rmnet_set_alt(struct usb_function *f,
 			unsigned intf, unsigned alt)
 {
 	struct rmnet_dev *dev = container_of(f, struct rmnet_dev, function);
+	struct rmnet_sdio_dev *sdio_dev = &dev->sdio_dev;
 	struct usb_composite_dev *cdev = dev->cdev;
 
 	/* allocate notification */
@@ -1382,7 +1377,9 @@ static int rmnet_set_alt(struct usb_function *f,
 	dev->cpkts_tomdm = 0;
 	dev->dpkts_tomdm = 0;
 	dev->dpkts_tomsm = 0;
-
+	dev->tx_drp_cnt = 0;
+	dev->cpkts_drp_cnt = 0;
+	sdio_dev->dpkts_pending_atdmux = 0;
 	atomic_set(&dev->online, 1);
 
 	return 0;
@@ -1400,6 +1397,7 @@ static ssize_t transport_store(
 	struct rmnet_smd_dev *smd_dev = &dev->smd_dev;
 	struct rmnet_sdio_dev *sdio_dev = &dev->sdio_dev;
 	struct list_head *pool;
+	struct sk_buff_head *skb_pool;
 	struct sk_buff *skb;
 	struct usb_request *req;
 	unsigned long flags;
@@ -1437,6 +1435,9 @@ static ssize_t transport_store(
 	case USB_RMNET_XPORT_SDIO:
 		spin_lock_irqsave(&dev->lock, flags);
 		/* tx_idle */
+
+		sdio_dev->dpkts_pending_atdmux = 0;
+
 		pool = &sdio_dev->tx_idle;
 		while (!list_empty(pool)) {
 			req = list_first_entry(pool, struct usb_request, list);
@@ -1455,25 +1456,21 @@ static ssize_t transport_store(
 			rmnet_free_req(dev->epin, req);
 		}
 
-		/* rx_queue */
-		pool = &sdio_dev->rx_queue;
-		while (!list_empty(pool)) {
-			req = list_first_entry(pool, struct usb_request, list);
-			list_del(&req->list);
-			skb = req->context;
+		/* tx_skb_queue */
+		skb_pool = &sdio_dev->tx_skb_queue;
+		while ((skb = __skb_dequeue(skb_pool)))
 			dev_kfree_skb_any(skb);
-			req->buf = NULL;
-			rmnet_free_req(dev->epin, req);
-		}
+		/* rx_skb_queue */
+		skb_pool = &sdio_dev->rx_skb_queue;
+		while ((skb = __skb_dequeue(skb_pool)))
+			dev_kfree_skb_any(skb);
+
 		spin_unlock_irqrestore(&dev->lock, flags);
 		break;
 	case USB_RMNET_XPORT_SMD:
 		/* close smd xport */
 		tasklet_kill(&smd_dev->smd_data.rx_tlet);
 		tasklet_kill(&smd_dev->smd_data.tx_tlet);
-
-		smd_close(smd_dev->smd_data.ch);
-		smd_dev->smd_data.flags = 0;
 
 		spin_lock_irqsave(&dev->lock, flags);
 		/* free all usb requests in SMD tx pool */
@@ -1499,6 +1496,7 @@ static ssize_t transport_store(
 			list_del(&req->list);
 			rmnet_free_req(dev->epin, req);
 		}
+
 		spin_unlock_irqrestore(&dev->lock, flags);
 		break;
 	default:
@@ -1610,66 +1608,93 @@ static void rmnet_smd_init(struct rmnet_smd_dev *smd_dev)
 
 static void rmnet_sdio_init(struct rmnet_sdio_dev *sdio_dev)
 {
-	INIT_WORK(&sdio_dev->ctl_rx_work, rmnet_sdio_control_rx_work);
 	INIT_WORK(&sdio_dev->data_rx_work, rmnet_sdio_data_rx_work);
-	INIT_WORK(&sdio_dev->set_modem_ctl_bits_work,
-			rmnet_sdio_set_modem_ctl_bits_work);
 
 	INIT_DELAYED_WORK(&sdio_dev->open_work, rmnet_open_sdio_work);
 
-	INIT_LIST_HEAD(&sdio_dev->qmi_req_q);
-	INIT_LIST_HEAD(&sdio_dev->qmi_resp_q);
-
 	INIT_LIST_HEAD(&sdio_dev->rx_idle);
-	INIT_LIST_HEAD(&sdio_dev->rx_queue);
 	INIT_LIST_HEAD(&sdio_dev->tx_idle);
+	skb_queue_head_init(&sdio_dev->tx_skb_queue);
+	skb_queue_head_init(&sdio_dev->rx_skb_queue);
 }
 
 static void
 rmnet_unbind(struct usb_configuration *c, struct usb_function *f)
 {
+	struct rmnet_dev *dev = container_of(f, struct rmnet_dev, function);
+	struct rmnet_smd_dev *smd_dev = &dev->smd_dev;
+
+	smd_close(smd_dev->smd_data.ch);
+	smd_dev->smd_data.flags = 0;
+
 }
 
 #if defined(CONFIG_DEBUG_FS)
+#define DEBUG_BUF_SIZE	1024
 static ssize_t debug_read_stats(struct file *file, char __user *ubuf,
 		size_t count, loff_t *ppos)
 {
 	struct rmnet_dev *dev = file->private_data;
 	struct rmnet_sdio_dev *sdio_dev = &dev->sdio_dev;
-	char debug_buf[512];
+	struct rmnet_ctrl_dev *ctrl_dev = &dev->ctrl_dev;
+	char *debug_buf;
 	unsigned long flags;
 	int ret;
 
+	debug_buf = kmalloc(sizeof(char) * DEBUG_BUF_SIZE, GFP_KERNEL);
+	if (!debug_buf)
+		return -ENOMEM;
+
 	spin_lock_irqsave(&dev->lock, flags);
-	ret = scnprintf(debug_buf, 512,
+	ret = scnprintf(debug_buf, DEBUG_BUF_SIZE,
 			"dpkts_tomsm:  %lu\n"
 			"dpkts_tomdm: %lu\n"
 			"cpkts_tomdm: %lu\n"
 			"dpkts_tolaptop: %lu\n"
 			"cpkts_tolaptop:  %lu\n"
 			"cbits_to_modem: %lu\n"
-			"xport: %s\n",
+			"tx skb size:     %u\n"
+			"rx_skb_size:     %u\n"
+			"dpkts_pending_at_dmux: %u\n"
+			"tx drp cnt: %lu\n"
+			"cpkts_drp_cnt: %lu\n"
+			"cpkt_tx_qlen: %lu\n"
+			"cpkt_rx_qlen_to_modem: %lu\n"
+			"xport: %s\n"
+			"ctr_ch_opened:	%d\n",
 			dev->dpkts_tomsm, dev->dpkts_tomdm,
 			dev->cpkts_tomdm, dev->dpkts_tolaptop,
-			dev->cpkts_tolaptop, sdio_dev->cbits_to_modem,
-			xport_to_str(dev->xport));
+			dev->cpkts_tolaptop, ctrl_dev->cbits_to_modem,
+			sdio_dev->tx_skb_queue.qlen,
+			sdio_dev->rx_skb_queue.qlen,
+			sdio_dev->dpkts_pending_atdmux, dev->tx_drp_cnt,
+			dev->cpkts_drp_cnt,
+			ctrl_dev->tx_len, ctrl_dev->rx_len,
+			xport_to_str(dev->xport), ctrl_dev->opened);
 
 	spin_unlock_irqrestore(&dev->lock, flags);
 
-	return simple_read_from_buffer(ubuf, count, ppos, debug_buf, ret);
+	ret = simple_read_from_buffer(ubuf, count, ppos, debug_buf, ret);
+
+	kfree(debug_buf);
+
+	return ret;
 }
 
 static ssize_t debug_reset_stats(struct file *file, const char __user *buf,
 				 size_t count, loff_t *ppos)
 {
 	struct rmnet_dev *dev = file->private_data;
+	struct rmnet_sdio_dev *sdio_dev = &dev->sdio_dev;
 
 	dev->dpkts_tolaptop = 0;
 	dev->cpkts_tolaptop = 0;
 	dev->cpkts_tomdm = 0;
 	dev->dpkts_tomdm = 0;
 	dev->dpkts_tomsm = 0;
-
+	sdio_dev->dpkts_pending_atdmux = 0;
+	dev->tx_drp_cnt = 0;
+	dev->cpkts_drp_cnt = 0;
 	return count;
 }
 
@@ -1700,6 +1725,202 @@ static void usb_debugfs_init(struct rmnet_dev *dev)
 #else
 static void usb_debugfs_init(struct rmnet_dev *dev) {}
 #endif
+
+int usb_rmnet_ctrl_open(struct inode *inode, struct file *fp)
+{
+	struct rmnet_dev *dev =  _dev;
+	struct rmnet_ctrl_dev *ctrl_dev = &dev->ctrl_dev;
+	unsigned long flags;
+
+	spin_lock_irqsave(&dev->lock, flags);
+	if (ctrl_dev->opened) {
+		spin_unlock_irqrestore(&dev->lock, flags);
+		pr_err("%s: device is already opened\n", __func__);
+		return -EBUSY;
+	}
+
+	ctrl_dev->opened = 1;
+	fp->private_data = dev;
+	spin_unlock_irqrestore(&dev->lock, flags);
+
+	return 0;
+}
+
+
+int usb_rmnet_ctrl_release(struct inode *inode, struct file *fp)
+{
+	struct rmnet_dev *dev = fp->private_data;
+	struct rmnet_ctrl_dev *ctrl_dev = &dev->ctrl_dev;
+	unsigned long flags;
+
+	spin_lock_irqsave(&dev->lock, flags);
+	ctrl_dev->opened = 0;
+	fp->private_data = 0;
+	spin_unlock_irqrestore(&dev->lock, flags);
+
+	return 0;
+}
+
+ssize_t usb_rmnet_ctrl_read(struct file *fp,
+		      char __user *buf,
+		      size_t count,
+		      loff_t *ppos)
+{
+	struct rmnet_dev *dev = fp->private_data;
+	struct rmnet_ctrl_dev *ctrl_dev = &dev->ctrl_dev;
+	struct rmnet_ctrl_pkt *cpkt;
+	unsigned long flags;
+	int ret = 0;
+
+ctrl_read:
+	if (!atomic_read(&dev->online)) {
+		pr_debug("%s: USB cable not connected\n", __func__);
+		return -ENODEV;
+	}
+
+	spin_lock_irqsave(&dev->lock, flags);
+	if (list_empty(&ctrl_dev->tx_q)) {
+		spin_unlock_irqrestore(&dev->lock, flags);
+		/* Implement sleep and wakeup here */
+		ret = wait_event_interruptible(ctrl_dev->tx_wait_q,
+					!list_empty(&ctrl_dev->tx_q) ||
+					!atomic_read(&dev->online));
+		if (ret < 0)
+			return ret;
+
+		goto ctrl_read;
+	}
+
+	cpkt = list_first_entry(&ctrl_dev->tx_q, struct rmnet_ctrl_pkt, list);
+	if (cpkt->len > count) {
+		spin_unlock_irqrestore(&dev->lock, flags);
+		pr_err("%s: cpkt size:%d > buf size:%d\n",
+				__func__, cpkt->len, count);
+		return -ENOMEM;
+	}
+	list_del(&cpkt->list);
+	ctrl_dev->tx_len--;
+	spin_unlock_irqrestore(&dev->lock, flags);
+
+	count = cpkt->len;
+
+	ret = copy_to_user(buf, cpkt->buf, count);
+	dev->cpkts_tomdm++;
+
+	rmnet_free_ctrl_pkt(cpkt);
+
+	if (ret)
+		return ret;
+
+	return count;
+}
+
+ssize_t usb_rmnet_ctrl_write(struct file *fp,
+		       const char __user *buf,
+		       size_t count,
+		       loff_t *ppos)
+{
+	struct rmnet_dev *dev = fp->private_data;
+	struct rmnet_ctrl_dev *ctrl_dev = &dev->ctrl_dev;
+	struct rmnet_ctrl_pkt *cpkt;
+	unsigned long flags;
+	int ret = 0;
+
+	if (!atomic_read(&dev->online)) {
+		pr_debug("%s: USB cable not connected\n", __func__);
+		return -ENODEV;
+	}
+
+	if (!count) {
+		pr_err("%s: zero length ctrl pkt\n", __func__);
+		return -ENODEV;
+	}
+
+	if (count > MAX_CTRL_PKT_SIZE) {
+		pr_err("%s: max_pkt_size:%d given_pkt_size:%d\n",
+				__func__, MAX_CTRL_PKT_SIZE, count);
+		return -ENOMEM;
+	}
+
+	cpkt = rmnet_alloc_ctrl_pkt(count, GFP_KERNEL);
+	if (!cpkt) {
+		pr_err("%s: cannot allocate rmnet ctrl pkt\n", __func__);
+		return -ENOMEM;
+	}
+
+	ret = copy_from_user(cpkt->buf, buf, count);
+	if (ret) {
+		pr_err("%s: copy_from_user failed err:%d\n",
+				__func__, ret);
+		rmnet_free_ctrl_pkt(cpkt);
+		return ret;
+	}
+
+	spin_lock_irqsave(&dev->lock, flags);
+	ctrl_dev->rx_len++;
+	list_add(&cpkt->list, &ctrl_dev->rx_q);
+	spin_unlock_irqrestore(&dev->lock, flags);
+
+	ctrl_response_available(dev);
+
+	return count;
+}
+
+
+#define RMNET_CTRL_GET_DTR	_IOR(0xFE, 0, int)
+static long
+usb_rmnet_ctrl_ioctl(struct file *fp, unsigned c, unsigned long value)
+{
+	struct rmnet_dev *dev = fp->private_data;
+	struct rmnet_ctrl_dev *ctrl_dev = &dev->ctrl_dev;
+	unsigned long *temp = (unsigned long *)value;
+	int ret = 0;
+
+	if (c != RMNET_CTRL_GET_DTR)
+		return -ENODEV;
+
+	ret = copy_to_user(temp,
+			&ctrl_dev->cbits_to_modem,
+			sizeof(*temp));
+	if (ret)
+		return ret;
+
+	return 0;
+}
+
+static const struct file_operations rmnet_ctrl_fops = {
+	.owner		= THIS_MODULE,
+	.open		= usb_rmnet_ctrl_open,
+	.release	= usb_rmnet_ctrl_release,
+	.read		= usb_rmnet_ctrl_read,
+	.write		= usb_rmnet_ctrl_write,
+	.unlocked_ioctl	= usb_rmnet_ctrl_ioctl,
+};
+
+static struct miscdevice rmnet_ctrl_dev = {
+	.minor = MISC_DYNAMIC_MINOR,
+	.name = "rmnet_ctrl",
+	.fops = &rmnet_ctrl_fops,
+};
+
+static int rmnet_ctrl_device_init(struct rmnet_dev *dev)
+{
+	int ret;
+	struct rmnet_ctrl_dev *ctrl_dev = &dev->ctrl_dev;
+
+	INIT_LIST_HEAD(&ctrl_dev->tx_q);
+	INIT_LIST_HEAD(&ctrl_dev->rx_q);
+	init_waitqueue_head(&ctrl_dev->tx_wait_q);
+
+	ret = misc_register(&rmnet_ctrl_dev);
+	if (ret) {
+		pr_err("%s: failed to register misc device\n", __func__);
+		return ret;
+	}
+
+	return 0;
+}
+
 static int rmnet_function_add(struct usb_configuration *c)
 {
 	struct rmnet_dev *dev;
@@ -1708,6 +1929,8 @@ static int rmnet_function_add(struct usb_configuration *c)
 	dev = kzalloc(sizeof(*dev), GFP_KERNEL);
 	if (!dev)
 		return -ENOMEM;
+
+	_dev = dev;
 
 	dev->wq = create_singlethread_workqueue("k_rmnet_work");
 	if (!dev->wq) {
@@ -1722,6 +1945,13 @@ static int rmnet_function_add(struct usb_configuration *c)
 	rmnet_smd_init(&dev->smd_dev);
 	rmnet_sdio_init(&dev->sdio_dev);
 
+	ret = rmnet_ctrl_device_init(dev);
+	if (ret) {
+		pr_debug("%s: rmnet_ctrl_device_init failed, err:%d\n",
+				__func__, ret);
+		goto free_wq;
+	}
+
 	dev->function.name = "rmnet_smd_sdio";
 	dev->function.strings = rmnet_strings;
 	dev->function.descriptors = rmnet_fs_function;
@@ -1731,6 +1961,7 @@ static int rmnet_function_add(struct usb_configuration *c)
 	dev->function.setup = rmnet_setup;
 	dev->function.set_alt = rmnet_set_alt;
 	dev->function.disable = rmnet_disable;
+	dev->function.suspend = rmnet_suspend;
 
 	ret = usb_add_function(c, &dev->function);
 	if (ret)

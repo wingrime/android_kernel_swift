@@ -62,5 +62,6 @@ int afe_validate_port(u16 port_id);
 int afe_get_port_index(u16 port_id);
 int afe_start_pseudo_port(u16 port_id);
 int afe_stop_pseudo_port(u16 port_id);
+int afe_apply_gain(u16 port_id, u16 gain);
 
 #endif /* __Q6AFE_H__ */

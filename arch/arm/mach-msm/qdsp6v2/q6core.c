@@ -31,31 +31,23 @@
 #include <linux/delay.h>
 #include <mach/msm_smd.h>
 #include <mach/qdsp6v2/apr.h>
-
-struct dentry *dentry;
-struct apr_svc_ch_dev *handle;
-struct apr_svc *apr_handle_q;
-struct apr_svc *apr_handle_m;
-struct apr_svc *core_handle_q;
-struct apr_client_data clnt_data;
-char l_buf[4096];
-
-static char *svc_names[] = {
-					"NULL",
-					"NULL",
-					"TEST",
-					"CORE",
-					"AFE",
-					"VSM",
-					"VPM",
-					"ASM",
-					"ADM",
-				};
+#include "q6core.h"
 
 #define TIMEOUT_MS 1000
-int32_t query_adsp_ver;
-wait_queue_head_t adsp_version_wait;
-uint32_t adsp_version;
+
+static struct apr_svc *apr_handle_q;
+static struct apr_svc *apr_handle_m;
+static struct apr_svc *core_handle_q;
+
+static int32_t query_adsp_ver;
+static wait_queue_head_t adsp_version_wait;
+static uint32_t adsp_version;
+
+static wait_queue_head_t bus_bw_req_wait;
+static u32 bus_bw_resp_received;
+
+static struct dentry *dentry;
+static char l_buf[4096];
 
 static int32_t aprv2_core_fn_q(struct apr_client_data *data, void *priv)
 {
@@ -64,17 +56,39 @@ static int32_t aprv2_core_fn_q(struct apr_client_data *data, void *priv)
 	struct adsp_service_info *svc_info;
 	int i;
 
-	pr_info("core msg: payload len = %d\n", data->payload_size);
+	pr_info("core msg: payload len = %u, apr resp opcode = 0x%X\n",
+		data->payload_size, data->opcode);
+
 	switch (data->opcode) {
+
 	case APR_BASIC_RSP_RESULT:{
+
+		if (data->payload_size == 0) {
+			pr_err("%s: APR_BASIC_RSP_RESULT No Payload ",
+					__func__);
+			return 0;
+		}
+
 		payload1 = data->payload;
-		if (payload1[0] == ADSP_CMD_SET_POWER_COLLAPSE_STATE) {
-			pr_info("Cmd[0x%x] status[0x%x]\n", payload1[0],
-							payload1[1]);
+
+		switch (payload1[0]) {
+
+		case ADSP_CMD_SET_POWER_COLLAPSE_STATE:
+			pr_info("Cmd = ADSP_CMD_SET_POWER_COLLAPSE_STATE"
+				" status[0x%x]\n", payload1[1]);
 			break;
-		} else
-			pr_err("Invalid cmd rsp[0x%x][0x%x]\n", payload1[0],
-								payload1[1]);
+		case ADSP_CMD_REMOTE_BUS_BW_REQUEST:
+			pr_info("%s: cmd = ADSP_CMD_REMOTE_BUS_BW_REQUEST"
+				"  status = 0x%x\n", __func__, payload1[1]);
+
+			bus_bw_resp_received = 1;
+			wake_up(&bus_bw_req_wait);
+			break;
+		default:
+			pr_err("Invalid cmd rsp[0x%x][0x%x]\n",
+					payload1[0], payload1[1]);
+			break;
+		}
 		break;
 	}
 	case ADSP_GET_VERSION_RSP:{
@@ -91,11 +105,13 @@ static int32_t aprv2_core_fn_q(struct apr_client_data *data, void *priv)
 			pr_info("Build id          = %x\n", payload->build_id);
 			pr_info("Number of services= %x\n", payload->svc_cnt);
 			pr_info("----------------------------------------\n");
-			for (i = 0; i < payload->svc_cnt; i++)
-				pr_info("%s\t%x.%x\n",
-				svc_names[svc_info[i].svc_id],
-				(svc_info[i].svc_ver & 0xFFFF0000) >> 16,
-				(svc_info[i].svc_ver & 0xFFFF));
+			for (i = 0; i < payload->svc_cnt; i++) {
+				pr_info("svc-id[%d]\tver[%x.%x]\n",
+					svc_info[i].svc_id,
+					(svc_info[i].svc_ver & 0xFFFF0000)
+					>> 16,
+					(svc_info[i].svc_ver & 0xFFFF));
+			}
 			pr_info("-----------------------------------------\n");
 		} else
 			pr_info("zero payload for ADSP_GET_VERSION_RSP\n");
@@ -139,7 +155,7 @@ static ssize_t apr_debug_open(struct inode *inode, struct file *file)
 	return 0;
 }
 
-void *core_open(void)
+void core_open(void)
 {
 	if (core_handle_q == NULL) {
 		core_handle_q = apr_register("ADSP", "CORE",
@@ -148,24 +164,57 @@ void *core_open(void)
 	pr_info("Open_q %p\n", core_handle_q);
 	if (core_handle_q == NULL) {
 		pr_err("%s: Unable to register CORE\n", __func__);
-		return NULL;
 	}
-	return core_handle_q;
 }
-EXPORT_SYMBOL(core_open);
 
-int32_t core_close(void)
+int core_req_bus_bandwith(u16 bus_id, u32 ab_bps, u32 ib_bps)
 {
-	int ret = 0;
+	struct adsp_cmd_remote_bus_bw_request bus_bw_req;
+	int ret;
+
+	pr_debug("%s: bus_id %u ab_bps %u ib_bps %u\n",
+			__func__, bus_id, ab_bps, ib_bps);
+
+	core_open();
 	if (core_handle_q == NULL) {
-		pr_err("CORE is already closed\n");
-		ret = -EINVAL;
-		return ret;
+		pr_info("%s: apr registration for CORE failed\n", __func__);
+		return -ENODEV;
 	}
-	apr_deregister(core_handle_q);
+
+	bus_bw_req.hdr.hdr_field = APR_HDR_FIELD(APR_MSG_TYPE_SEQ_CMD,
+					APR_HDR_LEN(APR_HDR_SIZE), APR_PKT_VER);
+	bus_bw_req.hdr.pkt_size = sizeof(struct adsp_cmd_remote_bus_bw_request);
+
+	bus_bw_req.hdr.src_port = 0;
+	bus_bw_req.hdr.dest_port = 0;
+	bus_bw_req.hdr.token = 0;
+	bus_bw_req.hdr.opcode = ADSP_CMD_REMOTE_BUS_BW_REQUEST;
+
+	bus_bw_req.bus_identifier = bus_id;
+	bus_bw_req.reserved = 0;
+	bus_bw_req.ab_bps = ab_bps;
+	bus_bw_req.ib_bps = ib_bps;
+
+	bus_bw_resp_received = 0;
+	ret = apr_send_pkt(core_handle_q, (uint32_t *) &bus_bw_req);
+	if (ret < 0) {
+		pr_err("%s: CORE bus bw request failed\n", __func__);
+		goto fail_cmd;
+	}
+
+	ret = wait_event_timeout(bus_bw_req_wait, (bus_bw_resp_received == 1),
+				msecs_to_jiffies(TIMEOUT_MS));
+	if (!ret) {
+		pr_err("%s: wait_event timeout\n", __func__);
+		ret = -ETIME;
+		goto fail_cmd;
+	}
+
+	return 0;
+
+fail_cmd:
 	return ret;
 }
-EXPORT_SYMBOL(core_close);
 
 uint32_t core_get_adsp_version(void)
 {
@@ -301,7 +350,7 @@ static ssize_t apr_debug_write(struct file *file, const char __user *buf,
 	} else if (!strncmp(l_buf + 20, "en_pwr_col", 64)) {
 		struct adsp_power_collapse pc;
 
-		core_handle_q = core_open();
+		core_open();
 		if (core_handle_q) {
 			pc.hdr.hdr_field = APR_HDR_FIELD(APR_MSG_TYPE_EVENT,
 					APR_HDR_LEN(APR_HDR_SIZE), APR_PKT_VER);
@@ -318,7 +367,7 @@ static ssize_t apr_debug_write(struct file *file, const char __user *buf,
 	} else if (!strncmp(l_buf + 20, "dis_pwr_col", 64)) {
 		struct adsp_power_collapse pc;
 
-		core_handle_q = core_open();
+		core_open();
 		if (core_handle_q) {
 			pc.hdr.hdr_field = APR_HDR_FIELD(APR_MSG_TYPE_EVENT,
 					APR_HDR_LEN(APR_HDR_SIZE), APR_PKT_VER);
@@ -345,15 +394,21 @@ static const struct file_operations apr_debug_fops = {
 
 static int __init core_init(void)
 {
+	init_waitqueue_head(&bus_bw_req_wait);
+	bus_bw_resp_received = 0;
+
+	query_adsp_ver = 0;
+	init_waitqueue_head(&adsp_version_wait);
+	adsp_version = 0;
+
+	core_handle_q = NULL;
+
 #ifdef CONFIG_DEBUG_FS
 	dentry = debugfs_create_file("apr", S_IFREG | S_IWUGO,
 				NULL, (void *) NULL, &apr_debug_fops);
 #endif /* CONFIG_DEBUG_FS */
-	query_adsp_ver = 0;
-	init_waitqueue_head(&adsp_version_wait);
-	adsp_version = 0;
-	core_handle_q = NULL;
+
 	return 0;
 }
-device_initcall(core_init);
 
+device_initcall(core_init);

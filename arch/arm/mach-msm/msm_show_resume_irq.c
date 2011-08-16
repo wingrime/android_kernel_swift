@@ -69,8 +69,8 @@ static int __init msm_show_resume_irq_init(void)
 
 static void __exit msm_show_resume_irq_exit(void)
 {
-	sysdev_register(&msm_show_resume_irq_device);
-	sysdev_class_register(&msm_show_resume_irq_sysclass);
+	sysdev_unregister(&msm_show_resume_irq_device);
+	sysdev_class_unregister(&msm_show_resume_irq_sysclass);
 }
 
 module_init(msm_show_resume_irq_init);

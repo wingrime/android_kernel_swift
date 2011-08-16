@@ -41,8 +41,8 @@ static struct afe_ctl this_afe;
 static int32_t afe_callback(struct apr_client_data *data, void *priv)
 {
 	if (data->opcode == RESET_EVENTS) {
-		pr_debug("q6afe: reset event = %d %d\n",
-			data->reset_event, data->reset_proc);
+		pr_debug("q6afe: reset event = %d %d apr[%p]\n",
+			data->reset_event, data->reset_proc, this_afe.apr);
 		if (this_afe.apr) {
 			apr_reset(this_afe.apr);
 			atomic_set(&this_afe.state, 0);
@@ -68,6 +68,7 @@ static int32_t afe_callback(struct apr_client_data *data, void *priv)
 			case AFE_PORT_CMD_SET_PARAM:
 			case AFE_PSEUDOPORT_CMD_START:
 			case AFE_PSEUDOPORT_CMD_STOP:
+			case AFE_PORT_CMD_APPLY_GAIN:
 				atomic_set(&this_afe.state, 0);
 				wake_up(&this_afe.wait);
 				break;
@@ -347,6 +348,67 @@ fail_cmd:
 	return ret;
 }
 
+int afe_apply_gain(u16 port_id, u16 gain)
+{
+	struct afe_port_gain_command set_gain;
+	int ret = 0;
+
+	if (this_afe.apr == NULL) {
+		pr_err("%s: AFE is not opened\n", __func__);
+		ret = -EPERM;
+		goto fail_cmd;
+	}
+
+	if (afe_validate_port(port_id) < 0) {
+
+		pr_err("%s: Failed : Invalid Port id = %d\n", __func__,
+				port_id);
+		ret = -EINVAL;
+		goto fail_cmd;
+	}
+
+	/* RX ports numbers are even .TX ports numbers are odd. */
+	if (port_id % 2 == 0) {
+		pr_err("%s: Failed : afe apply gain only for TX ports."
+			" port_id %d\n", __func__, port_id);
+		ret = -EINVAL;
+		goto fail_cmd;
+	}
+
+	pr_debug("%s: %d %hX\n", __func__, port_id, gain);
+
+	set_gain.hdr.hdr_field = APR_HDR_FIELD(APR_MSG_TYPE_SEQ_CMD,
+				APR_HDR_LEN(APR_HDR_SIZE), APR_PKT_VER);
+	set_gain.hdr.pkt_size = sizeof(set_gain);
+	set_gain.hdr.src_port = 0;
+	set_gain.hdr.dest_port = 0;
+	set_gain.hdr.token = 0;
+	set_gain.hdr.opcode = AFE_PORT_CMD_APPLY_GAIN;
+
+	set_gain.port_id		= port_id;
+	set_gain.gain	= gain;
+
+	atomic_set(&this_afe.state, 1);
+	ret = apr_send_pkt(this_afe.apr, (uint32_t *) &set_gain);
+	if (ret < 0) {
+		pr_err("%s: AFE Gain set failed for port %d\n",
+					__func__, port_id);
+		ret = -EINVAL;
+		goto fail_cmd;
+	}
+
+	ret = wait_event_timeout(this_afe.wait,
+		(atomic_read(&this_afe.state) == 0),
+			msecs_to_jiffies(TIMEOUT_MS));
+	if (ret < 0) {
+		pr_err("%s: wait_event timeout\n", __func__);
+		ret = -EINVAL;
+		goto fail_cmd;
+	}
+	return 0;
+fail_cmd:
+	return ret;
+}
 int afe_start_pseudo_port(u16 port_id)
 {
 	int ret = 0;

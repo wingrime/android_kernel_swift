@@ -494,8 +494,16 @@ static int mmc_bustest_write(struct mmc_host *host,
 	data.flags = MMC_DATA_WRITE;
 	data.sg = &sg;
 	data.sg_len = 1;
-	data.timeout_ns = card->csd.tacc_ns * 10;
-	data.timeout_clks = card->csd.tacc_clks * 10;
+
+	/* The mmc bus test timeout is primarily dependent on mmc clock and
+	*  the host controller since the card acts as a loopback device as
+	*  there is no data is being written to/read from the card's memory.
+	*  Since the test will be conducted at the frequency of operation
+	*  (20 MHz or higher), 1ms timeout is more than adequate. The same
+	*  timeout values are used for read bustest as well.
+	*/
+	data.timeout_ns = 1000000;
+	data.timeout_clks = 0;
 
 	test_pat[0] = bustest_send_pat[buswidth];
 	mmc_set_bus_width(card->host, buswidth);
@@ -544,6 +552,8 @@ static int mmc_bustest_read(struct mmc_host *host,
 	data.flags = MMC_DATA_READ;
 	data.sg = &sg;
 	data.sg_len = 1;
+	data.timeout_ns = 1000000;
+	data.timeout_clks = 0;
 
 	if (buswidth == MMC_BUS_WIDTH_8) {
 		data.blksz = 8;
@@ -556,7 +566,6 @@ static int mmc_bustest_read(struct mmc_host *host,
 		sg_init_one(&sg, test_pat, 1);
 	}
 
-	mmc_set_data_timeout(&data, card);
 	mmc_wait_for_req(host, &mrq);
 
 	pr_debug("%s: Test pattern received: 0x%x\n", __func__, test_pat[0]);

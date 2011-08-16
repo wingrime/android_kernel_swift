@@ -83,6 +83,7 @@ enum vfe_resp_msg {
 	VFE_MSG_SYNC_TIMER0,
 	VFE_MSG_SYNC_TIMER1,
 	VFE_MSG_SYNC_TIMER2,
+	VFE_MSG_COMMON,
 };
 
 enum vpe_resp_msg {
@@ -131,6 +132,18 @@ struct msm_vfe_phy_info {
 	uint32_t frame_id;
 };
 
+struct msm_vfe_stats_msg {
+	uint32_t aec_buff;
+	uint32_t awb_buff;
+	uint32_t af_buff;
+	uint32_t ihist_buff;
+	uint32_t rs_buff;
+	uint32_t cs_buff;
+	uint32_t skin_buff;
+	uint32_t status_bits;
+	uint32_t frame_id;
+};
+
 struct video_crop_t{
 	uint32_t  in1_w;
 	uint32_t  out1_w;
@@ -155,6 +168,7 @@ struct msm_vfe_resp {
 	enum vfe_resp_msg type;
 	struct msm_cam_evt_msg evt_msg;
 	struct msm_vfe_phy_info phy;
+	struct msm_vfe_stats_msg stats_msg;
 	struct msm_vpe_buf_info vpe_bf;
 	void    *extdata;
 	int32_t extlen;
@@ -202,7 +216,7 @@ struct msm_camvpe_fn {
 	int (*vpe_config)(struct msm_vpe_cfg_cmd *, void *);
 	void (*vpe_cfg_offset)(int frame_pack, uint32_t pyaddr,
 		uint32_t pcbcraddr, struct timespec *ts, int output_id,
-		int32_t x, int32_t y, int32_t frameid, struct msm_st_crop);
+		struct msm_st_half st_half, int frameid);
 	int *dis;
 };
 
@@ -311,6 +325,8 @@ struct msm_sync {
 	struct msm_queue_cmd *pp_stereocam2;
 	struct msm_queue_cmd *pp_stereosnap;
 	enum msm_stereo_state stereo_state;
+	int stcam_quality_ind;
+	uint32_t stcam_conv_value;
 
 	spinlock_t pmem_frame_spinlock;
 	spinlock_t pmem_stats_spinlock;
@@ -470,6 +486,9 @@ enum msm_bus_perf_setting {
 	S_PREVIEW,
 	S_VIDEO,
 	S_CAPTURE,
+	S_ZSL,
+	S_STEREO_VIDEO,
+	S_STEREO_CAPTURE,
 	S_DEFAULT,
 	S_EXIT
 };
@@ -477,7 +496,7 @@ enum msm_bus_perf_setting {
 int msm_camio_enable(struct platform_device *dev);
 int msm_camio_jpeg_clk_enable(void);
 int msm_camio_jpeg_clk_disable(void);
-int msm_camio_vpe_clk_enable(void);
+int msm_camio_vpe_clk_enable(uint32_t);
 int msm_camio_vpe_clk_disable(void);
 
 int  msm_camio_clk_enable(enum msm_camio_clk_type clk);

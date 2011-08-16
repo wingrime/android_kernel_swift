@@ -29,6 +29,8 @@
 #include <linux/debugfs.h>
 #include <linux/slab.h>
 #include <linux/msm_adc.h>
+#include <linux/notifier.h>
+#include <linux/pmic8058-batt-alarm.h>
 
 #include <mach/msm_xo.h>
 #include <mach/msm_hsusb.h>
@@ -46,6 +48,7 @@
 #define CHG_USB_SUSPEND			6
 #define CHG_IMON_CAL			5
 #define CHG_IMON_GAIN			4
+#define CHG_CHARGE_BAT			3
 #define CHG_VBUS_FROM_BOOST_OVRD	2
 #define CHG_CHARGE_DIS			1
 #define CHG_VCP_EN			0
@@ -107,8 +110,10 @@
 #define AUTO_CHARGING_TRICKLE_TIME_MINUTES		30
 #define AUTO_CHARGING_VEOC_ITERM			100
 #define AUTO_CHARGING_IEOC_ITERM			160
+#define AUTO_CHARGING_RESUME_MV				4100
 
 #define AUTO_CHARGING_VBATDET				4150
+#define AUTO_CHARGING_VBATDET_DEBOUNCE_TIME_MS		3000
 #define AUTO_CHARGING_VEOC_VBATDET			4100
 #define AUTO_CHARGING_VEOC_TCHG				16
 #define AUTO_CHARGING_VEOC_TCHG_FINAL_CYCLE		32
@@ -185,6 +190,7 @@ struct pm8058_charger {
 	struct delayed_work chg_done_check_work;
 	struct delayed_work check_vbat_low_work;
 	struct delayed_work veoc_begin_work;
+	struct delayed_work charging_check_work;
 	int waiting_for_topoff;
 	int waiting_for_veoc;
 	int vbatdet;
@@ -201,6 +207,37 @@ struct pm8058_charger {
 
 static struct pm8058_charger pm8058_chg;
 static struct msm_hardware_charger usb_hw_chg;
+
+
+static int msm_battery_gague_alarm_notify(struct notifier_block *nb,
+					  unsigned long status, void *unused);
+
+static struct notifier_block alarm_notifier = {
+	.notifier_call = msm_battery_gague_alarm_notify,
+};
+
+static int resume_mv = AUTO_CHARGING_RESUME_MV;
+static DEFINE_MUTEX(batt_alarm_lock);
+static int resume_mv_set(const char *val, struct kernel_param *kp);
+module_param_call(resume_mv, resume_mv_set, param_get_int,
+				&resume_mv, S_IRUGO | S_IWUSR);
+
+static int resume_mv_set(const char *val, struct kernel_param *kp)
+{
+	int rc;
+
+	mutex_lock(&batt_alarm_lock);
+
+	rc = param_set_int(val, kp);
+	if (rc)
+		goto out;
+
+	rc = pm8058_batt_alarm_threshold_set(resume_mv, 4300);
+
+out:
+	mutex_unlock(&batt_alarm_lock);
+	return rc;
+}
 
 static void pm8058_chg_enable_irq(int interrupt)
 {
@@ -526,6 +563,65 @@ static int pm_chg_enum_done_enable(int value)
 	return pm8058_write(pm8058_chg.pm_chip, PM8058_CHG_CNTRL_2, &temp, 1);
 }
 
+static uint32_t get_fsm_state(void)
+{
+	u8 temp;
+
+	temp = 0x00;
+	pm8058_write(pm8058_chg.pm_chip, PM8058_CHG_TEST_3, &temp, 1);
+	pm8058_read(pm8058_chg.pm_chip, PM8058_CHG_TEST_3, &temp, 1);
+	return (uint32_t)temp;
+}
+
+static int get_fsm_status(void *data, u64 * val)
+{
+	*val = get_fsm_state();
+	return 0;
+}
+
+static int pm_chg_disable(int value)
+{
+	u8 temp;
+	int ret;
+
+	ret = pm8058_read(pm8058_chg.pm_chip, PM8058_CHG_CNTRL, &temp, 1);
+	if (ret)
+		return ret;
+	if (value)
+		temp |= BIT(CHG_CHARGE_DIS);
+	else
+		temp &= ~BIT(CHG_CHARGE_DIS);
+
+	return pm8058_write(pm8058_chg.pm_chip, PM8058_CHG_CNTRL, &temp, 1);
+}
+
+static void pm8058_start_system_current(struct msm_hardware_charger *hw_chg,
+								int max_current)
+{
+	int ret = 0;
+
+	if (pm8058_chg.disabled)
+		return;
+
+	ret = pm_chg_imaxsel_set(max_current);
+	ret |= pm_chg_enum_done_enable(1);
+	ret |= pm_chg_disable(0);
+	if (ret)
+		pr_err("%s: failed to turn on system power err=%d",
+							__func__, ret);
+}
+
+static void pm8058_stop_system_current(struct msm_hardware_charger *hw_chg)
+{
+	int ret = 0;
+
+	ret = pm_chg_enum_done_enable(0);
+	ret |= pm_chg_disable(1);
+	if (ret)
+		pr_err("%s: failed to turn off system power err=%d",
+							__func__, ret);
+}
+
 static int __pm8058_start_charging(int chg_current, int termination_current,
 				   int time)
 {
@@ -596,11 +692,61 @@ out:
 	return ret;
 }
 
+static void chg_done_cleanup(void)
+{
+	dev_info(pm8058_chg.dev, "%s notify pm8058 charging completion"
+		"\n", __func__);
+
+	pm8058_chg_disable_irq(AUTO_CHGDONE_IRQ);
+	cancel_delayed_work_sync(&pm8058_chg.veoc_begin_work);
+	cancel_delayed_work_sync(&pm8058_chg.check_vbat_low_work);
+
+	pm8058_chg_disable_irq(CHG_END_IRQ);
+
+	pm8058_chg_disable_irq(VBATDET_LOW_IRQ);
+	pm8058_chg_disable_irq(VBATDET_IRQ);
+	pm8058_chg.waiting_for_veoc = 0;
+	pm8058_chg.waiting_for_topoff = 0;
+
+	pm_chg_auto_disable(1);
+
+	msm_charger_notify_event(&usb_hw_chg, CHG_DONE_EVENT);
+}
+
+static void chg_done_check_work(struct work_struct *work)
+{
+	chg_done_cleanup();
+}
+
+static void charging_check_work(struct work_struct *work)
+{
+	uint32_t fsm_state = get_fsm_state();
+	int rc;
+
+	switch (fsm_state) {
+	/* We're charging, so disarm alarm */
+	case 2:
+	case 7:
+	case 8:
+		rc = pm8058_batt_alarm_state_set(0, 0);
+		if (rc)
+			dev_err(pm8058_chg.dev,
+				"%s: unable to set alarm state\n", __func__);
+		break;
+	default:
+		/* Still not charging, so update driver state */
+		chg_done_cleanup();
+		break;
+	};
+}
+
 static int pm8058_start_charging(struct msm_hardware_charger *hw_chg,
 				 int chg_voltage, int chg_current)
 {
 	int vbat_higher_than_vbatdet;
 	int ret = 0;
+
+	cancel_delayed_work_sync(&pm8058_chg.charging_check_work);
 
 	/*
 	 * adjust the max current for PC USB connection - set the higher limit
@@ -645,6 +791,17 @@ static int pm8058_start_charging(struct msm_hardware_charger *hw_chg,
 	ret = __pm8058_start_charging(chg_current, AUTO_CHARGING_IEOC_ITERM,
 				AUTO_CHARGING_FAST_TIME_MAX_MINUTES);
 	pm8058_chg.current_charger_current = chg_current;
+
+	/*
+	 * We want to check the FSM state to verify we're charging. We must
+	 * wait before doing this to allow the VBATDET to settle. The worst
+	 * case for this is two seconds. The batt alarm does not have this
+	 * delay.
+	 */
+	schedule_delayed_work(&pm8058_chg.charging_check_work,
+				      round_jiffies_relative(msecs_to_jiffies
+			     (AUTO_CHARGING_VBATDET_DEBOUNCE_TIME_MS)));
+
 out:
 	return ret;
 }
@@ -682,26 +839,6 @@ static void vbat_low_work(struct work_struct *work)
 				AUTO_CHARGING_VEOC_TCHG_FINAL_CYCLE);
 }
 
-static void chg_done_check_work(struct work_struct *work)
-{
-	dev_info(pm8058_chg.dev, "%s notify pm8058 charging completion"
-		"\n", __func__);
-
-	pm8058_chg_disable_irq(AUTO_CHGDONE_IRQ);
-	cancel_delayed_work_sync(&pm8058_chg.veoc_begin_work);
-	cancel_delayed_work_sync(&pm8058_chg.check_vbat_low_work);
-
-	pm8058_chg_disable_irq(CHG_END_IRQ);
-
-	pm8058_chg_disable_irq(VBATDET_LOW_IRQ);
-	pm8058_chg_disable_irq(VBATDET_IRQ);
-	pm8058_chg.waiting_for_veoc = 0;
-	pm8058_chg.waiting_for_topoff = 0;
-
-	pm_chg_auto_disable(1);
-
-	msm_charger_notify_event(&usb_hw_chg, CHG_DONE_EVENT);
-}
 
 static irqreturn_t pm8058_chg_chgval_handler(int irq, void *dev_id)
 {
@@ -790,6 +927,7 @@ static irqreturn_t pm8058_chg_auto_chgdone_handler(int irq, void *dev_id)
 {
 	dev_info(pm8058_chg.dev, "%s waiting a sec to confirm\n",
 		__func__);
+	pm8058_chg_disable_irq(AUTO_CHGDONE_IRQ);
 	pm8058_chg_disable_irq(VBATDET_IRQ);
 	if (!delayed_work_pending(&pm8058_chg.chg_done_check_work)) {
 		schedule_delayed_work(&pm8058_chg.chg_done_check_work,
@@ -970,17 +1108,6 @@ static int get_rt_status(void *data, u64 * val)
 	return 0;
 }
 
-static int get_fsm_status(void *data, u64 * val)
-{
-	u8 temp;
-
-	temp = 0x00;
-	pm8058_write(pm8058_chg.pm_chip, PM8058_CHG_TEST_3, &temp, 1);
-	pm8058_read(pm8058_chg.pm_chip, PM8058_CHG_TEST_3, &temp, 1);
-	*val = temp;
-	return 0;
-}
-
 DEFINE_SIMPLE_ATTRIBUTE(rt_fops, get_rt_status, NULL, "%llu\n");
 DEFINE_SIMPLE_ATTRIBUTE(fsm_fops, get_fsm_status, NULL, "%llu\n");
 
@@ -1052,7 +1179,7 @@ static int __devinit request_irqs(struct platform_device *pdev)
 	} else {
 		ret = request_threaded_irq(res->start, NULL,
 				  pm8058_chg_auto_chgdone_handler,
-				  IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING,
+				  IRQF_TRIGGER_RISING,
 				  res->name, NULL);
 		if (ret < 0) {
 			dev_err(pm8058_chg.dev, "%s:couldnt request %d %d\n",
@@ -1209,6 +1336,58 @@ err_out:
 	return -EINVAL;
 }
 
+static int pm8058_get_charge_batt(void)
+{
+	u8 temp;
+	int rc;
+
+	rc = pm8058_read(pm8058_chg.pm_chip, PM8058_CHG_CNTRL, &temp, 1);
+	if (rc)
+		return rc;
+
+	temp &= BIT(CHG_CHARGE_BAT);
+	if (temp)
+		temp = 1;
+	return temp;
+}
+EXPORT_SYMBOL(pm8058_get_charge_batt);
+
+static int pm8058_set_charge_batt(int on)
+{
+	u8 temp;
+	int rc;
+
+	rc = pm8058_read(pm8058_chg.pm_chip, PM8058_CHG_CNTRL, &temp, 1);
+	if (rc)
+		return rc;
+	if (on)
+		temp |= BIT(CHG_CHARGE_BAT);
+	else
+		temp &= ~BIT(CHG_CHARGE_BAT);
+
+	return pm8058_write(pm8058_chg.pm_chip, PM8058_CHG_CNTRL, &temp, 1);
+
+}
+EXPORT_SYMBOL(pm8058_set_charge_batt);
+
+static int get_charge_batt(void *data, u64 * val)
+{
+	int ret;
+
+	ret = pm8058_get_charge_batt();
+	if (ret < 0)
+		return ret;
+
+	*val = ret;
+	return 0;
+}
+
+static int set_charge_batt(void *data, u64 val)
+{
+	return pm8058_set_charge_batt(val);
+}
+DEFINE_SIMPLE_ATTRIBUTE(fet_fops, get_charge_batt, set_charge_batt, "%llu\n");
+
 static void pm8058_chg_determine_initial_state(void)
 {
 	if (is_chg_plugged_in()) {
@@ -1227,9 +1406,20 @@ static int pm8058_stop_charging(struct msm_hardware_charger *hw_chg)
 	int ret;
 
 	dev_info(pm8058_chg.dev, "%s stopping charging\n", __func__);
+
+	/* disable the irqs enabled while charging */
+	pm8058_chg_disable_irq(AUTO_CHGFAIL_IRQ);
+	pm8058_chg_disable_irq(CHGHOT_IRQ);
+	pm8058_chg_disable_irq(AUTO_CHGDONE_IRQ);
+	pm8058_chg_disable_irq(FASTCHG_IRQ);
+	pm8058_chg_disable_irq(CHG_END_IRQ);
+	pm8058_chg_disable_irq(VBATDET_IRQ);
+	pm8058_chg_disable_irq(VBATDET_LOW_IRQ);
+
 	cancel_delayed_work_sync(&pm8058_chg.veoc_begin_work);
 	cancel_delayed_work_sync(&pm8058_chg.check_vbat_low_work);
 	cancel_delayed_work_sync(&pm8058_chg.chg_done_check_work);
+	cancel_delayed_work_sync(&pm8058_chg.charging_check_work);
 
 	ret = pm_chg_get_rt_status(pm8058_chg.pmic_chg_irq[FASTCHG_IRQ]);
 	if (ret == 1)
@@ -1243,14 +1433,6 @@ static int pm8058_stop_charging(struct msm_hardware_charger *hw_chg)
 	pm8058_chg.waiting_for_veoc = 0;
 	pm8058_chg.waiting_for_topoff = 0;
 
-	/* disable the irqs enabled while charging */
-	pm8058_chg_disable_irq(AUTO_CHGFAIL_IRQ);
-	pm8058_chg_disable_irq(CHGHOT_IRQ);
-	pm8058_chg_disable_irq(AUTO_CHGDONE_IRQ);
-	pm8058_chg_disable_irq(FASTCHG_IRQ);
-	pm8058_chg_disable_irq(CHG_END_IRQ);
-	pm8058_chg_disable_irq(VBATDET_IRQ);
-	pm8058_chg_disable_irq(VBATDET_LOW_IRQ);
 	if (pm8058_chg.voter)
 		msm_xo_mode_vote(pm8058_chg.voter, MSM_XO_MODE_OFF);
 
@@ -1471,6 +1653,9 @@ static void create_debugfs_entries(void)
 				    (void *)
 				    pm8058_chg.pmic_chg_irq[VBATDET_LOW_IRQ],
 				    &rt_fops);
+	debugfs_create_file("CHARGE_BATT", 0444, pm8058_chg.dent,
+				    NULL,
+				    &fet_fops);
 }
 #else
 static inline void create_debugfs_entries(void)
@@ -1484,12 +1669,14 @@ static void remove_debugfs_entries(void)
 }
 
 static struct msm_hardware_charger usb_hw_chg = {
-	.type = CHG_TYPE_USB,
-	.rating = 1,
-	.name = "pm8058-usb",
-	.start_charging = pm8058_start_charging,
-	.stop_charging = pm8058_stop_charging,
-	.charging_switched = pm8058_charging_switched,
+	.type			= CHG_TYPE_USB,
+	.rating			= 1,
+	.name			= "pm8058-usb",
+	.start_charging		= pm8058_start_charging,
+	.stop_charging		= pm8058_stop_charging,
+	.charging_switched	= pm8058_charging_switched,
+	.start_system_current	= pm8058_start_system_current,
+	.stop_system_current	= pm8058_stop_system_current,
 };
 
 static int batt_read_adc(int channel, int *mv_reading)
@@ -1610,12 +1797,51 @@ static int pm8058_get_battery_mvolts(void)
 	return 0;
 }
 
+static int msm_battery_gague_alarm_notify(struct notifier_block *nb,
+		unsigned long status, void *unused)
+{
+	int rc;
+
+	pr_info("%s: status: %lu\n", __func__, status);
+
+	switch (status) {
+	case 0:
+		dev_err(pm8058_chg.dev,
+			"%s: spurious interrupt\n", __func__);
+		break;
+	/* expected case - trip of low threshold */
+	case 1:
+		rc = pm8058_batt_alarm_state_set(0, 0);
+		if (rc)
+			dev_err(pm8058_chg.dev,
+				"%s: unable to set alarm state\n", __func__);
+		msm_charger_notify_event(NULL, CHG_BATT_NEEDS_RECHARGING);
+		break;
+	case 2:
+		dev_err(pm8058_chg.dev,
+			"%s: trip of high threshold\n", __func__);
+		break;
+	default:
+		dev_err(pm8058_chg.dev,
+			"%s: error received\n", __func__);
+	};
+
+	return 0;
+}
+
+static int pm8058_monitor_for_recharging(void)
+{
+	/* enable low comparator */
+	return pm8058_batt_alarm_state_set(1, 0);
+}
+
 static struct msm_battery_gauge pm8058_batt_gauge = {
 	.get_battery_mvolts = pm8058_get_battery_mvolts,
 	.get_battery_temperature = pm8058_get_battery_temperature,
 	.is_battery_present = pm8058_is_battery_present,
 	.is_battery_temp_within_range = pm8058_is_battery_temp_within_range,
 	.is_battery_id_valid = pm8058_is_battery_id_valid,
+	.monitor_for_recharging = pm8058_monitor_for_recharging,
 };
 
 static int pm8058_usb_voltage_lower_limit(void)
@@ -1676,12 +1902,48 @@ static int __devinit pm8058_charger_probe(struct platform_device *pdev)
 	INIT_DELAYED_WORK(&pm8058_chg.veoc_begin_work, veoc_begin_work);
 	INIT_DELAYED_WORK(&pm8058_chg.check_vbat_low_work, vbat_low_work);
 	INIT_DELAYED_WORK(&pm8058_chg.chg_done_check_work, chg_done_check_work);
+	INIT_DELAYED_WORK(&pm8058_chg.charging_check_work, charging_check_work);
 
 	/* determine what state the charger is in */
 	pm8058_chg_determine_initial_state();
 
 	pm8058_chg_enable_irq(BATTTEMP_IRQ);
 	pm8058_chg_enable_irq(BATTCONNECT_IRQ);
+
+	rc = pm8058_batt_alarm_state_set(0, 0);
+	if (rc) {
+		pr_err("%s: unable to set batt alarm state\n", __func__);
+		goto free_irq;
+	}
+
+	/*
+	 * The batt-alarm driver requires sane values for both min / max,
+	 * regardless of whether they're both activated.
+	 */
+	rc = pm8058_batt_alarm_threshold_set(resume_mv, 4300);
+	if (rc) {
+		pr_err("%s: unable to set batt alarm threshold\n", __func__);
+		goto free_irq;
+	}
+
+	rc = pm8058_batt_alarm_hold_time_set(PM8058_BATT_ALARM_HOLD_TIME_16_MS);
+	if (rc) {
+		pr_err("%s: unable to set batt alarm hold time\n", __func__);
+		goto free_irq;
+	}
+
+	/* PWM enabled at 2Hz */
+	rc = pm8058_batt_alarm_pwm_rate_set(1, 7, 4);
+	if (rc) {
+		pr_err("%s: unable to set batt alarm pwm rate\n", __func__);
+		goto free_irq;
+	}
+
+	rc = pm8058_batt_alarm_register_notifier(&alarm_notifier);
+	if (rc) {
+		pr_err("%s: unable to register alarm notifier\n", __func__);
+		goto free_irq;
+	}
 
 	pm8058_chg.inited = 1;
 
@@ -1696,15 +1958,25 @@ out:
 static int __devexit pm8058_charger_remove(struct platform_device *pdev)
 {
 	struct pm8058_charger_chip *chip = platform_get_drvdata(pdev);
+	int rc;
 
 	msm_charger_notify_event(&usb_hw_chg, CHG_REMOVED_EVENT);
 	msm_charger_unregister(&usb_hw_chg);
 	cancel_delayed_work_sync(&pm8058_chg.veoc_begin_work);
 	cancel_delayed_work_sync(&pm8058_chg.check_vbat_low_work);
+	cancel_delayed_work_sync(&pm8058_chg.charging_check_work);
 	free_irqs();
 	remove_debugfs_entries();
 	kfree(chip);
-	return 0;
+
+	rc = pm8058_batt_alarm_state_set(0, 0);
+	if (rc)
+		pr_err("%s: unable to set batt alarm state\n", __func__);
+
+	rc |= pm8058_batt_alarm_unregister_notifier(&alarm_notifier);
+	if (rc)
+		pr_err("%s: unable to register alarm notifier\n", __func__);
+	return rc;
 }
 
 static struct platform_driver pm8058_charger_driver = {

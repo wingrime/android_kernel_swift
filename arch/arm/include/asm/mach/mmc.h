@@ -8,6 +8,11 @@
 #include <linux/mmc/card.h>
 #include <linux/mmc/sdio_func.h>
 
+#define SDC_DAT1_DISABLE 0
+#define SDC_DAT1_ENABLE  1
+#define SDC_DAT1_ENWAKE  2
+#define SDC_DAT1_DISWAKE 3
+
 struct embedded_sdio_data {
         struct sdio_cis cis;
         struct sdio_cccr cccr;
@@ -33,8 +38,12 @@ struct mmc_platform_data {
 	unsigned int msmsdcc_fmax;
 	bool nonremovable;
 	bool pclk_src_dfab;
-	int (*cfg_mpm_sdiowakeup)(struct device *, bool);
+	int (*cfg_mpm_sdiowakeup)(struct device *, unsigned);
 	bool sdcc_v4_sup;
+	unsigned int wpswitch_gpio;
+	unsigned char wpswitch_polarity;
+	struct msm_mmc_slot_reg_data *vreg_data;
+	int is_sdio_al_client;
 };
 
 #endif

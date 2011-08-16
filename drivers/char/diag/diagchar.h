@@ -125,7 +125,6 @@ struct diagchar_dev {
 	unsigned int itemsize_write_struct;
 	unsigned int poolsize_write_struct;
 	unsigned int debug_flag;
-	unsigned int alert_count;
 	/* State for the mempool for the char driver */
 	mempool_t *diagpool;
 	mempool_t *diag_hdlc_pool;
@@ -188,6 +187,7 @@ struct diagchar_dev {
 	struct work_struct diag_read_mdm_work;
 	struct workqueue_struct *diag_sdio_wq;
 	struct work_struct diag_read_sdio_work;
+	struct work_struct diag_remove_sdio_work;
 	struct diag_request *usb_read_mdm_ptr;
 	struct diag_request *write_ptr_mdm;
 #endif

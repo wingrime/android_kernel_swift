@@ -698,16 +698,24 @@ done:
 static int acdb_mmap(struct file *file, struct vm_area_struct *vma)
 {
 	int result = 0;
+	int size = vma->vm_end - vma->vm_start;
 
 	pr_debug("%s\n", __func__);
 
 	mutex_lock(&acdb_data.acdb_mutex);
 	if (acdb_data.pmem_fd) {
-		result = remap_pfn_range(vma,
-			    vma->vm_start,
-			    acdb_data.paddr >> PAGE_SHIFT,
-			    acdb_data.pmem_len,
-			    vma->vm_page_prot);
+		if (size <= acdb_data.pmem_len) {
+			vma->vm_page_prot = pgprot_noncached(
+						vma->vm_page_prot);
+			result = remap_pfn_range(vma,
+				vma->vm_start,
+				acdb_data.paddr >> PAGE_SHIFT,
+				size,
+				vma->vm_page_prot);
+		} else {
+			pr_err("%s: Not enough PMEM memory!\n", __func__);
+			result = -ENOMEM;
+		}
 	} else {
 		pr_err("%s: PMEM is not allocated, yet!\n", __func__);
 		result = -ENODEV;

@@ -452,12 +452,75 @@ static void android_config_functions(struct usb_function *f, int enable)
 }
 #endif
 
-void android_enable_function(struct usb_function *f, int enable)
+void update_dev_desc(struct android_dev *dev)
+{
+	struct usb_function *f;
+	struct usb_function *last_enabled_f = NULL;
+	int num_enabled = 0;
+	int has_iad = 0;
+
+	dev->cdev->desc.bDeviceClass = USB_CLASS_PER_INTERFACE;
+	dev->cdev->desc.bDeviceSubClass = 0x00;
+	dev->cdev->desc.bDeviceProtocol = 0x00;
+
+	list_for_each_entry(f, &android_config_driver.functions, list) {
+		if (!f->disabled) {
+			num_enabled++;
+			last_enabled_f = f;
+			if (f->descriptors[0]->bDescriptorType ==
+					USB_DT_INTERFACE_ASSOCIATION)
+				has_iad = 1;
+		}
+		if (num_enabled > 1 && has_iad) {
+			dev->cdev->desc.bDeviceClass = USB_CLASS_MISC;
+			dev->cdev->desc.bDeviceSubClass = 0x02;
+			dev->cdev->desc.bDeviceProtocol = 0x01;
+			break;
+		}
+	}
+
+	if (num_enabled == 1) {
+#ifdef CONFIG_USB_ANDROID_RNDIS
+		if (!strcmp(last_enabled_f->name, "rndis")) {
+#ifdef CONFIG_USB_ANDROID_RNDIS_WCEIS
+			dev->cdev->desc.bDeviceClass =
+					USB_CLASS_WIRELESS_CONTROLLER;
+#else
+			dev->cdev->desc.bDeviceClass = USB_CLASS_COMM;
+#endif
+		}
+#endif
+	}
+}
+
+
+static char *sysfs_allowed[] = {
+	"rndis",
+	"mtp",
+	"adb",
+};
+
+static int is_sysfschange_allowed(struct usb_function *f)
+{
+	char **functions = sysfs_allowed;
+	int count = ARRAY_SIZE(sysfs_allowed);
+	int i;
+
+	for (i = 0; i < count; i++) {
+		if (!strncmp(f->name, functions[i], 32))
+			return 1;
+	}
+	return 0;
+}
+
+int android_enable_function(struct usb_function *f, int enable)
 {
 	struct android_dev *dev = _android_dev;
 	int disable = !enable;
 	int product_id;
 
+	if (!is_sysfschange_allowed(f))
+		return -EINVAL;
 	if (!!f->disabled != disable) {
 		usb_function_set_enabled(f, !disable);
 
@@ -496,6 +559,7 @@ void android_enable_function(struct usb_function *f, int enable)
 			dev->cdev->desc.idProduct = device_desc.idProduct;
 		usb_composite_force_reset(dev->cdev);
 	}
+	return 0;
 }
 
 #ifdef CONFIG_DEBUG_FS

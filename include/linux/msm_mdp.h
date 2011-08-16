@@ -46,11 +46,22 @@
 #define MSMFB_OVERLAY_BLT_OFFSET     _IOW(MSMFB_IOCTL_MAGIC, 143, unsigned int)
 #define MSMFB_HISTOGRAM_START	_IO(MSMFB_IOCTL_MAGIC, 144)
 #define MSMFB_HISTOGRAM_STOP	_IO(MSMFB_IOCTL_MAGIC, 145)
+#define MSMFB_NOTIFY_UPDATE	_IOW(MSMFB_IOCTL_MAGIC, 146, unsigned int)
 
-#define MSMFB_OVERLAY_3D       _IOWR(MSMFB_IOCTL_MAGIC, 146, \
+#define MSMFB_OVERLAY_3D       _IOWR(MSMFB_IOCTL_MAGIC, 147, \
 						struct msmfb_overlay_3d)
 
+#define MSMFB_MIXER_INFO       _IOWR(MSMFB_IOCTL_MAGIC, 148, \
+						struct msmfb_mixer_info_req)
+
+
+#define FB_TYPE_3D_PANEL 0x10101010
 #define MDP_IMGTYPE2_START 0x10000
+
+enum {
+	NOTIFY_UPDATE_START,
+	NOTIFY_UPDATE_STOP,
+};
 
 enum {
 	MDP_RGB_565,      /* RGB 565 planer */
@@ -69,6 +80,8 @@ enum {
 	MDP_Y_CBCR_H2V2_TILE,  /* Y and CbCr, pseudo planer tile */
 	MDP_Y_CR_CB_H2V2,  /* Y, Cr and Cb, planar */
 	MDP_Y_CB_CR_H2V2,  /* Y, Cb and Cr, planar */
+	MDP_Y_CRCB_H1V1,  /* Y and CrCb, pseduo planer w/ Cr is in MSB */
+	MDP_Y_CBCR_H1V1,  /* Y and CbCr, pseduo planer w/ Cb is in MSB */
 	MDP_IMGTYPE_LIMIT,
 	MDP_BGR_565 = MDP_IMGTYPE2_START,      /* BGR 565 planer */
 	MDP_FB_FORMAT,    /* framebuffer format */
@@ -219,7 +232,10 @@ struct msmfb_overlay_3d {
 
 struct msmfb_overlay_blt {
 	uint32_t enable;
-	struct msmfb_data data;
+	uint32_t offset;
+	uint32_t width;
+	uint32_t height;
+	uint32_t bpp;
 };
 
 struct mdp_histogram {
@@ -233,6 +249,24 @@ struct mdp_histogram {
 struct mdp_page_protection {
 	uint32_t page_protection;
 };
+
+
+struct mdp_mixer_info {
+	int pndx;
+	int pnum;
+	int ptype;
+	int mixer_num;
+	int z_order;
+};
+
+#define MAX_PIPE_PER_MIXER  4
+
+struct msmfb_mixer_info_req {
+	int mixer_num;
+	int cnt;
+	struct mdp_mixer_info info[MAX_PIPE_PER_MIXER];
+};
+
 
 #ifdef __KERNEL__
 

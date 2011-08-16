@@ -402,6 +402,13 @@ static void msm_timer_set_mode(enum clock_event_mode mode,
 		get_cpu_var(msm_active_clock) = clock;
 		put_cpu_var(msm_active_clock);
 		__raw_writel(TIMER_ENABLE_EN, clock->regbase + TIMER_ENABLE);
+
+		if (get_irq_chip(clock->irq.irq) &&
+		   get_irq_chip(clock->irq.irq)->unmask) {
+			get_irq_chip(clock->irq.irq)->unmask(
+				clock->irq.irq);
+		}
+
 		if (clock != &msm_clocks[MSM_CLOCK_GPT])
 			__raw_writel(TIMER_ENABLE_EN,
 				msm_clocks[MSM_CLOCK_GPT].regbase +
@@ -417,6 +424,12 @@ static void msm_timer_set_mode(enum clock_event_mode mode,
 			msm_read_timer_count(clock, LOCAL_TIMER) +
 			clock_state->sleep_offset;
 		__raw_writel(0, clock->regbase + TIMER_MATCH_VAL);
+
+		if (get_irq_chip(clock->irq.irq) &&
+		   get_irq_chip(clock->irq.irq)->mask) {
+			get_irq_chip(clock->irq.irq)->mask(
+				clock->irq.irq);
+		}
 #ifdef CONFIG_ARCH_MSM_SCORPIONMP
 		if (clock != &msm_clocks[MSM_CLOCK_DGT] || smp_processor_id())
 #endif
@@ -1037,6 +1050,8 @@ static void __init msm_timer_init(void)
 			printk(KERN_ERR "msm_timer_init: setup_irq "
 			       "failed for %s\n", cs->name);
 
+		get_irq_chip(clock->irq.irq)->mask(clock->irq.irq);
+
 		clockevents_register_device(ce);
 	}
 #ifdef CONFIG_ARCH_MSM_SCORPIONMP
@@ -1049,18 +1064,20 @@ static void __init msm_timer_init(void)
 void local_timer_setup(struct clock_event_device *evt)
 {
 	unsigned long flags;
+	static bool first_boot = true;
 	struct msm_clock *clock = &msm_clocks[MSM_GLOBAL_TIMER];
 
 #if defined(CONFIG_ARCH_MSM8X60) || defined(CONFIG_ARCH_MSM8960)
 	__raw_writel(DGT_CLK_CTL_DIV_4, MSM_TMR_BASE + DGT_CLK_CTL);
 #endif
 
-	if (!local_clock_event) {
+	if (first_boot) {
 		__raw_writel(0, clock->regbase  + TIMER_ENABLE);
 		__raw_writel(1, clock->regbase + TIMER_CLEAR);
 		__raw_writel(0, clock->regbase + TIMER_COUNT_VAL);
 		__raw_writel(~0, clock->regbase + TIMER_MATCH_VAL);
 		__get_cpu_var(msm_clocks_percpu)[clock->index].alarm = ~0;
+		first_boot = false;
 	}
 	evt->irq = clock->irq.irq;
 	evt->name = "local_timer";

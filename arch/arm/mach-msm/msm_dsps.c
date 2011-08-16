@@ -41,7 +41,7 @@
 #include <mach/msm_dsps.h>
 
 #define DRV_NAME	"msm_dsps"
-#define DRV_VERSION	"1.02"
+#define DRV_VERSION	"1.03"
 
 #define PPSS_PAUSE_REG	0x1804
 
@@ -86,14 +86,14 @@ static struct dsps_drv *drv;
 /**
  *  Load DSPS Firmware.
  */
-static int dsps_load(void)
+static int dsps_load(const char *name)
 {
 	pr_debug("%s.\n", __func__);
 
-	drv->pil = pil_get("dsps");
+	drv->pil = pil_get(name);
 
 	if (IS_ERR(drv->pil)) {
-		pr_err("%s: fail to load DSPS firmware.\n", __func__);
+		pr_err("%s: fail to load DSPS firmware %s.\n", __func__, name);
 		return -ENODEV;
 	}
 
@@ -118,7 +118,7 @@ static void dsps_suspend(void)
 	pr_debug("%s.\n", __func__);
 
 	writel_relaxed(1, drv->ppss_base + PPSS_PAUSE_REG);
-	mb(); /* Make sure write commited before ioctl returns. */
+	dsb(); /* write needs to be finished before the function returns */
 }
 
 /**
@@ -129,7 +129,7 @@ static void dsps_resume(void)
 	pr_debug("%s.\n", __func__);
 
 	writel_relaxed(0, drv->ppss_base + PPSS_PAUSE_REG);
-	mb(); /* Make sure write commited before ioctl returns. */
+	dsb(); /* write needs to be finished before the function returns */
 }
 
 /**
@@ -508,7 +508,7 @@ static int dsps_open(struct inode *ip, struct file *fp)
 		if (ret)
 			return ret;
 
-		ret = dsps_load();
+		ret = dsps_load(drv->pdata->pil_name);
 
 		if (ret) {
 			dsps_power_off_handler();

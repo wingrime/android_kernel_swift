@@ -406,6 +406,16 @@ static u32 ddl_set_dec_property(struct ddl_client_context *ddl,
 	case VCD_I_FRAME_RATE:
 		vcd_status = VCD_S_SUCCESS;
 		break;
+	case VCD_I_CONT_ON_RECONFIG:
+	{
+		DDL_MSG_LOW("Set property VCD_I_CONT_ON_RECONFIG\n");
+		if (sizeof(u32) == property_hdr->sz &&
+			DDLCLIENT_STATE_IS(ddl, DDL_CLIENT_OPEN)) {
+				decoder->cont_mode = *(u32 *)property_value;
+				vcd_status = VCD_S_SUCCESS;
+		}
+	}
+	break;
 	default:
 		vcd_status = VCD_ERR_ILLEGAL_OP;
 		break;
@@ -1041,6 +1051,12 @@ static u32 ddl_get_dec_property(struct ddl_client_context *ddl,
 			property_value);
 		vcd_status = VCD_S_SUCCESS;
 	break;
+	case VCD_I_CONT_ON_RECONFIG:
+		if (sizeof(u32) == property_hdr->sz) {
+			*(u32 *)property_value = decoder->cont_mode;
+			vcd_status = VCD_S_SUCCESS;
+		}
+	break;
 	default:
 		vcd_status = VCD_ERR_ILLEGAL_OP;
 	break;
@@ -1444,6 +1460,7 @@ void ddl_set_default_dec_property(struct ddl_client_context *ddl)
 	decoder->idr_only_decoding = false;
 	decoder->output_order = VCD_DEC_ORDER_DISPLAY;
 	decoder->field_needed_for_prev_ip = 0;
+	decoder->cont_mode = 0;
 	ddl_set_default_metadata_flag(ddl);
 	ddl_set_default_decoder_buffer_req(decoder, true);
 }
@@ -1657,28 +1674,15 @@ u32 ddl_set_default_decoder_buffer_req(struct ddl_decoder_data *decoder,
 					(!decoder->progressive_only),
 					decoder->hdr.decoding, NULL);
 	} else {
-		if (min_dpb >= decoder->min_dpb_num ||
-			decoder->idr_only_decoding) {
-			frame_size = &decoder->frame_size;
-			output_buf_req = &decoder->actual_output_buf_req;
-			input_buf_req = &decoder->actual_input_buf_req;
-			min_dpb = decoder->min_dpb_num;
-			y_cb_cr_size = decoder->y_cb_cr_size;
-		} else {
-			u32 max_dpb_size;
-
-			max_dpb_size = DDL_NO_OF_MB(
-				decoder->client_frame_size.stride,
-				decoder->client_frame_size.scan_lines);
-			max_dpb_size *= (decoder->min_dpb_num - 2);
-			DDL_MSG_ERROR("Error: H264MaxDpbSizeExceeded: %d > %d",
-				max_dpb_size, MAX_DPB_SIZE_L4PT0_MBS);
-			return false;
-		}
+		frame_size = &decoder->frame_size;
+		output_buf_req = &decoder->actual_output_buf_req;
+		input_buf_req = &decoder->actual_input_buf_req;
+		min_dpb = decoder->min_dpb_num;
+		y_cb_cr_size = decoder->y_cb_cr_size;
 	}
 	memset(output_buf_req, 0,
 		sizeof(struct vcd_buffer_requirement));
-	if (!estimate && !decoder->idr_only_decoding)
+	if ((!estimate && !decoder->idr_only_decoding) || (decoder->cont_mode))
 		output_buf_req->actual_count = min_dpb + 4;
 	else
 		output_buf_req->actual_count = min_dpb;

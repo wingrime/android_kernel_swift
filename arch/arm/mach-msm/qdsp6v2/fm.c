@@ -60,7 +60,6 @@ struct audio {
 };
 
 static struct audio fm_audio;
-
 static int fm_audio_enable(struct audio *audio)
 {
 	if (audio->enabled)
@@ -101,7 +100,7 @@ static void fm_audio_listner(u32 evt_id, union auddev_evt_data *evt_payload,
 
 		if (audio->enabled &&
 			audio->fm_dest &&
-			audio->fm_source) {
+			audio->fm_source && !audio->running) {
 
 			afe_loopback(FM_ENABLE, audio->fm_dst_copp_id,
 						audio->fm_src_copp_id);
@@ -115,10 +114,12 @@ static void fm_audio_listner(u32 evt_id, union auddev_evt_data *evt_payload,
 		else
 			audio->fm_dest = 0;
 		if (audio->running
-			&& (!audio->fm_dest || !audio->fm_source)) {
+			&& (!audio->fm_dest && !audio->fm_source)) {
 			afe_loopback(FM_DISABLE, audio->fm_dst_copp_id,
 						audio->fm_src_copp_id);
 			audio->running = 0;
+		} else {
+			pr_err("%s: device switch happened\n", __func__);
 		}
 		break;
 	case AUDDEV_EVT_STREAM_VOL_CHG:

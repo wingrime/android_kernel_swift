@@ -1,6 +1,7 @@
 /* linux/arch/arm/mach-msm/swift/board-swift-ss-driveric-panel.c
  *
  * Copyright (C) 2009-2011 LGE Inc.
+ * Copyright (c) 2011 wingrime
  * Author : MoonCheol Kang <knight0708@lge.com>
  *
  * This software is licensed under the term of GNU General Public
@@ -22,7 +23,7 @@
 #include <linux/backlight.h>
 
 #include "msm_fb.h"
-//#include "../../../../drivers/video/msm/mddihost_eve.h"
+
 #include "mddihosti.h"
 
 #define TM_GET_DID(id)	((id) & 0xff)
@@ -509,8 +510,6 @@ static int mddi_ss_driveric_on(struct platform_device *pdev)
 
 	   mdelay(1);
    }	
-	printk(KERN_INFO  "%s\n", __func__);
-
 	mfd = platform_get_drvdata(pdev);
 
 	if (system_state != SYSTEM_BOOTING) {
@@ -535,7 +534,6 @@ static int mddi_ss_driveric_off(struct platform_device *pdev)
   //struct vreg *vreg;
 	//unsigned int ret=0;
 
-	printk(KERN_INFO  "%s\n", __func__);
 	mddi_ss_driveric_powerdown(platform_get_drvdata(pdev));
 
 	//	vreg = vreg_get(NULL, "gp1");

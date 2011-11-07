@@ -347,20 +347,17 @@ static int isx005_pwdn(const struct msm_camera_sensor_info *dev, int value)
 	return rc;
 }
 
-static long isx005_snapshot_config(int mode)
+static long isx005_snapshot_config(int mode, int width, int height)
 {
 	int32_t rc;
 	unsigned short picture_width, picture_height;
-	//TODO FIX ME
-	
-	printk("TODO: Add snapsnop config params\n");
-	//	if(debug_mask)
-	//  printk("[isx005.c]%s: Input resolution[%d * %d]\n",__func__,width,height);
 
-	//picture_width = cpu_to_be16(width);
-	//picture_height = cpu_to_be16(height);
-	picture_width = cpu_to_be16(384);
-	picture_height = cpu_to_be16(288);
+		if(debug_mask)
+	  printk("[isx005.c]%s: Input resolution[%d * %d]\n",__func__,width,height);
+
+	picture_width = cpu_to_be16(width);
+	picture_height = cpu_to_be16(height);
+
 	rc = isx005_i2c_write(isx005_client->addr,
 			0x0024, picture_width, WORD_LEN);
 	if (rc < 0)
@@ -439,7 +436,7 @@ static int32_t isx005_cancel_focus(int mode)
 	return rc;
 }
 
-static long isx005_set_sensor_mode(int mode)
+static long isx005_set_sensor_mode(int mode,int width,int height)
 {
 	int32_t rc = 0;
 		
@@ -476,7 +473,7 @@ static long isx005_set_sensor_mode(int mode)
 		if(debug_mask)
 			printk("[isx005.c] sensor snapshot mode\n");
 	
-		rc = isx005_snapshot_config(mode);
+		rc = isx005_snapshot_config(mode,width,height);
 		
 		//mdelay(80);    // 1 frame skip
 		
@@ -1762,40 +1759,39 @@ int isx005_sensor_config(void __user *argp)
 		return -EFAULT;
 
 	if(debug_mask)
-		printk("[isx005.c] isx005_ioctl, cfgtype = %d, mode = %d\n",
-			cfg_data.cfgtype, cfg_data.mode);
+		printk("[isx005.c] isx005_ioctl, cfgtype = %d, mode = %d width= height %d \n",
+		       cfg_data.cfgtype, cfg_data.mode,cfg_data.width,cfg_data.height);
 
 	switch (cfg_data.cfgtype) {
 	case CFG_SET_MODE:
 		if(debug_mask)
 			printk("[isx005.c]%s: command is CFG_SET_MODE\n",__func__);
 			
-		rc = isx005_set_sensor_mode(cfg_data.mode);
+		rc = isx005_set_sensor_mode(cfg_data.mode,cfg_data.width,cfg_data.height);
 		break;
 
 	case CFG_SET_EFFECT:
 		if(debug_mask)
 			printk("stud [isx005.c]%s: command is CFG_SET_EFFECT\n",__func__);
 			
-		//rc = isx005_set_effect(cfg_data.cfg.effect);
-		rc = 0;
+		rc = isx005_set_effect(cfg_data.cfg.effect);
+
 		break;
   
   case CFG_SET_ZOOM_VIDEO:
 		if(debug_mask)
 			printk("stud [isx005.c]%s: command is CFG_SET_ZOOM\n",__func__);
-//			
-//		rc = isx005_set_zoom(cfg_data.cfg.zoom);
-		rc = 0;
+			
+		rc = isx005_set_zoom(cfg_data.cfg.zoom);
+
 		break;   
 	
 	case CFG_SET_PARM_AF_MODE:
 		if(debug_mask)
 			printk(" stud [isx005.c]%s: command is CFG_SET_PARM_AF_MODE\n",__func__);
-//		   
-		//focus_mode = cfg_data.cfg.focus.mode;
-//		rc = isx005_focus_config(cfg_data.cfg.focus.mode);
-		rc = 0;
+		focus_mode = cfg_data.cfg.focus.mode;
+		rc = isx005_focus_config(cfg_data.cfg.focus.mode);
+		
 		break;
 
 	case CFG_SET_DEFAULT_FOCUS:
@@ -1827,30 +1823,30 @@ int isx005_sensor_config(void __user *argp)
 		
 	case CFG_SET_WB:
 		if(debug_mask)
-			printk("stud - [isx005.c]%s: command is CFG_SET_WB\n",__func__);
-		rc = 0 ;
-//			
-//		rc = isx005_set_wb(cfg_data.cfg.wb);
+			printk("[isx005.c]%s: command is CFG_SET_WB\n",__func__);
+		
+			
+		rc = isx005_set_wb(cfg_data.cfg.wb);
 		break;
 
 	case CFG_SET_ISO:
 		if(debug_mask)
-			printk("stud - [isx005.c]%s: command is CFG_SET_ISO\n",__func__);
-		rc = 0 ;
-//		rc = isx005_set_iso(cfg_data.cfg.iso);
+			printk("[isx005.c]%s: command is CFG_SET_ISO\n",__func__);
+		
+		rc = isx005_set_iso(cfg_data.cfg.iso);
 		break;
 
 	case CFG_SET_SCENE_MODE:
 		if(debug_mask)
-			printk("stud - [isx005.c]%s: command is CFG_SET_SCENE_MODE\n",__func__);
-		rc = 0;
-//		rc = isx005_set_scene_mode(cfg_data.cfg.scene_mode);
+			printk("[isx005.c]%s: command is CFG_SET_SCENE_MODE\n",__func__);
+	       
+		rc = isx005_set_scene_mode(cfg_data.cfg.scene_mode);
 		break;
 	case CFG_SET_BRIGHTNESS:
 		if(debug_mask)
 			printk("stud - [isx005.c]%s: command is CFG_SET_BRIGHTNESS\n",__func__);
-		rc= 0;
-//		rc = isx005_set_brightness(cfg_data.cfg.ev);
+ 
+		rc = isx005_set_brightness(cfg_data.cfg.ev);
 		break;
 	default:
 		rc = -EFAULT;
@@ -2215,9 +2211,6 @@ static int isx005_sensor_probe(const struct msm_camera_sensor_info *info,
 	s->s_init = isx005_sensor_init;
 	s->s_release = isx005_sensor_release;
 	s->s_config  = isx005_sensor_config;
-//	s->s_pwdn  = isx005_pwdn;
-//	s->s_reset  = isx005_reset;
-
 probe_done:
 	printk("%s %s:%d\n", __FILE__, __func__, __LINE__);
 	return rc;

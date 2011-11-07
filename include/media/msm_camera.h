@@ -203,8 +203,9 @@ struct msm_ctrl_cmd {
 struct msm_vfe_evt_msg {
 	unsigned short type;	/* 1 == event (RPC), 0 == message (adsp) */
 	unsigned short msg_id;
+	int af_mode_locked;
 	unsigned int len;	/* size in, number of bytes out */
-	uint32_t frame_id;
+
 	void *data;
 };
 
@@ -413,7 +414,7 @@ struct fd_roi_info {
 };
 
 struct msm_frame {
-	struct timespec ts;
+
 	int path;
 	unsigned long buffer;
 	uint32_t y_off;
@@ -422,9 +423,6 @@ struct msm_frame {
 
 	void *cropinfo;
 	int croplen;
-	uint32_t error_code;
-	struct fd_roi_info roi_info;
-	uint32_t frame_id;
 };
 
 #define MSM_CAMERA_ERR_MASK (0xFFFFFFFF & 1)
@@ -433,7 +431,6 @@ struct msm_stats_buf {
 	int type;
 	unsigned long buffer;
 	int fd;
-	uint32_t frame_id;
 };
 
 #define MSM_V4L2_VID_CAP_TYPE	0
@@ -533,6 +530,7 @@ struct exp_gain_cfg {
 struct focus_cfg {
 	int32_t steps;
 	int dir;
+  int mode;
 };
 
 struct fps_cfg {
@@ -548,7 +546,9 @@ struct wb_info_cfg {
 struct sensor_cfg_data {
 	int cfgtype;
 	int mode;
-	int rs;
+	int rs;	
+        int width;
+	int height;
 	uint8_t max_steps;
 
 	union {
@@ -565,6 +565,12 @@ struct sensor_cfg_data {
 		struct focus_cfg focus;
 		struct fps_cfg fps;
 		struct wb_info_cfg wb_info;
+	       int8_t wb;
+               int8_t iso;
+               int8_t scene_mode;
+               int8_t ev;
+
+    int8_t zoom; 
 	} cfg;
 };
 

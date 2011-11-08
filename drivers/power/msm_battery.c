@@ -528,7 +528,7 @@ static void msm_batt_update_psy_status(void)
 			supp = &msm_psy_batt;
 
 			/* Correct charger status */
-			if (charger_status != CHARGER_STATUS_INVALID) {
+			if (charger_status != CHARGER_STATUS_INVALID ) {
 				DBG_LIMIT("BATT: No charging!\n");
 				charger_status = CHARGER_STATUS_INVALID;
 				msm_batt_info.batt_status =
@@ -560,13 +560,19 @@ static void msm_batt_update_psy_status(void)
 		}
 	} else {
 		/* Correct charger status */
-		if (charger_type != CHARGER_TYPE_INVALID &&
-		    charger_status == CHARGER_STATUS_GOOD) {
-			DBG_LIMIT("BATT: In charging\n");
-			msm_batt_info.batt_status =
-				POWER_SUPPLY_STATUS_CHARGING;
-		}
-	}
+	  		if (charger_type != CHARGER_TYPE_INVALID &&
+	  	    charger_status == CHARGER_STATUS_GOOD   ) {
+			  if (supp)
+			    {
+			      if (supp->type != POWER_SUPPLY_TYPE_BATTERY )
+				{
+				  DBG_LIMIT("BATT: In charging\n");
+				  msm_batt_info.batt_status =
+				    POWER_SUPPLY_STATUS_CHARGING;
+				}
+			    }
+	  	}
+	  }
 
 	/* Correct battery voltage and status */
 	if (!battery_voltage) {

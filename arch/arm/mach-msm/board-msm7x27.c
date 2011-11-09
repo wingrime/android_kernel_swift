@@ -446,6 +446,8 @@ static struct msm_hsusb_gadget_platform_data msm_gadget_pdata;
 
 #define SND(desc, num) { .name = #desc, .id = num }
 static struct snd_endpoint snd_endpoints_list[] = {
+  /*
+    msm 
 	SND(HANDSET, 0),
 	SND(MONO_HEADSET, 2),
 	SND(HEADSET, 3),
@@ -457,6 +459,21 @@ static struct snd_endpoint snd_endpoints_list[] = {
 	SND(IN_S_SADC_OUT_HANDSET, 16),
 	SND(IN_S_SADC_OUT_SPEAKER_PHONE, 25),
 	SND(CURRENT, 27),
+  */
+
+  //swift
+
+       SND(HANDSET, 0),
+       SND(HEADSET, 2), 
+       SND(CURRENT, 35),
+       SND(SPEAKER, 5),
+       //to do radio
+       // SND(FM_RADIO_HEADSET, 9),
+       // SND(FM_RADIO_SPEAKER, 10), 
+       SND(BT, 12),
+       SND(IN_S_SADC_OUT_HANDSET, 3),
+       SND(IN_S_SADC_OUT_SPEAKER_PHONE, 6),
+       SND(HEADSET_AND_SPEAKER, 7),
 };
 #undef SND
 

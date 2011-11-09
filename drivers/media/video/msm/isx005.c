@@ -2159,6 +2159,7 @@ static struct i2c_driver isx005_i2c_driver = {
 		.name = "isx005",
 	},
 };
+MODULE_DEVICE_TABLE(i2c, isx005_i2c_id);
 
 static int isx005_sensor_probe(const struct msm_camera_sensor_info *info,
 				struct msm_sensor_ctrl *s)

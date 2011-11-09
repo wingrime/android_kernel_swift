@@ -88,6 +88,8 @@
 #endif
 
 void __init swift_init_timed_vibrator(void);
+void __init swift_init_gpio_i2c_devices(void);
+
 
 static struct resource smc91x_resources[] = {
 	[0] = {
@@ -2160,6 +2162,8 @@ static void __init msm7x2x_init(void)
 
 	msm7x27_wlan_init();	
 	swift_init_timed_vibrator();
+
+	swift_init_gpio_i2c_devices();
 	
 
 }

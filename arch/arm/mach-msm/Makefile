@@ -181,6 +181,13 @@ obj-$(CONFIG_MACH_MSM7X27_SWIFT) += board-swift-lge-ats.o
 obj-$(CONFIG_MACH_MSM7X27_SWIFT)  += board-swift-vibrator.o
 
 
+#sensors 
+obj-y += board-swift-gpio-i2c.o
+obj-y += board-swift-msensor-bma150.o
+obj-y += board-swift-ec-ak8973.o
+
+
+
 obj-$(CONFIG_TROUT_BATTCHG) += htc_battery.o
 
 obj-$(CONFIG_HTC_PWRSINK) += htc_pwrsink.o

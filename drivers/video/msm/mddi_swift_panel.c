@@ -27,6 +27,7 @@
 
 #define TM_GET_DID(id)	((id) & 0xff)
 #define TM_GET_PID(id)	(((id) & 0xff00)>>8)
+#define SWIFT_DEBUG_LCD 0 
 
 #define LCD_CONTROL_BLOCK_BASE	0x110000
 #define INTFLG		LCD_CONTROL_BLOCK_BASE|(0x18)
@@ -289,8 +290,10 @@ static void display_table(struct display_table *table, unsigned int count)
 		default:
 			mddi_host_register_cmd_write(reg, table[i].count, table[i].val_list,
 					0, 0, 0);
+#if SWIFT_DEBUG_LCD
 		       printk(KERN_INFO, "reg : %x, val : 0x%X.\n",
 					reg, table[i].val_list[0]);
+#endif
                break;
        	}
     }
@@ -342,9 +345,9 @@ static void mddi_ss_driveric_vsync_detected(boolean detected)
 	struct timeval now;
 	uint32 elapsed_us;
 	uint32 num_vsyncs;
-
+#if SWIFT_DEBUG_LCD
 	printk(KERN_INFO "%s : detected = %d\n", __func__, detected);
-
+#endif
 	if ((detected) || (mddi_ss_driveric_vsync_attempts > 5)) {
 		if ((detected) || (mddi_ss_driveric_monitor_refresh_value)) {
 			/* if (start_time != 0) */
@@ -418,7 +421,9 @@ static void mddi_ss_driveric_vsync_detected(boolean detected)
 
 static int innotek_panel_hw_reset(void)
 {
+#if SWIFT_DEBUG_LCD
         printk(KERN_INFO  "%s : Reset pin = %d\n",__func__, GPIO_LCD_RESET_N);
+#endif
 	gpio_set_value(GPIO_LCD_RESET_N, 1);
 	mdelay(9);
 	gpio_set_value(GPIO_LCD_RESET_N, 0);
@@ -471,7 +476,9 @@ EXPORT_SYMBOL(mddi_ss_driveric_innotek_position);
 
 static int mddi_ss_driveric_powerdown(struct msm_fb_data_type *mfd)
 {
+#if SWIFT_DEBUG_LCD
         printk( KERN_INFO "%s : state = %d\n", __func__, ss_panel);
+#endif
 	mddi_ss_driveric_innotek_powerdown(mfd);
 
 	return 0;
@@ -505,9 +512,11 @@ static int mddi_ss_driveric_on(struct platform_device *pdev)
 	   }
 
 	   mdelay(1);
-   }	
-	printk(KERN_INFO  "%s\n", __func__);
+   }
 
+#if SWIFT_DEBUG_LCD	
+	printk(KERN_INFO  "%s\n", __func__);
+#endif
 	mfd = platform_get_drvdata(pdev);
 
 	if (system_state != SYSTEM_BOOTING) {
@@ -533,8 +542,9 @@ static int mddi_ss_driveric_off(struct platform_device *pdev)
 	unsigned int ret=0;
 
 	printk(KERN_INFO  "%s\n", __func__);
+#if SWIFT_DEBUG_LCD
 	mddi_ss_driveric_powerdown(platform_get_drvdata(pdev));
-
+#endif
 	//	vreg = vreg_get(NULL, "gp1");
 	//	if(IS_ERR(vreg)) {
 	//	printk(KERN_ERR "%s: vreg_get(%s) failed (%ld)\n",
@@ -566,9 +576,9 @@ mddi_ss_driveric_set_backlight(struct msm_fb_data_type * mfd)
 {
         struct backlight_device *bd;
         bd->props.brightness = mfd->bl_level;
-
+#if SWIFT_DEBUG_LCD
         printk(KERN_INFO  "[sungwoo] bl_level : %d \n", mfd->bl_level);
-        
+#endif
         rt9393_set_intensity(bd);
         
         return 0;

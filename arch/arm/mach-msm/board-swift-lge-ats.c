@@ -20,6 +20,9 @@
 //#include <mach/board_lge.h>
 #include "board-swift-lge-ats.h"
 
+int swift_hs_press();
+
+ 
 /* Ats server definitions. */
 
 #define ATS_APPS_APISPROG		0x30000006
@@ -63,7 +66,7 @@
 static int handle_ats_rpc_call(struct msm_rpc_server *server,
 							   struct rpc_request_hdr *req, unsigned len)
 {
-//	struct ats_data *data = &lge_ats_data;
+  //	struct ats_data *data = &lge_ats_data;
 
 	switch (req->procedure)
 	{
@@ -73,7 +76,10 @@ static int handle_ats_rpc_call(struct msm_rpc_server *server,
 			//	return data->handle_atcmd_eta(server, req, len);
 			break;
 		case ONCRPC_LGE_ATCMD_ATS_PROC:
-			printk("LGE DRM %s: ONCRPC_LGE_ATCMD_ATS_PROC\n", __func__);
+		  //	printk("Swift Head set Button\n", __func__);
+			
+			swift_hs_press();
+			
 			//if(data->handle_atcmd)
 			//	return data->handle_atcmd(server, req, len, data->update_atcmd_state);
 			break;

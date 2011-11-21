@@ -32,6 +32,8 @@
 #include <linux/ioctl.h>
 #include <linux/miscdevice.h>
 
+#define SWIFT_DEBUG_TS 0
+
 /* HW register map */
 #define TSSC_CTL_REG      0x100
 #define TSSC_SI_REG       0x108
@@ -92,7 +94,7 @@
 #define P_MAX	256
 
 static int PreRejectTouchCount = 0;
-static int preRejectValue = 2;
+static  int preRejectValue = 2;
 
 static uint32_t msm_tsdebug;
 module_param_named(debug_mask, msm_tsdebug, uint, 0664);
@@ -111,6 +113,9 @@ struct ts {
 	u8 keypad;
 };
 
+
+struct  ts *base_ts =0;
+
 static int TouchWindowPress = 1; 
 //extern int ts_key_event;
 int ts_key_event;
@@ -125,6 +130,26 @@ static int back_y = TS_KEY_Y;
 #if defined(TS_KEY_CALMODE)
 
 #define TOUCH_KEY_FILENAME "/data/nv/tskey_cal"
+
+int swift_hs_press()
+	/*headset event*/
+	      {
+		if (base_ts)
+		  {
+		    //if (base_ts->keypad == 0) {
+#if SWIFT_DEBUG_TS
+			  printk("input report HS key\n");
+#endif
+			  input_report_key(base_ts->input, KEY_HOME, 1);
+			  //  base_ts->keypad = KEY_HOME;
+			  	/* kick pen up timer - to make sure it expires again(!) */
+			  // mod_timer(&base_ts->timer,  msecs_to_jiffies(15));
+			 input_report_key(base_ts->input, KEY_HOME, 0);
+
+			 //	}
+		  }
+	      }
+EXPORT_SYMBOL(swift_hs_press);
 
 int ts_calibration_for_touch_key_region(char *filename, int *cal_data)
 {
@@ -398,6 +423,13 @@ static void ts_timer(unsigned long arg)
 	struct ts *ts = (struct ts *)arg;
 
 	ts->count = 0;
+	if (ts->keypad == KEY_HOME) {
+		input_report_key(ts->input, KEY_HOME, 0);
+		ts->keypad = 0;
+		return;
+	}
+
+
 //#if defined(CONFIG_MACH_MSM7X27_SWIFT)
 	input_report_abs(ts->input, ABS_PRESSURE, 0);
 	input_report_key(ts->input, BTN_TOUCH, 0);
@@ -411,10 +443,8 @@ static void ts_timer(unsigned long arg)
 		ts->keypad = 0;
 	}
 //#else
-//	if (ts->keypad == KEY_HOME) {
-//		input_report_key(ts->input, KEY_HOME, 0);
-//		ts->keypad = 0;
-//	}
+/*head set */
+
 //#endif
 	if (ts->keypad == KEY_BACK) {
 		input_report_key(ts->input, KEY_BACK, 0);
@@ -525,7 +555,9 @@ static irqreturn_t ts_interrupt(int irq, void *dev_id)
 				printk("Menu key : x=%d, y=%d\n", lx, ly);
 			
 			if (ts->keypad == 0) {
+#if SWIFT_DEBUG_TS
 				printk("input report MENU key\n");
+#endif
 				input_report_key(ts->input, KEY_MENU, 1);
 				ts->keypad = KEY_MENU;
 			}
@@ -544,7 +576,9 @@ static irqreturn_t ts_interrupt(int irq, void *dev_id)
 				printk("Back key : x=%d, y=%d\n", lx, ly);
 
 			if (ts->keypad == 0) {
+#if SWIFT_DEBUG_TS
 				printk("input report BACK key\n");
+#endif
 				input_report_key(ts->input, KEY_BACK, 1);
 				ts->keypad = KEY_BACK;
 				ts_key_event = 1;
@@ -634,7 +668,7 @@ static int __devinit ts_probe(struct platform_device *pdev)
 //#if defined(CONFIG_MACH_MSM7X27_SWIFT_REV_1)
     set_bit(KEY_MENU, input_dev->keybit); 
 //#else
-  //  set_bit(KEY_HOME, input_dev->keybit); 
+    set_bit(KEY_HOME, input_dev->keybit); 
 //#endif
 	set_bit(KEY_BACK, input_dev->keybit);
 
@@ -681,7 +715,7 @@ static int __devinit ts_probe(struct platform_device *pdev)
 //	printk("[SWIFT TOUCH CAL-PROBE] MenuKey X: %d, MENUKey y: %d\n", menu_x, menu_y); 
 //	printk("[SWIFT TOUCH CAL-PROBE] BACKKey X: %d, BACKKey y: %d\n", back_x, back_y); 
 //#endif
-
+	base_ts = ts;
 	return 0;
 
 fail_req_irq:
@@ -714,7 +748,7 @@ static int __devexit ts_remove(struct platform_device *pdev)
 	release_mem_region(res->start, resource_size(res));
 	platform_set_drvdata(pdev, NULL);
 	kfree(ts);
-
+	base_ts = 0;
 	return 0;
 }
 

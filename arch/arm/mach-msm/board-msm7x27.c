@@ -89,7 +89,7 @@
 
 void __init swift_init_timed_vibrator(void);
 void __init swift_init_gpio_i2c_devices(void);
-
+void __init swift_init_bt_device(void);
 
 static struct resource smc91x_resources[] = {
 	[0] = {
@@ -961,7 +961,8 @@ static struct platform_device msm_fb_device = {
 	}
 };
 
-#ifdef CONFIG_BT
+//#ifdef CONFIG_BT
+/*
 static struct platform_device msm_bt_power_device = {
 	.name = "bt_power",
 };
@@ -978,32 +979,33 @@ enum {
 	BT_PCM_CLK,
 	BT_HOST_WAKE,
 };
-
 static unsigned bt_config_power_on[] = {
-	GPIO_CFG(42, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),	/* WAKE */
-	GPIO_CFG(43, 2, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),	/* RFR */
-	GPIO_CFG(44, 2, GPIO_CFG_INPUT,  GPIO_CFG_NO_PULL, GPIO_CFG_2MA),	/* CTS */
-	GPIO_CFG(45, 2, GPIO_CFG_INPUT,  GPIO_CFG_NO_PULL, GPIO_CFG_2MA),	/* Rx */
-	GPIO_CFG(46, 3, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),	/* Tx */
-	GPIO_CFG(68, 1, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),	/* PCM_DOUT */
-	GPIO_CFG(69, 1, GPIO_CFG_INPUT,  GPIO_CFG_NO_PULL, GPIO_CFG_2MA),	/* PCM_DIN */
-	GPIO_CFG(70, 2, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),	/* PCM_SYNC */
-	GPIO_CFG(71, 2, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),	/* PCM_CLK */
-	GPIO_CFG(83, 0, GPIO_CFG_INPUT,  GPIO_CFG_NO_PULL, GPIO_CFG_2MA),	/* HOST_WAKE */
+	GPIO_CFG(42, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),	// WAKE
+	GPIO_CFG(43, 2, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),	// RFR 
+GPIO_CFG(44, 2, GPIO_CFG_INPUT,  GPIO_CFG_NO_PULL, GPIO_CFG_2MA),	// CTS 
+	GPIO_CFG(45, 2, GPIO_CFG_INPUT,  GPIO_CFG_NO_PULL, GPIO_CFG_2MA),	// Rx 
+	GPIO_CFG(46, 3, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),	// Tx 
+	GPIO_CFG(68, 1, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),	// PCM_DOUT 
+GPIO_CFG(69, 1, GPIO_CFG_INPUT,  GPIO_CFG_NO_PULL, GPIO_CFG_2MA),	// PCM_DIN 
+	GPIO_CFG(70, 2, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),	// PCM_SYNC 
+	GPIO_CFG(71, 2, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),	// PCM_CLK 
+  GPIO_CFG(83, 0, GPIO_CFG_INPUT,  GPIO_CFG_NO_PULL, GPIO_CFG_2MA),	// HOST_WAKE 
 };
 static unsigned bt_config_power_off[] = {
-	GPIO_CFG(42, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),	/* WAKE */
-	GPIO_CFG(43, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),	/* RFR */
-	GPIO_CFG(44, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),	/* CTS */
-	GPIO_CFG(45, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),	/* Rx */
-	GPIO_CFG(46, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),	/* Tx */
-	GPIO_CFG(68, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),	/* PCM_DOUT */
-	GPIO_CFG(69, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),	/* PCM_DIN */
-	GPIO_CFG(70, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),	/* PCM_SYNC */
-	GPIO_CFG(71, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),	/* PCM_CLK */
-	GPIO_CFG(83, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),	/* HOST_WAKE */
+  GPIO_CFG(42, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),	// WAKE 
+	GPIO_CFG(43, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),// RFR 
+	GPIO_CFG(44, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),	// CTS 
+	GPIO_CFG(45, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),	// Rx 
+	GPIO_CFG(46, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),	// Tx 
+	GPIO_CFG(68, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),	// PCM_DOUT 
+	GPIO_CFG(69, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),	// PCM_DIN 
+	GPIO_CFG(70, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),	// PCM_SYNC 
+	GPIO_CFG(71, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),	// PCM_CLK 
+	GPIO_CFG(83, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),	// HOST_WAKE 
 };
-
+*/
+/*
+//disabled on swift due lge code
 static int bluetooth_power(int on)
 {
 	struct vreg *vreg_bt;
@@ -1011,8 +1013,8 @@ static int bluetooth_power(int on)
 
 	printk(KERN_DEBUG "%s\n", __func__);
 
-	/* do not have vreg bt defined, gp6 is the same */
-	/* vreg_get parameter 1 (struct device *) is ignored */
+	// do not have vreg bt defined, gp6 is the same /
+	// vreg_get parameter 1 (struct device *) is ignored /
 	vreg_bt = vreg_get(NULL, "gp6");
 
 	if (IS_ERR(vreg_bt)) {
@@ -1033,7 +1035,7 @@ static int bluetooth_power(int on)
 			}
 		}
 
-		/* units of mV, steps of 50 mV */
+		// units of mV, steps of 50 mV //
 		rc = vreg_set_level(vreg_bt, 2600);
 		if (rc) {
 			printk(KERN_ERR "%s: vreg set level failed (%d)\n",
@@ -1075,6 +1077,9 @@ static void __init bt_power_init(void)
 #define bt_power_init(x) do {} while (0)
 #endif
 
+*/
+
+
 #ifdef CONFIG_ARCH_MSM7X27
 static struct resource kgsl_resources[] = {
 	{
@@ -1115,7 +1120,7 @@ static struct platform_device msm_device_pmic_leds = {
 	.name   = "pmic-leds",
 	.id = -1,
 };
-
+/*
 static struct resource bluesleep_resources[] = {
 	{
 		.name	= "gpio_host_wake",
@@ -1143,7 +1148,7 @@ static struct platform_device msm_bluesleep_device = {
 	.num_resources	= ARRAY_SIZE(bluesleep_resources),
 	.resource	= bluesleep_resources,
 };
-
+*/
 static struct i2c_board_info i2c_devices[] = {
 #ifdef CONFIG_MT9D112
 	{
@@ -1628,7 +1633,9 @@ static struct platform_device *devices[] __initdata = {
 	//&lcdc_gordon_panel_device,
 	&msm_device_uart_dm1,
 #ifdef CONFIG_BT
-	&msm_bt_power_device,
+
+	//disabled due lge
+	//	&msm_bt_power_devce,
 #endif
 //	&msm_device_pmic_leds,
 	&msm_device_snd,
@@ -1651,7 +1658,9 @@ static struct platform_device *devices[] __initdata = {
 #ifdef CONFIG_VB6801
 	&msm_camera_sensor_vb6801,
 #endif
-	&msm_bluesleep_device,
+	//diabled due lge code
+	//&msm_bluesleep_device,
+	//
 #ifdef CONFIG_ARCH_MSM7X27
 	&msm_device_kgsl,
 	/*ISX005 Camera*/
@@ -2196,7 +2205,8 @@ static void __init msm7x2x_init(void)
 #endif
 	printk(KERN_INFO "Init swift  mmc...\n");
 	msm7x2x_init_mmc();
-	bt_power_init();
+	//disabled due lge code
+	//	bt_power_init();
 
 	if (cpu_is_msm7x27())
 		msm_pm_set_platform_data(msm7x27_pm_data,
@@ -2210,7 +2220,7 @@ static void __init msm7x2x_init(void)
 
 	swift_init_gpio_i2c_devices();
 	
-
+	swift_init_bt_device();
 }
 
 static unsigned pmem_kernel_ebi1_size = PMEM_KERNEL_EBI1_SIZE;

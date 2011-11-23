@@ -766,8 +766,8 @@ static int msm_batt_modify_client(u32 client_handle, u32 desired_batt_voltage,
 void msm_batt_early_suspend(struct early_suspend *h)
 {
 	int rc;
-
-	pr_debug("%s: enter\n", __func__);
+	//wingrime turn off spam in dmesg
+	//	pr_debug("%s: enter\n", __func__);
 
 	if (msm_batt_info.batt_handle != INVALID_BATT_HANDLE) {
 		rc = msm_batt_modify_client(msm_batt_info.batt_handle,
@@ -784,14 +784,14 @@ void msm_batt_early_suspend(struct early_suspend *h)
 		return;
 	}
 
-	pr_debug("%s: exit\n", __func__);
+	//pr_debug("%s: exit\n", __func__);
 }
 
 void msm_batt_late_resume(struct early_suspend *h)
 {
 	int rc;
 
-	pr_debug("%s: enter\n", __func__);
+	//pr_debug("%s: enter\n", __func__);
 
 	if (msm_batt_info.batt_handle != INVALID_BATT_HANDLE) {
 		rc = msm_batt_modify_client(msm_batt_info.batt_handle,
@@ -807,7 +807,7 @@ void msm_batt_late_resume(struct early_suspend *h)
 		return;
 	}
 
-	pr_debug("%s: exit\n", __func__);
+	//pr_debug("%s: exit\n", __func__);
 }
 #endif
 

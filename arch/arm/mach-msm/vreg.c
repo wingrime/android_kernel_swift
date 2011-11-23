@@ -123,6 +123,36 @@ int vreg_enable(struct vreg *vreg)
 }
 EXPORT_SYMBOL(vreg_enable);
 
+#if defined(CONFIG_MACH_MSM7X27_SWIFT)
+int vreg_must_enable(struct vreg *vreg)
+{
+	unsigned id = vreg->id;
+	int enable = VREG_SWITCH_ENABLE;
+
+	vreg->status = msm_proc_comm(PCOM_VREG_SWITCH, &id, &enable);
+	
+	if (!vreg->status)
+		vreg->refcnt = 1;
+	
+	return vreg->status;
+}
+EXPORT_SYMBOL(vreg_must_enable);
+
+int vreg_must_disable(struct vreg *vreg)
+{
+	unsigned id = vreg->id;
+	int disable = VREG_SWITCH_DISABLE;
+
+	vreg->status = msm_proc_comm(PCOM_VREG_SWITCH, &id, &disable);
+
+	if (!vreg->status)
+		vreg->refcnt = 0;
+
+	return vreg->status;
+}
+EXPORT_SYMBOL(vreg_must_disable);
+#endif
+
 int vreg_disable(struct vreg *vreg)
 {
 	unsigned id = vreg->id;

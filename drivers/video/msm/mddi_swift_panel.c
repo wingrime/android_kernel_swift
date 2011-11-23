@@ -413,9 +413,6 @@ static int mddi_ss_driveric_on(struct platform_device *pdev)
 	if (mfd->key != MFD_KEY)
 		return -EINVAL;
 
-#if 0
-		mddi_ss_driveric_innotek_init(mfd);
-#endif
 
 	return 0;
 }

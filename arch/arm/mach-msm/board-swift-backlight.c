@@ -82,7 +82,8 @@ static int rt9393_power_down(void)
 static int rt9393_power_on(void)
 {
 	gpio_set_value(GPIO_BL_EN, 1);
-	udelay(40); // 30us < tIH.INIT
+	//	udelay(40); // 30us < tIH.INIT
+	udelay(150);
 	power_state = POWER_ON;
 	current_intensity = MAX_BRIGHTNESS;
 	KNIGHT_DBG(lge_bl_debug_mask, "\n");

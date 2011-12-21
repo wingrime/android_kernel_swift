@@ -339,6 +339,261 @@ struct msm_audio_eq_stream_config {
 	struct msm_audio_eq_band	eq_bands[AUDIO_MAX_EQ_BANDS];
 } __attribute__ ((packed));
 
+struct msm_snd_set_loopback_mode_param {
+	int32_t mode;
+	int get_param;
+};
+/* LGE_CHANGE_S, [junyoub.an] , 2010-02-19, For audio cal tool.*/
+
+typedef enum {
+  VOC_CODEC_SPEAKER_MEDIA					= 0,  	/* BT Intercom                      */	
+  VOC_CODEC_STEREO_HEADSET_LOOPBACK		    = 1, 	 	/* On Chip Codec Channel 2          */
+  VOC_CODEC_STEREO_HEADSET					= 2,  	/* On Chip Codec Channels 1 and 2   */
+  VOC_CODEC_STEREO_HEADSET_MEDIA			= 3,  	/* On Chip Codec Aux. Channel       */
+  VOC_CODEC_STEREO_HEADSET_WITHOUT_MIC		= 4,  	/* Headset without mic                   */
+  VOC_CODEC_ON_CHIP_0						= 5,		/* On Chip Codec Channel 1 */
+  VOC_CODEC_SPEAKER_PHONE					= 6,  	/* External BT codec                */
+  VOC_CODEC_SPEAKER_HEADSET				    = 7,  	/* BT local audio path              */
+  VOC_CODEC_VOICE_RECORDER					= 8,
+  VOC_CODEC_FM_RADIO_HEADSET_MEDIA			= 9,     /* FM_RADIO HEADSET*/
+  VOC_CODEC_FM_RADIO_SPEAKER_MEDIA			= 10,  /* FM_RADIO SPEAKER*/ 
+  VOC_CODEC_OFF_BOARD			    		= 11,
+  VOC_CODEC_BT_HEADSET					    = 12, 	/* Aux. Codec                       */
+  VOC_CODEC_A2DP_BT_HEADSET					= 13, 	/* Stereo DAC                       */
+  VOC_CODEC_TTY_ON_CHIP_1						= 14,	/* TTY On Chip Codec Channel 2		*/
+  VOC_CODEC_TTY_VCO 							= 15,	/* Voice Carry-Over TTY 			*/
+  VOC_CODEC_TTY_HCO 							= 16,	/* Hearing Carry-Over TTY			*/
+  VOC_CODEC_TTY_OFF_BOARD						= 17,	/* TTY Aux. Codec					*/
+  VOC_CODEC_RX_EXT_SDAC_TX_INTERNAL 			= 18,	/* External Stereo DAC and Tx Internal */
+  VOC_CODEC_IN_STEREO_SADC_OUT_MONO_HANDSET 	= 19,	/* Stereo line in Mono out	  */
+  VOC_CODEC_IN_STEREO_SADC_OUT_STEREO_HEADSET	= 20,	/* Stereo line in STEREO out  */
+  VOC_CODEC_TX_INT_SADC_RX_EXT_AUXPCM			= 21,	/* Stereo line in, AUX_PCM out*/ 
+  VOC_CODEC_EXT_STEREO_SADC_OUT_MONO_HANDSET	= 22,	/* Stereo line in Mono out	 */
+  VOC_CODEC_EXT_STEREO_SADC_OUT_STEREO_HEADSET	= 23,	/* Stereo line in STEREO out */
+  VOC_CODEC_USB 								= 24,	/* USB off-board codec				*/
+  VOC_CODEC_STEREO_USB							= 25,	/* Stereo USB off-board codec		*/
+  VOC_CODEC_ON_CHIP_0_DUAL_MIC					= 26,	/* On Chip dual mic stereo channels */
+  VOC_CODEC_MAX 								= 27,
+  VOC_CODEC_NONE								= 28,		  /* Place Holder					  */
+  VOC_CODEC_32BIT_DUMMY                         = 0x7FFFFFFF
+} voc_codec_type;
+
+struct msm_snd_set_voccal_param {
+	voc_codec_type voc_codec;	/* voc_codec */
+	int voccal_param_type; //voccal_property_enum_type voccal_param_type;	/* voccal_param_type */
+	uint32_t param_val;	/* param_val */
+	int get_flag;  //get_flag = 0 for set, get_flag = 1 for get
+	int get_param;
+};
+
+typedef enum{
+  RX_FLAG,
+  RX_STAGE_CNT,
+  RX_STAGE1_A1,
+  RX_STAGE1_A2,
+  RX_STAGE1_B0,
+  RX_STAGE1_B1,
+  RX_STAGE1_B2,
+  RX_STAGE2_A1,
+  RX_STAGE2_A2,
+  RX_STAGE2_B0,
+  RX_STAGE2_B1,
+  RX_STAGE2_B2,
+  RX_STAGE3_A1,
+  RX_STAGE3_A2,
+  RX_STAGE3_B0,
+  RX_STAGE3_B1,
+  RX_STAGE3_B2,
+  RX_STAGE4_A1,
+  RX_STAGE4_A2,
+  RX_STAGE4_B0,
+  RX_STAGE4_B1,
+  RX_STAGE4_B2,
+  RX_STAGE5_A1,
+  RX_STAGE5_A2,
+  RX_STAGE5_B0,
+  RX_STAGE5_B1,
+  RX_STAGE5_B2,
+  TX_FLAG,
+  TX_STAGE_CNT,
+  TX_STAGE1_A1,
+  TX_STAGE1_A2,
+  TX_STAGE1_B0,
+  TX_STAGE1_B1,
+  TX_STAGE1_B2,
+  TX_STAGE2_A1,
+  TX_STAGE2_A2,
+  TX_STAGE2_B0,
+  TX_STAGE2_B1,
+  TX_STAGE2_B2,
+  TX_STAGE3_A1,
+  TX_STAGE3_A2,
+  TX_STAGE3_B0,
+  TX_STAGE3_B1,
+  TX_STAGE3_B2,
+  TX_STAGE4_A1,
+  TX_STAGE4_A2,
+  TX_STAGE4_B0,
+  TX_STAGE4_B1,
+  TX_STAGE4_B2,
+  TX_STAGE5_A1,
+  TX_STAGE5_A2,
+  TX_STAGE5_B0,
+  TX_STAGE5_B1,
+  TX_STAGE5_B2, 
+  IIR_PARAM_MAX,
+}voccal_iir_filter_type;
+
+struct msm_snd_set_voccal_iir_param {
+     voc_codec_type voc_codec;
+     voccal_iir_filter_type voccal_iir_param_type;
+     int32_t param_val;
+	int get_flag;  //get_flag = 0 for set, get_flag = 1 for get
+	 int get_param;
+};
+
+typedef enum {
+  VOC_EC_OFF = 0,
+  VOC_EC_ESEC,
+  VOC_EC_HEADSET,
+  VOC_EC_AEC,
+  VOC_EC_SPEAKER,
+  VOC_EC_BT,
+  VOC_EC_DEFAULT
+} voc_ec_type;
+
+typedef enum {
+  NLPP_LIMIT,
+  NLPP_GAIN,
+  NLMS_LIMIT,
+  MODE,
+  TUNING_MODE,
+  ECHO_PATH_DELAY,
+  OUTPUTGAIN,
+  INPUTGAIN,
+  NLMS_TWOALPHA,
+  NLMS_ERL,
+  NLMS_TAPS,
+  NLMS_PRESET_COEFS,
+  NLMS_OFFSET,
+  NLMS_ERL_BG,
+  NLMS_TAPS_BG,
+  PCD_THRESHOLD,
+  MINIMUM_ERL,
+  ERL_STEP,
+  MAX_NOISE_FLOOR,
+  DET_THRESHOLD,
+  SPDET_FAR,
+  SPDET_MIC,
+  SPDET_XCLIP,
+  DENS_TAIL_ALPHA,
+  DENS_TAIL_PORTION,
+  DENS_GAMMA_E_ALPHA,
+  DENS_GAMMA_E_DT,
+  DENS_GAMMA_E_LOW,
+  DENS_GAMMA_E_RESCUE,
+  DENS_GAMMA_E_HIGH,
+  DENS_SPDET_NEAR,
+  DENS_SPDET_ACT,
+  DENS_GAMMA_N,
+  DENS_NFE_BLOCKSIZE,
+  DENS_LIMIT_NS,
+  DENS_NL_ATTEN,
+  DENS_CNI_LEVEL,
+  WB_ECHO_RATIO
+}nextgen_ec_param_enum_type;
+
+struct msm_snd_set_next_ec_param {
+     voc_ec_type ec_mode;
+     nextgen_ec_param_enum_type ec_param_type;
+     int32_t param_val;
+     int get_flag;  //get_flag = 0 for set, get_flag = 1 for get
+	 int get_param;
+};
+
+struct msm_snd_set_rx_volume_param {
+     uint32_t device;
+     uint32_t method;
+     uint8_t idx;
+     int32_t param_val;
+     int get_flag;  //get_flag = 0 for set, get_flag = 1 for get
+	 int get_param;
+};
+
+struct msm_snd_set_dtmf_volume_param {
+     uint32_t device;
+     uint32_t method;
+     uint8_t idx;
+     int32_t param_val;
+     int get_flag;  //get_flag = 0 for set, get_flag = 1 for get
+	 int get_param;
+};
+
+struct msm_snd_set_pad_value_param {
+     uint32_t device;
+     uint32_t method;
+     uint8_t idx;
+     int32_t param_val;
+     int get_flag;  //get_flag = 0 for set, get_flag = 1 for get
+	 int get_param;
+};
+
+typedef enum {
+  HPH = 0,
+  SPK,
+} amp_gain_type;
+
+struct msm_snd_set_amp_gain_param {
+     voc_codec_type voc_codec;
+     amp_gain_type gain_type;
+     int32_t value;
+     int get_flag;  //get_flag = 0 for set, get_flag = 1 for get
+	 int get_param;
+};
+
+struct msm_snd_set_fm_radio_vol_param {
+	int32_t volume;
+};
+
+struct msm_snd_set_micamp_gain_param {
+     voc_codec_type voc_codec;
+     int mic_channel;
+     int32_t value;
+     int get_flag;  //get_flag = 0 for set, get_flag = 1 for get
+	 int get_param;
+};
+
+struct msm_snd_set_voice_clarity_param {
+	int32_t mode;
+	int get_param;
+};
+
+struct msm_snd_set_hook_mode_param {
+	int32_t mode;
+	int get_param;
+};
+
+#define SND_SET_VOCCAL_PARAM _IOWR(SND_IOCTL_MAGIC, 6, struct msm_snd_set_voccal_param *)
+#define SND_SET_VOCCAL_IIR_PARAM _IOWR(SND_IOCTL_MAGIC, 7, struct msm_snd_set_voccal_iir_param *)
+#define SND_SET_NEXT_EC_PARAM _IOWR(SND_IOCTL_MAGIC, 8, struct msm_snd_set_next_ec_param *)
+#define SND_SET_RX_VOLUME _IOWR(SND_IOCTL_MAGIC, 9, struct msm_snd_set_rx_volume_param *)
+#define SND_SET_DTMF_VOLUME _IOWR(SND_IOCTL_MAGIC, 10, struct msm_snd_set_dtmf_volume_param *)
+#define SND_SET_PAD_VALUE _IOWR(SND_IOCTL_MAGIC, 11, struct msm_snd_set_pad_value_param *)
+#define SND_SET_LOOPBACK_MODE 				_IOWR(SND_IOCTL_MAGIC, 12, struct msm_snd_set_loopback_mode_param *)
+#define SND_SET_AMP_GAIN _IOWR(SND_IOCTL_MAGIC, 13, struct msm_snd_set_amp_gain_param *)
+#define SND_WRITE_EFS _IOWR(SND_IOCTL_MAGIC, 14, int *)
+#define SND_SET_MICAMP_GAIN _IOWR(SND_IOCTL_MAGIC, 15, struct msm_snd_set_micamp_gain_param *)
+#define SND_WRITE_MEM _IOWR(SND_IOCTL_MAGIC, 16, int *)
+#define SND_SET_FM_RADIO_VOLUME _IOWR(SND_IOCTL_MAGIC, 17, int *)
+#define SND_SET_VOICE_CLARITY _IOWR(SND_IOCTL_MAGIC, 18, struct msm_snd_set_voice_clarity_param *)
+#define SND_SET_POWER_OFF _IOWR(SND_IOCTL_MAGIC, 19, int *)
+/* LGE_CHANGE_E, [junyoub.an] , 2010-02-19, For audio cal tool.*/
+
+/* LGE_CHANGE_S, [junyoub.an] , 2010-02-28, for hook key*/
+#define SND_SET_HOOK_MODE _IOWR(SND_IOCTL_MAGIC, 20, struct msm_snd_set_hook_mode_param *)
+/* LGE_CHANGE_S, [junyoub.an] , 2010-09-05, To control amp*/
+#define SND_SET_AMP_CONTROL _IOWR(SND_IOCTL_MAGIC, 21, struct msm_snd_set_hook_mode_param *)
+
 struct msm_acdb_cmd_device {
 	uint32_t     command_id;
 	uint32_t     device_id;

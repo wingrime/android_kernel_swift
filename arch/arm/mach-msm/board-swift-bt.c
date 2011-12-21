@@ -1,4 +1,4 @@
-/* arch/arm/mach-msm/lge/board-alohag-bt.c
+/* arch/arm/mach-msm/lge/board-swift-bt.c
  * Copyright (C) 2009 LGE, Inc.
  *
  * This software is licensed under the terms of the GNU General Public
@@ -18,13 +18,7 @@
 #include <mach/gpio.h>
 #include <mach/vreg.h>
 #include <linux/rfkill.h>
-//#include <mach/board_swift.h>
-//#include <mach/board_lge.h>
-
-// #include "board-alohag.h"
-//remove when wifi   ported
-
-
+#include <linux/delay.h>
 
 struct bluetooth_platform_data {
 	int (*bluetooth_power)(int on);
@@ -35,13 +29,6 @@ struct bluesleep_platform_data {
 	int bluetooth_port_num;
 };
 
-#define CONFIG_BCM4325_GPIO_WL_RESET 93
-#include <linux/delay.h>
-#include <linux/rfkill.h>
-
-#define GPIO_BT_RESET_N     96
-#define GPIO_BT_REG_ON      21
-#define GPIO_WL_RESET_N     CONFIG_BCM4325_GPIO_WL_RESET
 
 /* bluetooth gpio pin */
 enum {
@@ -55,13 +42,8 @@ enum {
 	BT_PCM_SYNC 	= 70,
 	BT_PCM_CLK		= 71,
 	BT_HOST_WAKE	= 83,
-#if 1
 	BT_RESET_N			= 96,
-#else
-	BT_RESET_N			= 123,
-#endif
 };
-
 
 #ifdef CONFIG_BT
 static unsigned bt_config_power_on[] = {
@@ -72,8 +54,8 @@ static unsigned bt_config_power_on[] = {
 	GPIO_CFG(BT_TX, 3, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),	/* Tx */
 	GPIO_CFG(BT_PCM_DOUT, 1, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),	/* PCM_DOUT */
 	GPIO_CFG(BT_PCM_DIN, 1, GPIO_CFG_INPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),	/* PCM_DIN */
-	GPIO_CFG(BT_PCM_SYNC, 2, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),	/* PCM_SYNC */
-	GPIO_CFG(BT_PCM_CLK, 2, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),	/* PCM_CLK */
+	GPIO_CFG(BT_PCM_SYNC, 1, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),	/* PCM_SYNC */
+	GPIO_CFG(BT_PCM_CLK, 1, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),	/* PCM_CLK */
 	GPIO_CFG(BT_HOST_WAKE, 0, GPIO_CFG_INPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),	/* HOST_WAKE */
 	GPIO_CFG(BT_RESET_N, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),	/* RESET_N */
 };
@@ -91,23 +73,23 @@ static unsigned bt_config_power_off[] = {
 	GPIO_CFG(BT_RESET_N, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),	/* RESET_N */	
 };
 
-static int alohag_bluetooth_toggle_radio(void *data, bool blocked)
+static int thunderg_bluetooth_toggle_radio(void *data, bool state)
 {
 	int ret;
 	int (*power_control)(int enable);
 
-  printk(KERN_DEBUG "%s\n", __func__);
-
-  power_control = ((struct bluetooth_platform_data *)data)->bluetooth_power;
-	ret = (*power_control)((blocked ==  0) ? 1 : 0);
+    power_control = ((struct bluetooth_platform_data *)data)->bluetooth_power;
+	ret = (*power_control)((state == RFKILL_USER_STATE_SOFT_BLOCKED) ? 1 : 0);
 	return ret;
 }
 
-static int alohag_bluetooth_power(int on)
+static int thunderg_bluetooth_power(int on)
 {
 	int pin, rc;
 
-	printk(KERN_DEBUG "%s\n turn %d", __func__,on);
+	
+	printk(KERN_DEBUG "%s\n", __func__);
+	printk( "%s %d\n", __func__, on);
 
 	if (on) {
 		for (pin = 0; pin < ARRAY_SIZE(bt_config_power_on); pin++) {
@@ -120,26 +102,21 @@ static int alohag_bluetooth_power(int on)
 				return -EIO;
 			}
 		}
-#if 1
-		/*Regulator On*/
-		if(!gpio_get_value(GPIO_BT_REG_ON))
-			gpio_set_value(GPIO_BT_REG_ON, 1);
-		msleep (200);		
-		/*Reset Off*/
-		gpio_set_value(GPIO_BT_RESET_N, 0); 
-		msleep(15);/*BCM4325 Requirement*/		
-		/*Reset On*/
-		gpio_set_value(GPIO_BT_RESET_N, 1);
-		/*for safety*/
-		msleep(200);
+        //Turn Bluetooth Power On if and only if not turned on by WLAN yet.
+        if (!gpio_get_value(CONFIG_BCM4325_GPIO_WL_REGON)) //#23
+		    gpio_set_value(CONFIG_BCM4325_GPIO_WL_REGON, 1); //#23
+		mdelay(100);
+		gpio_set_value(BT_RESET_N, 0);
+		mdelay(100);
+		gpio_set_value(BT_RESET_N, 1);
+		mdelay(100);
 
-#else
-		gpio_set_value(BT_RESET_N, 0); 	
-		mdelay(15);
-		gpio_set_value(BT_RESET_N, 1); 	
-		mdelay(200);		
-#endif 
 	} else {
+        //Turn Bluetooth Power Off if and only if not used by WLAN anymore.
+        if (!gpio_get_value(CONFIG_BCM4325_GPIO_WL_RESET)) //#93
+         gpio_set_value(CONFIG_BCM4325_GPIO_WL_REGON, 0); //#23
+
+		gpio_set_value(BT_RESET_N, 0);
 		for (pin = 0; pin < ARRAY_SIZE(bt_config_power_off); pin++) {
 			rc = gpio_tlmm_config(bt_config_power_off[pin],
 					      GPIO_CFG_ENABLE);
@@ -150,31 +127,30 @@ static int alohag_bluetooth_power(int on)
 				return -EIO;
 			}
 		}
-		gpio_set_value(GPIO_BT_RESET_N, 0);
-		if(!gpio_get_value(GPIO_WL_RESET_N))
-			gpio_set_value(GPIO_BT_REG_ON, 0);	
 	}
 	return 0;
 }
 
-static struct bluetooth_platform_data alohag_bluetooth_data = {
-	.bluetooth_power = alohag_bluetooth_power,
-	.bluetooth_toggle_radio = alohag_bluetooth_toggle_radio,
+static struct bluetooth_platform_data thunderg_bluetooth_data = {
+	.bluetooth_power = thunderg_bluetooth_power,
+	.bluetooth_toggle_radio = thunderg_bluetooth_toggle_radio,
 };
 
 static struct platform_device msm_bt_power_device = {
 	.name = "bt_power",
 	.dev = {
-		.platform_data = &alohag_bluetooth_data,
+		.platform_data = &thunderg_bluetooth_data,
 	},		
 };
 
 
 static void __init bt_power_init(void)
 {
-       alohag_bluetooth_power(1);
-       msleep (100);
-       alohag_bluetooth_power(0);       
+/* LGE_CHANGE_S, [kidong0420.kim@lge.com] , 2010-06-18, for current consumption*/
+  gpio_set_value(23, 1);
+  ssleep(1); /* 1 sec */
+  gpio_set_value(23, 0);
+/* LGE_CHANGE_E, [kidong0420.kim@lge.com] , 2010-06-18, for current consumption*/
 }
 #else
 #define bt_power_init(x) do {} while (0)
@@ -201,11 +177,18 @@ static struct resource bluesleep_resources[] = {
 	},
 };
 
+static struct bluesleep_platform_data thunderg_bluesleep_data = {
+	.bluetooth_port_num = 0,
+};
+
 static struct platform_device msm_bluesleep_device = {
 	.name = "bluesleep",
 	.id		= -1,
 	.num_resources	= ARRAY_SIZE(bluesleep_resources),
 	.resource	= bluesleep_resources,
+	.dev = {
+		.platform_data = &thunderg_bluesleep_data,
+	},	
 };
 
 void __init swift_init_bt_device(void)

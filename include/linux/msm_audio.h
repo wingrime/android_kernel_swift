@@ -107,7 +107,9 @@
 #define BT_A2DP_SPKR			0x0B
 #define TTY_HEADSET_MIC			0x0C
 #define TTY_HEADSET_SPKR		0x0D
-
+//swift
+#define FM_RADIO_HEADSET		0x0E
+#define FM_RADIO_SPEAKER		0x0F
 /* Default devices are not supported in a */
 /* device switching context. Only supported */
 /* for stream devices. */

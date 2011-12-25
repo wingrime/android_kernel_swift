@@ -208,10 +208,8 @@ void __init init_i2c_gpio_amp(void)
 
 void __init swift_init_gpio_i2c_devices(void)
 {
-  // disable not using drivers --wingrime
-     init_i2c_gpio_compass();
-    init_i2c_gpio_motion();
-    //  init_i2c_gpio_amp();
-
-	return;
+  init_i2c_gpio_compass();
+  init_i2c_gpio_motion();
+  init_i2c_gpio_amp();
+  
 }

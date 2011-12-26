@@ -490,18 +490,43 @@ static struct snd_endpoint snd_endpoints_list[] = {
   */
 
   //swift
-
+  /*
        SND(HANDSET, 0),
        SND(HEADSET, 2), 
        SND(CURRENT, 35),
        SND(SPEAKER, 5),
-       //to do radio
-       // SND(FM_RADIO_HEADSET, 9),
-       // SND(FM_RADIO_SPEAKER, 10), 
+       // radio
+       SND(FM_RADIO_HEADSET, 9),
+       SND(FM_RADIO_SPEAKER, 10), 
        SND(BT, 12),
        SND(IN_S_SADC_OUT_HANDSET, 3),
        SND(IN_S_SADC_OUT_SPEAKER_PHONE, 6),
        SND(HEADSET_AND_SPEAKER, 7),
+  */
+
+       SND(HANDSET, 0),
+       SND(HEADSET, 2),
+       SND(TTY_HEADSET, 2),
+       SND(HEADSET_STEREO, 2),
+       SND(HEADSET_LOOPBACK, 3),
+       SND(SPEAKER_PHONE, 6),
+       SND(SPEAKER_IN_CALL, 6),
+       SND(SPEAKER_AUDIO, 5),
+       SND(SPEAKER, 5), // 6
+       SND(SPEAKER_RING, 5),
+       SND(TTY_VCO, 5),
+       SND(TTY_HCO, 5),
+       // SND(HEADSET_SPEAKER, 7),
+       SND(HEADSET_AND_SPEAKER, 7),
+       SND(VOICE_RECORDER, 8),
+       SND(FM_RADIO_HEADSET_MEDIA, 9),
+       SND(FM_HEADSET, 9),
+       SND(FM_RADIO_SPEAKER_MEDIA, 10),
+       SND(FM_SPEAKER, 10),
+       SND(BT, 12),
+       SND(BT_A2DP, 11),
+       SND(CURRENT, 35),
+
 };
 #undef SND
 

@@ -27,6 +27,7 @@
 #define TM_GET_DID(id)	((id) & 0xff)
 #define TM_GET_PID(id)	(((id) & 0xff00)>>8)
 #define SWIFT_DEBUG_LCD 0 
+#define SWIFT_LCD_VREG 0
 
 #define LCD_CONTROL_BLOCK_BASE	0x110000
 #define INTFLG		LCD_CONTROL_BLOCK_BASE|(0x18)
@@ -66,7 +67,6 @@ static void *mddi_ss_driveric_vsync_handler_arg;
 static uint16 mddi_ss_driveric_vsync_attempts;
 
 static mddi_ss_driveric_state_t ss_driveric_state = SS_POWER_OFF;
-static mddi_ss_panel_t ss_panel = INNOTEK;
 static struct msm_panel_common_pdata *mddi_ss_driveric_pdata;
 
 static int mddi_ss_driveric_on(struct platform_device *pdev);
@@ -80,15 +80,6 @@ struct display_table {
 	unsigned reg;
 	unsigned char count;
 	unsigned int val_list[5];
-};
-
-static struct display_table mddi_innotek_display_on[] = {
-	{0x29, 1, {0x00000000}},
-};
-
-static struct display_table mddi_innotek_display_off[] = {
-	{0x28, 1, {0x00000000}},
-
 };
 
 static struct display_table mddi_innotek_power_on[] = {
@@ -317,22 +308,6 @@ static int innotek_panel_hw_reset(void)
 	return 0;
 }
 
-static int mddi_ss_driveric_display_on(struct msm_fb_data_type *mfd)
-{
-	ss_driveric_state = SS_POWER_ON;
-	display_table(mddi_innotek_display_on, ARRAY_SIZE(mddi_innotek_display_on));
-
-	return 0;
-}
-
-static int mddi_ss_driveric_display_off(struct msm_fb_data_type *mfd)
-{
-	ss_driveric_state = SS_POWER_OFF;
-	display_table(mddi_innotek_display_off, ARRAY_SIZE(mddi_innotek_display_off));
-
-	return 0;
-}
-
 static int mddi_ss_driveric_innotek_powerdown(struct msm_fb_data_type *mfd)
 {
 
@@ -371,9 +346,11 @@ static int mddi_ss_driveric_powerdown(struct msm_fb_data_type *mfd)
 static int mddi_ss_driveric_on(struct platform_device *pdev)
 {
 	struct msm_fb_data_type *mfd;
+
+#if SWIFT_LCD_VREG
 	struct vreg *vreg;
 	unsigned int ret=0;
-	
+
    if (system_state != SYSTEM_BOOTING) {
    	vreg = vreg_get(NULL, "gp1");
 	   if(IS_ERR(vreg)) {
@@ -394,9 +371,10 @@ static int mddi_ss_driveric_on(struct platform_device *pdev)
 	   if (ret) {
 		   printk(KERN_ERR "%s: vreg enabled failed!\n", __func__);
 	   }
-
 	   mdelay(1);
+
    }
+#endif
 
 #if SWIFT_DEBUG_LCD	
 	printk(KERN_INFO  "%s\n", __func__);
@@ -419,13 +397,17 @@ static int mddi_ss_driveric_on(struct platform_device *pdev)
 
 static int mddi_ss_driveric_off(struct platform_device *pdev)
 {
+#if SWIFT_LCD_VREG
 	struct vreg *vreg;
 	unsigned int ret=0;
-
+#endif
 #if SWIFT_DEBUG_LCD
 	printk(KERN_INFO  "%s\n", __func__);
 #endif	
-	mddi_ss_driveric_powerdown(platform_get_drvdata(pdev));	
+	mddi_ss_driveric_powerdown(platform_get_drvdata(pdev));
+
+#if SWIFT_LCD_VREG
+	
 		vreg = vreg_get(NULL, "gp1");
 		if(IS_ERR(vreg)) {
 		printk(KERN_ERR "%s: vreg_get(%s) failed (%ld)\n",
@@ -444,7 +426,7 @@ static int mddi_ss_driveric_off(struct platform_device *pdev)
 	if(ret) {
 		printk(KERN_ERR "%s: vreg disabled failed!\n", __func__);
 			}
-
+#endif
 	return 0;
 }
 

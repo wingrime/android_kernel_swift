@@ -87,6 +87,22 @@
 #define PMEM_KERNEL_EBI1_SIZE	0x1C000
 #endif
 
+/* sdcard related macros */
+#ifdef CONFIG_MMC_MSM_CARD_HW_DETECTION
+#define GPIO_SD_DETECT_N 49
+#define GPIO_MMC_COVER_DETECT 77
+#define VREG_SD_LEVEL 3000
+
+#define GPIO_SD_DATA_3 51
+#define GPIO_SD_DATA_2 52
+#define GPIO_SD_DATA_1 53
+#define GPIO_SD_DATA_0 54
+#define GPIO_SD_CMD 55
+#define GPIO_SD_CLK 56
+#endif
+
+#define GPIO_MMC_CD_N 49
+
 void __init swift_init_timed_vibrator(void);
 void __init swift_init_gpio_i2c_devices(void);
 void __init swift_init_bt_device(void);
@@ -1902,6 +1918,52 @@ static struct mmc_platform_data msm7x2x_sdc1_data = {
 };
 #endif
 
+#if defined(CONFIG_LGE_BCM432X_PATCH)
+static unsigned int bcm432x_sdcc_wlan_slot_status(struct device *dev)
+{
+	printk(KERN_ERR "%s: %d %d\n", __func__, CONFIG_BCM4325_GPIO_WL_RESET, gpio_get_value(CONFIG_BCM4325_GPIO_WL_RESET));
+    return gpio_get_value(CONFIG_BCM4325_GPIO_WL_RESET);
+}
+
+static struct mmc_platform_data bcm432x_sdcc_wlan_data = {
+	.ocr_mask   	= MMC_VDD_30_31,
+	.translate_vdd	= msm_sdcc_setup_power,
+	.status     	= bcm432x_sdcc_wlan_slot_status,
+	.status_irq	= MSM_GPIO_TO_INT(CONFIG_BCM4325_GPIO_WL_RESET),
+	.irq_flags      = IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING,
+	.mmc_bus_width  = MMC_CAP_4_BIT_DATA,
+	.msmsdcc_fmin	= 144000,
+	.msmsdcc_fmid	= 24576000,
+	.msmsdcc_fmax	= 49152000,
+	.nonremovable	= 1,
+};
+#endif  /* CONFIG_LGE_BCM432X_PATCH*/
+
+#define SWIFT_MMC_VDD (MMC_VDD_165_195 | MMC_VDD_20_21 | MMC_VDD_21_22 \
+			| MMC_VDD_22_23 | MMC_VDD_23_24 | MMC_VDD_24_25 \
+			| MMC_VDD_25_26 | MMC_VDD_26_27 | MMC_VDD_27_28 \
+			| MMC_VDD_28_29 | MMC_VDD_29_30)
+
+static struct mmc_platform_data msm7x2x_sdcc_data = {
+#ifdef CONFIG_MMC_MSM_CARD_HW_DETECTION
+	.ocr_mask	= SWIFT_MMC_VDD, //MMC_VDD_30_31,
+	.translate_vdd	= msm_sdcc_setup_power,
+	.status 	= thunderg_sdcc_slot_status,
+	.status_irq 	= MSM_GPIO_TO_INT(GPIO_MMC_COVER_DETECT),
+	.irq_flags	= IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING,
+	.mmc_bus_width	= MMC_CAP_4_BIT_DATA,
+#else
+	.ocr_mask	= MMC_VDD_28_29,
+	.translate_vdd	= msm_sdcc_setup_power,
+	.mmc_bus_width  = MMC_CAP_4_BIT_DATA,
+#endif	
+	.msmsdcc_fmin	= 144000,
+	.msmsdcc_fmid	= 24576000,
+	.msmsdcc_fmax	= 49152000,
+	.nonremovable	= 0,
+};
+
+
 #ifdef CONFIG_MMC_MSM_SDC2_SUPPORT
 static struct mmc_platform_data msm7x2x_sdc2_data = {
 	.ocr_mask	= MMC_VDD_28_29,
@@ -1964,14 +2026,32 @@ static void __init msm7x2x_init_mmc(void)
 #ifdef CONFIG_MMC_MSM_SDC1_SUPPORT
 	msm_add_sdcc(1, &msm7x2x_sdc1_data);
 #endif
-
-	if (machine_is_msm7x25_surf() || machine_is_msm7x27_surf() ||  machine_is_msm7x27_swift() ||
-		machine_is_msm7x27_ffa()) {
+  if (machine_is_msm7x25_surf() || machine_is_msm7x27_surf() ||  machine_is_msm7x27_swift() ||
+    machine_is_msm7x27_ffa()) {
 #ifdef CONFIG_MMC_MSM_SDC2_SUPPORT
-		msm_sdcc_setup_gpio(2, 1);
-		msm_add_sdcc(2, &msm7x2x_sdc2_data);
+    msm_sdcc_setup_gpio(2, 1);
+    msm_add_sdcc(2, &msm7x2x_sdc2_data);
 #endif
-	}
+  }
+#if defined(CONFIG_LGE_BCM432X_PATCH)
+
+	/* GPIO config */
+	gpio_tlmm_config(GPIO_CFG(CONFIG_BCM4325_GPIO_WL_REGON, 0, GPIO_CFG_OUTPUT, GPIO_CFG_PULL_UP, GPIO_CFG_2MA), GPIO_CFG_ENABLE);
+	gpio_set_value(CONFIG_BCM4325_GPIO_WL_REGON, 0);
+
+	gpio_tlmm_config(GPIO_CFG(CONFIG_BCM4325_GPIO_WL_RESET, 0, GPIO_CFG_OUTPUT, GPIO_CFG_PULL_UP, GPIO_CFG_2MA), GPIO_CFG_ENABLE);
+	gpio_set_value(CONFIG_BCM4325_GPIO_WL_RESET, 0);
+
+	gpio_tlmm_config(GPIO_CFG(CONFIG_BCM4325_GPIO_WL_HOSTWAKEUP, 0, GPIO_CFG_OUTPUT, GPIO_CFG_PULL_UP, GPIO_CFG_2MA), GPIO_CFG_ENABLE);
+
+	/* Register platform device */
+        msm_add_sdcc(2, &bcm432x_sdcc_wlan_data);
+
+	/* Enable RESET IRQ for wlan card detect */
+	enable_irq(gpio_to_irq(CONFIG_BCM4325_GPIO_WL_RESET));
+#else /* qualcomm or google */
+    msm_add_sdcc(2, &msm7x2x_sdcc_data);
+#endif /* CONFIG_LGE_BCM432X_PATCH */
 
 	if (machine_is_msm7x25_surf() || machine_is_msm7x27_surf() ||  machine_is_msm7x27_swift()) {
 #ifdef CONFIG_MMC_MSM_SDC3_SUPPORT

@@ -101,16 +101,7 @@
 #define GPIO_SD_CLK 56
 #endif
 
-#define GPIOF_INPUT 0x00020000
-#define GPIOF_DRIVE_OUTPUT 0x00040000
-
 #define GPIO_MMC_CD_N 49
-
-static inline int gpio_configure(unsigned int gpio, unsigned long flags)
-{
-WARN("%s is deprecated. Do not use it.\n", __func__);
-return -ENOSYS;
-}
 
 void __init swift_init_timed_vibrator(void);
 void __init swift_init_gpio_i2c_devices(void);
@@ -1927,7 +1918,6 @@ static struct mmc_platform_data msm7x2x_sdc1_data = {
 };
 #endif
 
-/* LGE_CHANGE_S [jisung.yang@lge.com] 2010-04-24, BCM4325 control gpio */
 #if defined(CONFIG_LGE_BCM432X_PATCH)
 static unsigned int bcm432x_sdcc_wlan_slot_status(struct device *dev)
 {
@@ -1948,7 +1938,6 @@ static struct mmc_platform_data bcm432x_sdcc_wlan_data = {
 	.nonremovable	= 1,
 };
 #endif  /* CONFIG_LGE_BCM432X_PATCH*/
-/* LGE_CHANGE_E [jisung.yang@lge.com] 2010-04-24, BCM4325 control gpio */
 
 #define SWIFT_MMC_VDD (MMC_VDD_165_195 | MMC_VDD_20_21 | MMC_VDD_21_22 \
 			| MMC_VDD_22_23 | MMC_VDD_23_24 | MMC_VDD_24_25 \
@@ -2037,22 +2026,23 @@ static void __init msm7x2x_init_mmc(void)
 #ifdef CONFIG_MMC_MSM_SDC1_SUPPORT
 	msm_add_sdcc(1, &msm7x2x_sdc1_data);
 #endif
+  if (machine_is_msm7x25_surf() || machine_is_msm7x27_surf() ||  machine_is_msm7x27_swift() ||
+    machine_is_msm7x27_ffa()) {
 #ifdef CONFIG_MMC_MSM_SDC2_SUPPORT
-
-/* LGE_CHANGE_S [jisung.yang@lge.com] 2010-04-24, BCM4325 control */
+    msm_sdcc_setup_gpio(2, 1);
+    msm_add_sdcc(2, &msm7x2x_sdc2_data);
+#endif
+  }
 #if defined(CONFIG_LGE_BCM432X_PATCH)
 
 	/* GPIO config */
 	gpio_tlmm_config(GPIO_CFG(CONFIG_BCM4325_GPIO_WL_REGON, 0, GPIO_CFG_OUTPUT, GPIO_CFG_PULL_UP, GPIO_CFG_2MA), GPIO_CFG_ENABLE);
-	gpio_configure(CONFIG_BCM4325_GPIO_WL_REGON, GPIOF_DRIVE_OUTPUT);
 	gpio_set_value(CONFIG_BCM4325_GPIO_WL_REGON, 0);
 
 	gpio_tlmm_config(GPIO_CFG(CONFIG_BCM4325_GPIO_WL_RESET, 0, GPIO_CFG_OUTPUT, GPIO_CFG_PULL_UP, GPIO_CFG_2MA), GPIO_CFG_ENABLE);
-	gpio_configure(CONFIG_BCM4325_GPIO_WL_RESET, GPIOF_DRIVE_OUTPUT);
 	gpio_set_value(CONFIG_BCM4325_GPIO_WL_RESET, 0);
 
 	gpio_tlmm_config(GPIO_CFG(CONFIG_BCM4325_GPIO_WL_HOSTWAKEUP, 0, GPIO_CFG_OUTPUT, GPIO_CFG_PULL_UP, GPIO_CFG_2MA), GPIO_CFG_ENABLE);
-	gpio_configure(CONFIG_BCM4325_GPIO_WL_HOSTWAKEUP, GPIOF_INPUT);
 
 	/* Register platform device */
         msm_add_sdcc(2, &bcm432x_sdcc_wlan_data);
@@ -2062,9 +2052,7 @@ static void __init msm7x2x_init_mmc(void)
 #else /* qualcomm or google */
     msm_add_sdcc(2, &msm7x2x_sdcc_data);
 #endif /* CONFIG_LGE_BCM432X_PATCH */
-/* LGE_CHANGE_E [jisung.yang@lge.com] 2010-04-24, BCM4325 control */
 
-#endif
 	if (machine_is_msm7x25_surf() || machine_is_msm7x27_surf() ||  machine_is_msm7x27_swift()) {
 #ifdef CONFIG_MMC_MSM_SDC3_SUPPORT
 		msm_add_sdcc(3, &msm7x2x_sdc3_data);

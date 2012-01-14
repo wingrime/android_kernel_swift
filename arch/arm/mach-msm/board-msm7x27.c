@@ -2026,13 +2026,13 @@ static void __init msm7x2x_init_mmc(void)
 #ifdef CONFIG_MMC_MSM_SDC1_SUPPORT
 	msm_add_sdcc(1, &msm7x2x_sdc1_data);
 #endif
+
   if (machine_is_msm7x25_surf() || machine_is_msm7x27_surf() ||  machine_is_msm7x27_swift() ||
     machine_is_msm7x27_ffa()) {
 #ifdef CONFIG_MMC_MSM_SDC2_SUPPORT
-    msm_sdcc_setup_gpio(2, 1);
-    msm_add_sdcc(2, &msm7x2x_sdc2_data);
 #endif
   }
+
 #if defined(CONFIG_LGE_BCM432X_PATCH)
 
 	/* GPIO config */

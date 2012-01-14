@@ -2136,10 +2136,8 @@ msmsdcc_runtime_resume(struct device *dev)
 
 static int msmsdcc_runtime_idle(struct device *dev)
 {
-	printk("%s: start\n", __func__);
 	/* Idle timeout is not configurable for now */
 	pm_schedule_suspend(dev, MSM_MMC_IDLE_TIMEOUT);
-	printk("%s: end\n", __func__);
 	return -EAGAIN;
 }
 

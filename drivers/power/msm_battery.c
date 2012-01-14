@@ -326,6 +326,7 @@ static enum power_supply_property msm_batt_power_props[] = {
 	POWER_SUPPLY_PROP_VOLTAGE_MIN_DESIGN,
 	POWER_SUPPLY_PROP_VOLTAGE_NOW,
 	POWER_SUPPLY_PROP_CAPACITY,
+	POWER_SUPPLY_PROP_TEMP,
 };
 
 static int msm_batt_power_get_property(struct power_supply *psy,
@@ -346,16 +347,19 @@ static int msm_batt_power_get_property(struct power_supply *psy,
 		val->intval = msm_batt_info.batt_technology;
 		break;
 	case POWER_SUPPLY_PROP_VOLTAGE_MAX_DESIGN:
-		val->intval = msm_batt_info.voltage_max_design;
+		val->intval = msm_batt_info.voltage_max_design *1000;
 		break;
 	case POWER_SUPPLY_PROP_VOLTAGE_MIN_DESIGN:
-		val->intval = msm_batt_info.voltage_min_design;
+		val->intval = msm_batt_info.voltage_min_design * 1000;
 		break;
 	case POWER_SUPPLY_PROP_VOLTAGE_NOW:
-		val->intval = msm_batt_info.battery_voltage;
+		val->intval = msm_batt_info.battery_voltage * 1000;
 		break;
 	case POWER_SUPPLY_PROP_CAPACITY:
 		val->intval = msm_batt_info.batt_capacity;
+		break;
+	case POWER_SUPPLY_PROP_TEMP:
+	        val->intval = msm_batt_info.battery_temp;
 		break;
 	default:
 		return -EINVAL;
@@ -642,7 +646,7 @@ static void msm_batt_update_psy_status(void)
 	msm_batt_info.charger_type 	= charger_type;
 	msm_batt_info.battery_status 	= battery_status;
 	msm_batt_info.battery_level 	= battery_level;
-	msm_batt_info.battery_temp 	= battery_temp;
+	msm_batt_info.battery_temp 	= battery_temp * 10;
 
 	if (msm_batt_info.battery_voltage != battery_voltage) {
 		msm_batt_info.battery_voltage  	= battery_voltage;

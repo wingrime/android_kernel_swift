@@ -17,7 +17,7 @@
  *
  */
 
-#define OVERCLOCK_AHB
+//#define OVERCLOCK_AHB
 
 #include <linux/version.h>
 #include <linux/kernel.h>
@@ -223,8 +223,8 @@ static struct clkctl_acpu_speed pll0_960_pll1_245_pll2_1200[] = {
 	{ 1, 768000, ACPU_PLL_0, 4, 0, 256000, 2, 7, 200000 },
 	{ 1, 787200, ACPU_PLL_0, 4, 0, 262400, 2, 7, 200000 },
 	{ 1, 806400, ACPU_PLL_0, 4, 0, 268800, 2, 7, 200000 },
-//	{ 1, 825600, ACPU_PLL_0, 4, 0, 275200, 2, 7, 200000 },
-//	{ 1, 844800, ACPU_PLL_0, 4, 0, 281600, 2, 7, 200000 },
+	{ 1, 825600, ACPU_PLL_0, 4, 0, 275200, 2, 7, 200000 },
+	{ 1, 844800, ACPU_PLL_0, 4, 0, 281600, 2, 7, 200000 },
 #else
 /* Agressive AHB overclocking */
 //	{ 1, 480000, ACPU_PLL_0, 4, 1, 240000, 1, 6, 200000 },

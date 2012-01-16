@@ -47,7 +47,7 @@ module_param_named(debug_mask, lge_bl_debug_mask, int,
 
 #define GPIO_BL_EN	84
 #define MAX_BRIGHTNESS 32
-#define VMAX_BRIGHTNESS 16
+#define VMAX_BRIGHTNESS 32
 #define MIN_BRIGHTNESS 0
 
 wait_queue_head_t backlight_wait_q;
@@ -247,7 +247,7 @@ static int rt9393_probe(struct platform_device *pdev)
 	}
 
 	if (system_state == SYSTEM_BOOTING) {
-		current_intensity = 16;
+		current_intensity = 8;
 		power_state = POWER_ON;
 	} else {
 		rt9393_power_down();

@@ -585,12 +585,16 @@ static void audpcm_async_flush(struct audio *audio)
 
 static void audio_flush(struct audio *audio)
 {
+	unsigned long flags;
+
+	spin_lock_irqsave(&audio->dsp_lock, flags);
 	audio->out[0].used = 0;
 	audio->out[1].used = 0;
 	audio->out_head = 0;
 	audio->out_tail = 0;
 	audio->reserved = 0;
 	audio->out_needed = 0;
+	spin_unlock_irqrestore(&audio->dsp_lock, flags);
 	atomic_set(&audio->out_bytes, 0);
 }
 

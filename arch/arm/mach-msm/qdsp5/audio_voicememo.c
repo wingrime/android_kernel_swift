@@ -835,6 +835,7 @@ static int audio_voicememo_open(struct inode *inode, struct file *file)
 
 	file->private_data = audio;
 	audio->opened = 1;
+	audio->stopped = 0;
 	rc = 0;
 done:
 	mutex_unlock(&audio->lock);

@@ -77,3 +77,6 @@ GTAGS
 *.orig
 *~
 \#*#
+arch/arm/boot/compressed/lib1funcs.S
+arch/arm/boot/compressed/vmlinux
+arch/arm/mach-msm/smd_rpc_sym.c

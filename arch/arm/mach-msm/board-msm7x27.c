@@ -100,9 +100,9 @@
 #define GPIO_SD_CMD 55
 #define GPIO_SD_CLK 56
 #endif
-
+#ifdef CONFIG_MMC_MSM_CARD_HW_DETECTION
 #define GPIO_MMC_CD_N 49
-
+#endif
 void __init swift_init_timed_vibrator(void);
 void __init swift_init_gpio_i2c_devices(void);
 void __init swift_init_bt_device(void);
@@ -1903,19 +1903,12 @@ static uint32_t msm_sdcc_setup_power(struct device *dv, unsigned int vdd)
 	return 0;
 }
 
-#ifdef CONFIG_MMC_MSM_SDC1_SUPPORT
-static struct mmc_platform_data msm7x2x_sdc1_data = {
-	.ocr_mask	= MMC_VDD_28_29,
-	.translate_vdd	= msm_sdcc_setup_power,
-	.mmc_bus_width  = MMC_CAP_4_BIT_DATA,
-	.msmsdcc_fmin	= 144000,
-	.msmsdcc_fmid	= 24576000,
-	.msmsdcc_fmax	= 49152000,
-	.nonremovable	= 0,
-#ifdef CONFIG_MMC_MSM_SDC1_DUMMY52_REQUIRED
-	.dummy52_required = 1,
-#endif
-};
+
+#ifdef CONFIG_MMC_MSM_CARD_HW_DETECTION
+static unsigned int swift_sdcc_slot_status(struct device *dev)
+{
+	return !gpio_get_value(GPIO_MMC_CD_N);
+}
 #endif
 
 #if defined(CONFIG_LGE_BCM432X_PATCH)
@@ -1939,17 +1932,18 @@ static struct mmc_platform_data bcm432x_sdcc_wlan_data = {
 };
 #endif  /* CONFIG_LGE_BCM432X_PATCH*/
 
+#ifdef CONFIG_MMC_MSM_SDC1_SUPPORT
 #define SWIFT_MMC_VDD (MMC_VDD_165_195 | MMC_VDD_20_21 | MMC_VDD_21_22 \
 			| MMC_VDD_22_23 | MMC_VDD_23_24 | MMC_VDD_24_25 \
 			| MMC_VDD_25_26 | MMC_VDD_26_27 | MMC_VDD_27_28 \
 			| MMC_VDD_28_29 | MMC_VDD_29_30)
 
-static struct mmc_platform_data msm7x2x_sdcc_data = {
+static struct mmc_platform_data msm7x2x_sdc1_data = {
 #ifdef CONFIG_MMC_MSM_CARD_HW_DETECTION
 	.ocr_mask	= SWIFT_MMC_VDD, //MMC_VDD_30_31,
 	.translate_vdd	= msm_sdcc_setup_power,
-	.status 	= thunderg_sdcc_slot_status,
-	.status_irq 	= MSM_GPIO_TO_INT(GPIO_MMC_COVER_DETECT),
+	.status 	= swift_sdcc_slot_status,
+	.status_irq 	= MSM_GPIO_TO_INT(GPIO_MMC_CD_N),
 	.irq_flags	= IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING,
 	.mmc_bus_width	= MMC_CAP_4_BIT_DATA,
 #else
@@ -1961,8 +1955,11 @@ static struct mmc_platform_data msm7x2x_sdcc_data = {
 	.msmsdcc_fmid	= 24576000,
 	.msmsdcc_fmax	= 49152000,
 	.nonremovable	= 0,
+#ifdef CONFIG_MMC_MSM_SDC1_DUMMY52_REQUIRED
+	.dummy52_required = 1,
+#endif
 };
-
+#endif
 
 #ifdef CONFIG_MMC_MSM_SDC2_SUPPORT
 static struct mmc_platform_data msm7x2x_sdc2_data = {
@@ -2024,6 +2021,10 @@ static void __init msm7x2x_init_mmc(void)
 	}
 
 #ifdef CONFIG_MMC_MSM_SDC1_SUPPORT
+#ifdef CONFIG_MMC_MSM_CARD_HW_DETECTION
+	gpio_request(GPIO_MMC_CD_N, "sdc1_status_irq");
+	gpio_tlmm_config(GPIO_CFG(GPIO_MMC_CD_N, 0, GPIO_CFG_INPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA), GPIO_CFG_ENABLE);
+#endif
 	msm_add_sdcc(1, &msm7x2x_sdc1_data);
 #endif
 

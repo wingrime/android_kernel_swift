@@ -1772,7 +1772,7 @@ int isx005_sensor_config(void __user *argp)
 
 	case CFG_SET_EFFECT:
 		if(debug_mask)
-			printk("stud [isx005.c]%s: command is CFG_SET_EFFECT\n",__func__);
+			printk("[isx005.c]%s: command is CFG_SET_EFFECT\n",__func__);
 			
 		rc = isx005_set_effect(cfg_data.cfg.effect);
 
@@ -1780,7 +1780,7 @@ int isx005_sensor_config(void __user *argp)
   
   case CFG_SET_ZOOM_VIDEO:
 		if(debug_mask)
-			printk("stud [isx005.c]%s: command is CFG_SET_ZOOM\n",__func__);
+			printk("[isx005.c]%s: command is CFG_SET_ZOOM\n",__func__);
 			
 		rc = isx005_set_zoom(cfg_data.cfg.zoom);
 
@@ -1788,7 +1788,7 @@ int isx005_sensor_config(void __user *argp)
 	
 	case CFG_SET_PARM_AF_MODE:
 		if(debug_mask)
-			printk(" stud [isx005.c]%s: command is CFG_SET_PARM_AF_MODE\n",__func__);
+			printk("[isx005.c]%s: command is CFG_SET_PARM_AF_MODE\n",__func__);
 		focus_mode = cfg_data.cfg.focus.mode;
 		rc = isx005_focus_config(cfg_data.cfg.focus.mode);
 		
@@ -1844,7 +1844,7 @@ int isx005_sensor_config(void __user *argp)
 		break;
 	case CFG_SET_BRIGHTNESS:
 		if(debug_mask)
-			printk("stud - [isx005.c]%s: command is CFG_SET_BRIGHTNESS\n",__func__);
+			printk("[isx005.c]%s: command is CFG_SET_BRIGHTNESS\n",__func__);
  
 		rc = isx005_set_brightness(cfg_data.cfg.ev);
 		break;

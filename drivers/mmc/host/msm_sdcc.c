@@ -1549,7 +1549,6 @@ static void msmsdcc_early_suspend(struct early_suspend *h)
 	spin_unlock_irqrestore(&host->lock, flags);
 /* LGE_CHANGE_S [yoohoo@lge.com] 2009-10-24, don't do this to WLAN */
 	}
-	printk(KERN_ERR "msmsdcc_early_suspend : end \n");
 /* LGE_CHANGE_S [jisung.yang@lge.com] 2010-04-24, don't do this to WLAN */
 };
 static void msmsdcc_late_resume(struct early_suspend *h)
@@ -1558,7 +1557,6 @@ static void msmsdcc_late_resume(struct early_suspend *h)
 		container_of(h, struct msmsdcc_host, early_suspend);
 	unsigned long flags;
 /* LGE_CHANGE_S [jisung.yang@lge.com] 2010-04-24, don't do this to WLAN */
-	printk(KERN_ERR "msmsdcc_late_resume : start \n");
 #ifdef  CONFIG_BCM4325_GPIO_WL_RESET
 	if ( host->plat->status_irq != gpio_to_irq(CONFIG_BCM4325_GPIO_WL_RESET) )
 #endif
@@ -1606,7 +1604,6 @@ msmsdcc_probe(struct platform_device *pdev)
 	struct resource *dmares = NULL;
 	int ret;
 	int i;
-	printk("%s: start\n", __func__);
 	/* must have platform data */
 	if (!plat) {
 		pr_err("%s: Platform data not available\n", __func__);
@@ -1945,7 +1942,6 @@ msmsdcc_probe(struct platform_device *pdev)
 		if (ret)
 			goto platform_irq_free;
 	}
-	printk("%s: end\n", __func__);
 	return 0;
 
  platform_irq_free:
@@ -2117,7 +2113,6 @@ msmsdcc_runtime_resume(struct device *dev)
 	unsigned long flags;
 	int release_lock = 0;
 
-	printk("%s: start\n", __func__);
 	if (mmc) {
 		mmc->ios.clock = host->clk_rate;
 		mmc->ops->set_ios(host->mmc, &host->mmc->ios);
@@ -2161,7 +2156,6 @@ msmsdcc_runtime_resume(struct device *dev)
 
 		 wake_unlock(&host->sdio_suspend_wlock);
 	}
-	printk("%s: end\n", __func__);
 	return 0;
 }
 
@@ -2177,7 +2171,6 @@ static int msmsdcc_pm_suspend(struct device *dev)
 	struct mmc_host *mmc = dev_get_drvdata(dev);
 	struct msmsdcc_host *host = mmc_priv(mmc);
 	int rc = 0;
-	printk("%s: start\n", __func__);
 	if (host->plat->status_irq)
 		disable_irq(host->plat->status_irq);
 
@@ -2197,7 +2190,6 @@ static int msmsdcc_pm_suspend(struct device *dev)
 
 	if (!pm_runtime_suspended(dev))
 		rc = msmsdcc_runtime_suspend(dev);
-	printk("%s: end\n", __func__);
 	return rc;
 }
 
@@ -2206,7 +2198,6 @@ static int msmsdcc_pm_resume(struct device *dev)
 	struct mmc_host *mmc = dev_get_drvdata(dev);
 	struct msmsdcc_host *host = mmc_priv(mmc);
 	int rc = 0;
-	printk("%s: start\n", __func__);
 	rc = msmsdcc_runtime_resume(dev);
 
 /* LGE_CHANGE_S [jisung.yang@lge.com] 2011-3-4, <Support Host Wakeup> */
@@ -2234,7 +2225,6 @@ static int msmsdcc_pm_resume(struct device *dev)
 		pr_info("%s: %s: failed with error %d", mmc_hostname(mmc),
 				__func__, rc);
 	pm_runtime_enable(dev);
-	printk("%s: end\n", __func__);
 	return rc;
 }
 

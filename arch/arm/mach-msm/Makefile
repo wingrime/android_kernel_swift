@@ -176,7 +176,7 @@ obj-$(CONFIG_MACH_MSM7X27_SWIFT) += board-swift-headset.o
 
 obj-$(CONFIG_MACH_MSM7X27_SWIFT) += board-swift-keylight.o
 
-obj-$(CONFIG_MACH_MSM7X27_SWIFT) += board-swift-lge-ats.o
+obj-$(CONFIG_MACH_MSM7X27_SWIFT) += board-swift-lge-rpc.o
 
 obj-$(CONFIG_MACH_MSM7X27_SWIFT)  += board-swift-vibrator.o
 

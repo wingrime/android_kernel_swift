@@ -2476,9 +2476,9 @@ static void __init swift_fixup(struct machine_desc *desc, struct tag *tags,
 	mi->bank[0].node = PHYS_TO_NID(PHYS_OFFSET);
 	//getting more ram from modem  space 214+
 #ifdef CONFIG_ANDROID_RAM_CONSOLE
-	mi->bank[0].size = (217*1024*1024);
+	mi->bank[0].size = (216*1024*1024);
 #else
-        mi->bank[0].size = (218*1024*1024);
+        mi->bank[0].size = (217*1024*1024);
 #endif
 }
 

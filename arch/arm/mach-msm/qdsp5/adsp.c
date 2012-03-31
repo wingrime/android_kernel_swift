@@ -991,7 +991,7 @@ int adsp_set_clkrate(struct msm_adsp_module *module, unsigned long clk_rate)
 		return -EINVAL;
 
 	if (module->clk && clk_rate)
-		return clk_set__rate(module->clk, clk_rate);
+		return clk_set_rate(module->clk, clk_rate);
 
 	return -EINVAL;
 }

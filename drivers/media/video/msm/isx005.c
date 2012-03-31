@@ -1685,9 +1685,9 @@ init_probe_fail:
     return rc;
 }
 
-int32_t isx005_sensor_init(const struct msm_camera_sensor_info *data)
+static int isx005_sensor_init(const struct msm_camera_sensor_info *data)
 {
-	int32_t rc;
+	int rc;
 	isx005_sensor_power_enable();
 	isx005_ctrl = kzalloc(sizeof(struct isx005_ctrl), GFP_KERNEL);
 	if (!isx005_ctrl) {
@@ -1759,7 +1759,7 @@ int isx005_sensor_config(void __user *argp)
 		return -EFAULT;
 
 	if(debug_mask)
-		printk("[isx005.c] isx005_ioctl, cfgtype = %d, mode = %d width= height %d \n",
+		printk("[isx005.c] isx005_ioctl, cfgtype = %d, mode = %d width = %d height = %d \n",
 		       cfg_data.cfgtype, cfg_data.mode,cfg_data.width,cfg_data.height);
 
 	switch (cfg_data.cfgtype) {
@@ -2101,13 +2101,13 @@ static void isx005_sysfs_add(struct kobject* kobj)
 /*  end :  sysf                                                                         */
 /*======================================================================================*/
 
-int isx005_sensor_release(const struct msm_camera_sensor_info *info)
+int isx005_sensor_release(void)
 {
-	if(isx005_ctrl)
-		kfree(isx005_ctrl);
-	isx005_ctrl=NULL;
-	
-	return 0;
+
+  if(isx005_ctrl)
+    kfree(isx005_ctrl);
+  isx005_ctrl=NULL;	
+    return 0;
 }
 
 static int isx005_i2c_probe(struct i2c_client *client,
@@ -2164,8 +2164,9 @@ MODULE_DEVICE_TABLE(i2c, isx005_i2c_id);
 static int isx005_sensor_probe(const struct msm_camera_sensor_info *info,
 				struct msm_sensor_ctrl *s)
 {
+        int rc;
 	isx005_sensor_power_enable();
-	int rc = i2c_add_driver(&isx005_i2c_driver);
+	rc = i2c_add_driver(&isx005_i2c_driver);
 	
 	if (rc < 0 || isx005_client == NULL) {
 		rc = -ENOTSUPP;

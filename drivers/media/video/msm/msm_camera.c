@@ -467,35 +467,6 @@ static int msm_pmem_frame_ptov_lookup(struct msm_sync *sync,
 	return -EINVAL;
 }
 
-static int msm_pmem_frame_ptov_lookup2(struct msm_sync *sync,
-		unsigned long pyaddr,
-		struct msm_pmem_info *pmem_info,
-		int clear_active)
-{
-	struct msm_pmem_region *region;
-	struct hlist_node *node, *n;
-	unsigned long flags = 0;
-
-	spin_lock_irqsave(&sync->pmem_frame_spinlock, flags);
-	hlist_for_each_entry_safe(region, node, n, &sync->pmem_frames, list) {
-		if (pyaddr == (region->paddr + region->info.y_off) &&
-				region->info.active) {
-			/* offset since we could pass vaddr inside
-			 * a registerd pmem buffer
-			 */
-			memcpy(pmem_info, &region->info, sizeof(*pmem_info));
-			if (clear_active)
-				region->info.active = 0;
-			spin_unlock_irqrestore(&sync->pmem_frame_spinlock,
-				flags);
-			return 0;
-		}
-	}
-
-	spin_unlock_irqrestore(&sync->pmem_frame_spinlock, flags);
-	return -EINVAL;
-}
-
 static unsigned long msm_pmem_stats_ptov_lookup(struct msm_sync *sync,
 		unsigned long addr, int *fd)
 {

@@ -97,7 +97,7 @@ static smb380_t smb380;
 
 static struct class *bma_dev_class;
 
-static int bma150_detect(struct i2c_client *client, int kind, struct i2c_board_info *info);
+static int bma150_detect(struct i2c_client *client,  struct i2c_board_info *info);
 
 static char bma150_i2c_write(unsigned char reg_addr, unsigned char *data, unsigned char len);
 static char bma150_i2c_read(unsigned char reg_addr, unsigned char *data, unsigned char len);
@@ -1039,6 +1039,7 @@ int bma150_probe(struct i2c_client *client, const struct i2c_device_id * devid)
 	struct bma150_data *data;
 	int err = 0;
 	int tempvalue;
+	u8 v;
 	if (!i2c_check_functionality(client->adapter, I2C_FUNC_I2C)) {
 		err = -ENODEV;
 		goto exit;
@@ -1082,7 +1083,7 @@ int bma150_probe(struct i2c_client *client, const struct i2c_device_id * devid)
 		goto exit_kfree;
 	}
 
-	u8 v;
+
 	v = 0x01 & 0xff;
 	tempvalue = i2c_smbus_write_byte_data(client, 0x15, v);
 
@@ -1101,7 +1102,7 @@ exit:
 	return err;
 }
 
-static int bma150_detect(struct i2c_client *client, int kind,
+static int bma150_detect(struct i2c_client *client, 
 			 struct i2c_board_info *info)
 {
 	strlcpy(info->type, "bma150", I2C_NAME_SIZE);
@@ -1110,19 +1111,10 @@ static int bma150_detect(struct i2c_client *client, int kind,
 
 static int bma150_remove(struct i2c_client *client)
 {
-	int err;
 	struct bma150_data *bma = i2c_get_clientdata(client);
 #if DEBUG
 	printk(KERN_INFO "BMA150 driver: remove\n");
 #endif
-
-	//according update man
-	/*
-	if ((err = i2c_detach_client(client)))
-	{
-		dev_err(&client->dev,"Client deregistration failed, client can not be detached!\n");
-	}
-	*/
 	kfree(bma);
 	bma150_client = NULL;
 
@@ -1132,12 +1124,9 @@ static int bma150_remove(struct i2c_client *client)
 #ifdef CONFIG_PM
 static int bma150_suspend(struct i2c_client *client, pm_message_t state)
 {
-	struct bma150_device *dev = i2c_get_clientdata(client);
 	int ret;
 	u8 v;
-#if 1
 	printk("%s\n",__FUNCTION__);
-#endif
 
 	v = 0x01 & 0xff;/* set sleep mode "bit0 = 1"*/
 	
@@ -1146,26 +1135,15 @@ static int bma150_suspend(struct i2c_client *client, pm_message_t state)
 		dev_err(&client->dev, "i2c_smbus_write_byte_data failed\n");
 		return -EIO;
 	}
-/* //This msensor_bma150.c
-	if (PM_EVENT_SUSPEND == state.event) {
-		cancel_work_sync(&dev->work);
-
-		if (!dev->use_irq) 
-			hrtimer_cancel(&dev->timer);
-	}
-*///This msensor_bma150.c
-
 	return 0;
 }
 
 static int bma150_resume(struct i2c_client *client)
 {
-	struct bma150_device *dev = i2c_get_clientdata(client);
 	int ret;
 	u8 v;
-#if 1
 	printk("%s\n",__FUNCTION__);
-#endif
+
 	
 	v = 0x00 & 0xff;/*from sleep mode to normal mode "bit0 = 0"*/
 
@@ -1174,14 +1152,6 @@ static int bma150_resume(struct i2c_client *client)
 		dev_err(&client->dev, "i2c_smbus_write_byte_data failed\n");
 		return -EIO;
 	}
-/*	
-	if (bma150_init_chip(client)) //This msensor_bma150.c
-		dev_err(&client->dev, "initialization of chip failed on resuming");
-
-	if (dev->enabled) //This msensor_bma150.c
-		hrtimer_start(&dev->timer, ktime_set(1, 0), HRTIMER_MODE_REL);
-	*///This msensor_bma150.c
-
 	return 0;
 }
 #endif

@@ -164,26 +164,6 @@ static int AKI2C_TxData(char *txData, int length)
 }
 
 #if defined(CONFIG_MACH_MSM7X27_SWIFT)
-static int akm8973_config_gpio(int config)
-{
-#if DEBUG	
-	printk("akm8973_config_gpio(%d)\n", config);
-#endif
-
-	if (config) {	// for wake state
-	  gpio_tlmm_config(GPIO_CFG(30, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA), GPIO_CFG_ENABLE);
-		gpio_tlmm_config(GPIO_CFG(31, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA), GPIO_CFG_ENABLE);
-		gpio_tlmm_config(GPIO_CFG(18, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), GPIO_CFG_ENABLE);
-		gpio_tlmm_config(GPIO_CFG(23, 0, GPIO_CFG_OUTPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), GPIO_CFG_ENABLE);
-	} else {		// for sleep state
-		gpio_tlmm_config(GPIO_CFG(30, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), GPIO_CFG_ENABLE);
-		gpio_tlmm_config(GPIO_CFG(31, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), GPIO_CFG_ENABLE);
-		gpio_tlmm_config(GPIO_CFG(18, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), GPIO_CFG_ENABLE);
-		gpio_tlmm_config(GPIO_CFG(23, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), GPIO_CFG_ENABLE);
-	}
-
-	return 0;
-}
 
 static int akm8973_set_vreg(int on)
 {
@@ -231,154 +211,10 @@ static void AKECS_Reset(void)
 #endif
 
 }
-
-#define RECOVER_EEPROM_COUNT 7
- 
-static int AKECS_WriteEEPROM(void)
-{
-	struct akm8973_data *data = i2c_get_clientdata(this_client);
-	char buffer[2];
-	char aRecoverData[RECOVER_EEPROM_COUNT+1] = {0x26, 0x77, 0x66, 0xC7, 0x06, 0x06, 0x07};
-	char i2cData[6];
-	char data2;
-	int ret, i;
-#if DEBUG
-	printk(KERN_INFO "%s\n", __FUNCTION__);
-#endif
-    msleep(100);
-	
-		/* Set to EEPROM read mode */
-		buffer[0] = AKECS_REG_MS1;
-		buffer[1] = AK8973_MS1_READ_EEPROM;
-		
-		ret = AKI2C_TxData(buffer, 2);
-		if (ret < 0)
-			return ret;
-		msleep(1);
-
-		/* Set to EEPROM read mode */
-		buffer[0] = AK8973_EEP_ETST;
-		/* Read data */
-		ret = AKI2C_RxData(buffer, 1);
-		if (ret < 0)
-			return ret;
-		else
-			printk("%x\n", buffer);
-		msleep(1);
-		
-		data2 = buffer[0];
-		 if ( data2 == 0xC7)
-	  	{
-  			#if DEBUG
-			printk("GOOD Device - Do nothing %x, %h\n", data2, data2);
-			#endif
-		
-			// Set to PowerDown mode
-			buffer[0] = AKECS_REG_MS1;
-			buffer[1] = AKECS_MODE_POWERDOWN;
-			
-			ret = AKI2C_TxData(buffer, 2);
-			if (ret < 0)
-				return ret;
-			msleep(1);
-				return;
-		   	// do nothing...
-		}else {
-	  		#if DEBUG
-				ADBG("============0============\n");
-				printk("Bad Device ETST = %x \n", data2);
-			#endif
-			
-			// Set to PowerDown mode
-			buffer[0] = AKECS_REG_MS1;
-			buffer[1] = AKECS_MODE_POWERDOWN;
-			
-			ret = AKI2C_TxData(buffer, 2);
-			if (ret < 0)
-				return ret;
-			msleep(1);
-	    	#if DEBUG
-				ADBG("============1============\n");
-			#endif
-		
-			/* Set to EEPROM read mode */
-			buffer[0] = AKECS_REG_MS1;
-			buffer[1] = AK8973_MS1_WRITE_EEPROM;
-			
-			ret = AKI2C_TxData(buffer, 2);
-			if (ret < 0)
-				return ret;
-			msleep(1);
-			#if DEBUG
-				ADBG("============2============\n");
-			#endif
-			for (i=0; i < RECOVER_EEPROM_COUNT; i++)
-			{
-			  /* Set to EEPROM read mode */
-				buffer[0] = AK8973_EEP_ETS+i;
-				buffer[1] = aRecoverData[i];
-
-				ret = AKI2C_TxData(buffer, 2);	
-			    ADBG("[%x]==>  %x \n", AK8973_EEP_ETS+i, aRecoverData[i] );
-			  msleep(1);
-			}
-	 	 }
-			
- 
-	 #if DEBUG
- 		 // Set to PowerDown mode
- 		 buffer[0] = AKECS_REG_MS1;
- 		 buffer[1] = AKECS_MODE_POWERDOWN;
- 		 
- 		 ret = AKI2C_TxData(buffer, 2);
- 		 if (ret < 0)
- 			 return ret;
- 		 msleep(1);
- 	 
- 		 /* Set to EEPROM read mode */
- 		 buffer[0] = AKECS_REG_MS1;
- 		 buffer[1] = AK8973_MS1_READ_EEPROM;
- 		 
- 		 ret = AKI2C_TxData(buffer, 2);
- 		 if (ret < 0)
- 			 return ret;
- 		 msleep(1);
- 	 
- 	 	//*******************************************************************
- 	 	//  Print Screen
-	 	//*******************************************************************
-	 	
-		
-		// Read EHXGA, EHYGA, EHZGA values
-		i2cData[0] = AK8973_EEP_ETS;
-		/* Read data */
-		ret = AKI2C_RxData(i2cData, 1);
-		if (ret < 0)
-			return ret;
-		
-		for (i=0; i< RECOVER_EEPROM_COUNT; i++)
-		{
-  		#if DEBUG 
-			ADBG("REGISTER [%x] = [%x] \n", AK8973_EEP_ETS+i, i2cData[i]);
-  		#endif
-		}
-	#endif
-		
-		// Set to PowerDown mode
- 		 buffer[0] = AKECS_REG_MS1;
- 		 buffer[1] = AKECS_MODE_POWERDOWN;
- 		 
- 		 ret = AKI2C_TxData(buffer, 2);
- 		 if (ret < 0)
- 			 return ret;
-
-}
-
 static int AKECS_StartMeasure(void)
 {
-//	struct akm8973_data *data = i2c_get_clientdata(this_client);
+
 	char buffer[2];
-//	int ret;
 #if DEBUG
 	printk(KERN_INFO "%s\n", __FUNCTION__);
 #endif
@@ -1438,7 +1274,7 @@ exit_check_functionality_failed:
 	return err;
 }
 
-static int akm8973_detect(struct i2c_client *client, int kind,
+static int akm8973_detect(struct i2c_client *client, 
 			  struct i2c_board_info *info)
 {
 #if DEBUG

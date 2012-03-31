@@ -228,9 +228,9 @@ DEVICE_ATTR(gpio, 0664, gpio_no_show, NULL);
 
 static int rt9393_probe(struct platform_device *pdev)
 {
-  printk("PROBING BACKLIGHT\n");
 	int err;
 	struct backlight_properties props;
+	printk("PROBING BACKLIGHT\n");
 	err = gpio_request(GPIO_BL_EN, 0);
 
 	if (err < 0 ) {

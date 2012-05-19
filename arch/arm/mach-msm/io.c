@@ -28,7 +28,7 @@
 #include <asm/mach/map.h>
 
 #include <mach/board.h>
-
+#include "board-swift-vibrator.h"
 #define MSM_DEVICE(name) { \
 		.virtual = (unsigned long) MSM_##name##_BASE, \
 		.pfn = __phys_to_pfn(MSM_##name##_PHYS), \
@@ -65,6 +65,8 @@ static struct map_desc msm_io_desc[] __initdata = {
 	MSM_DEVICE(CLK_CTL),
 	MSM_DEVICE(AD5),
 	MSM_DEVICE(MDC),
+	//swift vibrator support
+	MSM_DEVICE(WEB),
 #ifdef CONFIG_MSM_DEBUG_UART
 	MSM_DEVICE(DEBUG_UART),
 #endif

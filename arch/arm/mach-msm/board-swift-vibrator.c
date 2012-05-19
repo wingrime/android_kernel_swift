@@ -21,58 +21,10 @@
 #include <mach/mpp.h>
 
 #include <../../../drivers/staging/android/timed_output.h>
-
-#define GPIO_VIB_PWM		28
-
-#define GPIO_LDO_EN			109
-
-/* addresses of gp_mn register */
-#define GP_MN_CLK_MDIV              0x004C
-#define GP_MN_CLK_NDIV              0x0050
-#define GP_MN_CLK_DUTY              0x0054
-
-#define GPMN_M_DEFAULT              21
-#define GPMN_N_DEFAULT              4500
-
-#define GPMN_D_DEFAULT              3200  /* 2250 */
-#define PWM_MULTIPLIER              2560  /* 4394 */
-
-/* The maximum value of M is 511 and N is 8191 */
-#define GPMN_M_MASK                 0x01FF
-#define GPMN_N_MASK                 0x1FFF
-#define GPMN_D_MASK                 0x1FFF
-
-/* Qcoin motor state */
-#define PWM_DUTY_MAX		1
-#define PWM_DUTY_SET		2
-#define PWM_DUTY_MIN		3
-#define VIB_DISABLE			4
-
-#define DUTY_MAX_TIME		20
-#define DUTY_MIN_TIME		20
-
-#define MSM_WEB_BASE          IOMEM(0xE100C000)
-#define MSM_WEB_PHYS          0xA9D00040 //0xA9D00000 in code.
-#define MSM_WEB_SIZE          SZ_4K
-#if 0 
-#define REG_WRITEL(value, reg)      writel(value, (MSM_WEB_BASE + reg))
-#else 
-#define REG_WRITEL(value, reg)  
-#endif
-
-struct vibrator_device {
-	struct timed_output_dev timed_vibrator;
-	struct hrtimer vib_timer;
-	int state;
-	int value;
-	int pwm_max_time;
-	int pwm_min_time;
-	spinlock_t	lock;
-};
+#include "board-swift-vibrator.h"
 
 static atomic_t s_vibrator = ATOMIC_INIT(0);
 static atomic_t s_amp = ATOMIC_INIT(50);
-
 /* set amp level, default amp 50
  * level 1: 100, 3.1V
  * level 2:  75, 2.8V
@@ -126,10 +78,8 @@ void vibrator_enable(void)
 	amp = atomic_read(&s_amp);
 
 	gain = ((PWM_MULTIPLIER * amp) >> 8) + GPMN_D_DEFAULT;
-	REG_WRITEL((gain & GPMN_D_MASK), GP_MN_CLK_DUTY);
-	//
-	//
-	//
+	VIB_WRITEL((gain & GPMN_D_MASK), GP_MN_CLK_DUTY);
+
 	if (debug_mask)
 		printk(KERN_INFO "%s\n", __func__);
 
@@ -145,7 +95,7 @@ static void vibrator_set(struct timed_output_dev *tdev, int value)
 
 	if (vib_dev->state > 0) {
 		if (debug_mask)
-			printk(KERN_INFO "vibrator is working now\n");
+			printk(KERN_INFO "[swift-vibrator]Working now\n");
 	} else {
 		vib_dev->value = (value > 15000 ? 15000 : value);
 
@@ -202,17 +152,17 @@ static void pwm_gen(struct vibrator_device *vib_dev)
 
 	switch (vib_dev->state) {
 	default:
-		printk(KERN_INFO "pwm_timer error\n");
+		printk(KERN_INFO "[swift-vibrator]pwm_timer error\n");
 		vibrator_disable();
 		vib_dev->state = 0;
 		atomic_set(&s_vibrator, 0);
 		break;
 	case PWM_DUTY_MAX:
 		gain = 4200;  /* 3.1V */
-		REG_WRITEL((gain & GPMN_D_MASK), GP_MN_CLK_DUTY);
+		VIB_WRITEL((gain & GPMN_D_MASK), GP_MN_CLK_DUTY);
 
 		if (debug_mask)
-			printk(KERN_INFO "PWM max duty:%d\n", gain);
+			printk(KERN_INFO "[swift-vibrator]PWM max duty:%d\n", gain);
 		
 		hrtimer_start(&vib_dev->vib_timer,
 			      ktime_set(vib_dev->pwm_max_time  / 1000,
@@ -222,10 +172,10 @@ static void pwm_gen(struct vibrator_device *vib_dev)
 		break;
 	case PWM_DUTY_SET:
 		gain = ((PWM_MULTIPLIER * amp) >> 8) + GPMN_D_DEFAULT;
-		REG_WRITEL((gain & GPMN_D_MASK), GP_MN_CLK_DUTY);
+		VIB_WRITEL((gain & GPMN_D_MASK), GP_MN_CLK_DUTY);
 
 		if (debug_mask)
-			printk(KERN_INFO "PWM set duty:%d\n", gain);
+			printk(KERN_INFO "[swift-vibrator]PWM set duty:%d\n", gain);
 
 		hrtimer_start(&vib_dev->vib_timer,
 			      ktime_set(vib_dev->value / 1000,
@@ -235,10 +185,10 @@ static void pwm_gen(struct vibrator_device *vib_dev)
 		break;
 	case PWM_DUTY_MIN:
 		gain = 0;  /* -3.1V */
-		REG_WRITEL((gain & GPMN_D_MASK), GP_MN_CLK_DUTY);
+		VIB_WRITEL((gain & GPMN_D_MASK), GP_MN_CLK_DUTY);
 
 		if (debug_mask)
-			printk(KERN_INFO "PWM min duty:%d\n", gain);
+			printk(KERN_INFO "[swift-vibrator]PWM min duty:%d\n", gain);
 
 		hrtimer_start(&vib_dev->vib_timer,
 			      ktime_set(vib_dev->pwm_min_time / 1000,
@@ -281,9 +231,8 @@ void __init swift_init_timed_vibrator(void)
 	struct vibrator_device *vib_dev;
 
 	/* Set PWM frequency */
-	//Prevent boot time hung
-	//REG_WRITEL((GPMN_M_DEFAULT & GPMN_M_MASK), GP_MN_CLK_MDIV);
-	//REG_WRITEL((~(GPMN_N_DEFAULT - GPMN_M_DEFAULT) & GPMN_N_MASK), GP_MN_CLK_NDIV);
+	VIB_WRITEL((GPMN_M_DEFAULT & GPMN_M_MASK), GP_MN_CLK_MDIV);
+	VIB_WRITEL((~(GPMN_N_DEFAULT - GPMN_M_DEFAULT) & GPMN_N_MASK), GP_MN_CLK_NDIV);
 
 	/* Off Enable */
 	gpio_set_value(GPIO_VIB_PWM, 0);
@@ -292,7 +241,7 @@ void __init swift_init_timed_vibrator(void)
 	vib_dev = kmalloc(sizeof(*vib_dev), GFP_KERNEL);
 	if (vib_dev == NULL)
 	{
-		printk(KERN_ERR "[Swift-vibrator]Failed to allocate private data!\n");
+		printk(KERN_ERR "[swift-vibrator]Failed to allocate private data!\n");
 		return;
 	}
 	vib_dev->timed_vibrator.name = "vibrator";
@@ -305,13 +254,13 @@ void __init swift_init_timed_vibrator(void)
 
 	ret = timed_output_dev_register(&vib_dev->timed_vibrator);
 	if (ret < 0) {
-		printk(KERN_ERR "timed_output_dev_register error!\n");
+		printk(KERN_ERR "[swift-vibrator]timed_output_dev_register error!\n");
 		return;
 	}
 
 	ret = device_create_file(vib_dev->timed_vibrator.dev, &dev_attr_amp);
 	if (ret < 0) {
-		printk(KERN_ERR "device_create_file error!\n");
+		printk(KERN_ERR "[swift-vibrator]device_create_file error!\n");
 		timed_output_dev_unregister(&vib_dev->timed_vibrator);
 		return;
 	}
@@ -322,7 +271,7 @@ void __init swift_init_timed_vibrator(void)
 
 	spin_lock_init(&vib_dev->lock);
 
-	printk(KERN_INFO "timed_vibrator probed\n");
+	printk(KERN_INFO "[swift-vibrator]Probed\n");
 }
 
 MODULE_AUTHOR("Taehyun Kim <kimth@lge.com>");

@@ -2237,8 +2237,7 @@ static void __init msm7x2x_init(void)
 	msm_acpu_clock_init(&msm7x2x_clock_data);
 
 #ifdef CONFIG_ARCH_MSM7X27
-	kgsl_pdata.max_axi_freq = 160000;
-
+	kgsl_pdata.max_axi_freq = 200000;
 	/* 7x27 doesn't allow graphics clocks to be run asynchronously to */
 	/* the AXI bus */
 	kgsl_pdata.max_grp2d_freq = 0;

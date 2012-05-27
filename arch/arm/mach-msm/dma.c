@@ -64,6 +64,7 @@ struct msm_dmov_conf {
 	unsigned int irq;
 	struct clk *clk;
 	struct clk *pclk;
+	struct clk *ebiclk;
 	unsigned int clk_ctl;
 	struct timer_list timer;
 };
@@ -230,13 +231,25 @@ static int msm_dmov_clk_toggle(int adm, int on)
 			goto err;
 		if (dmov_conf[adm].pclk) {
 			ret = clk_enable(dmov_conf[adm].pclk);
-			if (ret)
+			if (ret) {
 				clk_disable(dmov_conf[adm].clk);
+				goto err;
+			}
+		}
+		if (dmov_conf[adm].ebiclk) {
+			ret = clk_enable(dmov_conf[adm].ebiclk);
+			if (ret) {
+				if (dmov_conf[adm].pclk)
+					clk_disable(dmov_conf[adm].pclk);
+				clk_disable(dmov_conf[adm].clk);
+			}
 		}
 	} else {
 		clk_disable(dmov_conf[adm].clk);
 		if (dmov_conf[adm].pclk)
 			clk_disable(dmov_conf[adm].pclk);
+		if (dmov_conf[adm].ebiclk)
+			clk_disable(dmov_conf[adm].ebiclk);
 	}
 err:
 	return ret;
@@ -258,7 +271,8 @@ void msm_dmov_stop_cmd(unsigned id, struct msm_dmov_cmd *cmd, int graceful)
 {
 	int adm = DMOV_ID_TO_ADM(id);
 	int ch = DMOV_ID_TO_CHAN(id);
-	writel((graceful << 31), DMOV_REG(DMOV_FLUSH0(ch), adm));
+	writel_relaxed((graceful << 31), DMOV_REG(DMOV_FLUSH0(ch), adm));
+	wmb();
 }
 EXPORT_SYMBOL(msm_dmov_stop_cmd);
 
@@ -346,11 +360,13 @@ static void set_crci_mask(int crci_mask, int adm)
 			if (tmp_crci_mask == CRCI_MUX_ON)
 				crci_ctl |= DMOV_CRCI_MUX;
 
-			writel(crci_ctl, DMOV_REG(DMOV_CRCI_CTL(i), adm));
+			writel_relaxed(crci_ctl, DMOV_REG(DMOV_CRCI_CTL(i),
+				       adm));
 			dmov_conf[adm].crci_mask &= blank_mask;
 			dmov_conf[adm].crci_mask |= (tmp_crci_mask << (2*i));
 		}
 	}
+	wmb();
 #endif
 }
 
@@ -367,13 +383,13 @@ static void start_ready_cmds(int adm)
 		act = &dmov_conf[adm].active_commands[i];
 		cmd = list_entry(rdy->next, typeof(*cmd), list);
 		if (!list_empty(rdy) && !check_crci_conflict(cmd, adm)) {
-			status = readl(DMOV_REG(DMOV_STATUS(i), adm));
+			status = readl_relaxed(DMOV_REG(DMOV_STATUS(i), adm));
 			if (status & DMOV_STATUS_CMD_PTR_RDY) {
 				list_del(&cmd->list);
 				list_add_tail(&cmd->list, act);
 				dmov_conf[adm].channel_active |= (1 << i);
 				set_crci_mask(cmd->crci_mask, adm);
-				writel(cmd->cmdptr,
+				writel_relaxed(cmd->cmdptr,
 				       DMOV_REG(DMOV_CMD_PTR(i), adm));
 			}
 		}
@@ -396,7 +412,7 @@ void msm_dmov_enqueue_cmd_ext(unsigned id, struct msm_dmov_cmd *cmd)
 		del_timer(&dmov_conf[adm].timer);
 	dmov_conf[adm].clk_ctl = CLK_EN;
 
-	status = readl(DMOV_REG(DMOV_STATUS(ch), adm));
+	status = readl_relaxed(DMOV_REG(DMOV_STATUS(ch), adm));
 	conflict = check_crci_conflict(cmd, adm);
 	if ((status & DMOV_STATUS_CMD_PTR_RDY) && !conflict) {
 		PRINT_IO("msm_dmov_enqueue_cmd(%d), start command, status %x\n",
@@ -409,7 +425,7 @@ void msm_dmov_enqueue_cmd_ext(unsigned id, struct msm_dmov_cmd *cmd)
 		dmov_conf[adm].channel_active |= 1U << ch;
 		PRINT_IO("Writing %x exactly to register", cmd->cmdptr);
 		set_crci_mask(cmd->crci_mask, adm);
-		writel(cmd->cmdptr, DMOV_REG(DMOV_CMD_PTR(ch), adm));
+		writel_relaxed(cmd->cmdptr, DMOV_REG(DMOV_CMD_PTR(ch), adm));
 	} else {
 		if (!dmov_conf[adm].channel_active) {
 			dmov_conf[adm].clk_ctl = CLK_TO_BE_DIS;
@@ -445,8 +461,9 @@ void msm_dmov_flush(unsigned int id)
 	/* XXX not checking if flush cmd sent already */
 	if (!list_empty(&dmov_conf[adm].active_commands[ch])) {
 		PRINT_IO("msm_dmov_flush(%d), send flush cmd\n", id);
-		writel(DMOV_FLUSH_TYPE, DMOV_REG(DMOV_FLUSH0(ch), adm));
+		writel_relaxed(DMOV_FLUSH_TYPE, DMOV_REG(DMOV_FLUSH0(ch), adm));
 	}
+	/* spin_unlock_irqrestore has the necessary barrier */
 	spin_unlock_irqrestore(&dmov_conf[adm].lock, irq_flags);
 }
 EXPORT_SYMBOL(msm_dmov_flush);
@@ -502,12 +519,12 @@ EXPORT_SYMBOL(msm_dmov_exec_cmd);
 
 static void fill_errdata(struct msm_dmov_errdata *errdata, int ch, int adm)
 {
-	errdata->flush[0] = readl(DMOV_REG(DMOV_FLUSH0(ch), adm));
-	errdata->flush[1] = readl(DMOV_REG(DMOV_FLUSH1(ch), adm));
-	errdata->flush[2] = readl(DMOV_REG(DMOV_FLUSH2(ch), adm));
-	errdata->flush[3] = readl(DMOV_REG(DMOV_FLUSH3(ch), adm));
-	errdata->flush[4] = readl(DMOV_REG(DMOV_FLUSH4(ch), adm));
-	errdata->flush[5] = readl(DMOV_REG(DMOV_FLUSH5(ch), adm));
+	errdata->flush[0] = readl_relaxed(DMOV_REG(DMOV_FLUSH0(ch), adm));
+	errdata->flush[1] = readl_relaxed(DMOV_REG(DMOV_FLUSH1(ch), adm));
+	errdata->flush[2] = readl_relaxed(DMOV_REG(DMOV_FLUSH2(ch), adm));
+	errdata->flush[3] = readl_relaxed(DMOV_REG(DMOV_FLUSH3(ch), adm));
+	errdata->flush[4] = readl_relaxed(DMOV_REG(DMOV_FLUSH4(ch), adm));
+	errdata->flush[5] = readl_relaxed(DMOV_REG(DMOV_FLUSH5(ch), adm));
 }
 
 static irqreturn_t msm_datamover_irq_handler(int irq, void *dev_id)
@@ -523,8 +540,8 @@ static irqreturn_t msm_datamover_irq_handler(int irq, void *dev_id)
 	int adm = DMOV_IRQ_TO_ADM(irq);
 
 	spin_lock_irqsave(&dmov_conf[adm].lock, irq_flags);
-
-	int_status = readl(DMOV_REG(DMOV_ISR, adm)); /* read and clear isr */
+	/* read and clear isr */
+	int_status = readl_relaxed(DMOV_REG(DMOV_ISR, adm));
 	PRINT_FLOW("msm_datamover_irq_handler: DMOV_ISR %x\n", int_status);
 
 	while (int_status) {
@@ -533,14 +550,14 @@ static irqreturn_t msm_datamover_irq_handler(int irq, void *dev_id)
 		id = DMOV_CHAN_ADM_TO_ID(ch, adm);
 		PRINT_FLOW("msm_datamover_irq_handler %08x %08x id %d\n", int_status, mask, id);
 		int_status &= ~mask;
-		ch_status = readl(DMOV_REG(DMOV_STATUS(ch), adm));
+		ch_status = readl_relaxed(DMOV_REG(DMOV_STATUS(ch), adm));
 		if (!(ch_status & DMOV_STATUS_RSLT_VALID)) {
 			PRINT_FLOW("msm_datamover_irq_handler id %d, "
 				"result not valid %x\n", id, ch_status);
 			continue;
 		}
 		do {
-			ch_result = readl(DMOV_REG(DMOV_RSLT(ch), adm));
+			ch_result = readl_relaxed(DMOV_REG(DMOV_RSLT(ch), adm));
 			if (list_empty(&dmov_conf[adm].active_commands[ch])) {
 				PRINT_ERROR("msm_datamover_irq_handler id %d, got result "
 					"with no active command, status %x, result %x\n",
@@ -586,9 +603,12 @@ static irqreturn_t msm_datamover_irq_handler(int irq, void *dev_id)
 				}
 				/* this does not seem to work, once we get an error */
 				/* the datamover will no longer accept commands */
-				writel(0, DMOV_REG(DMOV_FLUSH0(ch), adm));
+				writel_relaxed(0, DMOV_REG(DMOV_FLUSH0(ch),
+					       adm));
 			}
-			ch_status = readl(DMOV_REG(DMOV_STATUS(ch), adm));
+			rmb();
+			ch_status = readl_relaxed(DMOV_REG(DMOV_STATUS(ch),
+						  adm));
 #ifndef CONFIG_MSM_ADM3
 			PRINT_FLOW("msm_datamover_irq_handler id %d, status %x\n", id, ch_status);
 			if ((ch_status & DMOV_STATUS_CMD_PTR_RDY) &&
@@ -602,8 +622,8 @@ static irqreturn_t msm_datamover_irq_handler(int irq, void *dev_id)
 				list_add_tail(&cmd->list,
 					&dmov_conf[adm].active_commands[ch]);
 				PRINT_FLOW("msm_datamover_irq_handler id %d, start command\n", id);
-				writel(cmd->cmdptr, DMOV_REG(DMOV_CMD_PTR(ch),
-					adm));
+				writel_relaxed(cmd->cmdptr,
+					       DMOV_REG(DMOV_CMD_PTR(ch), adm));
 			}
 #endif
 		} while (ch_status & DMOV_STATUS_RSLT_VALID);
@@ -668,6 +688,8 @@ static struct dev_pm_ops msm_dmov_dev_pm_ops = {
 static int msm_dmov_init_clocks(struct platform_device *pdev)
 {
 	int adm = (pdev->id >= 0) ? pdev->id : 0;
+	int ret;
+
 	dmov_conf[adm].clk = clk_get(&pdev->dev, "adm_clk");
 	if (IS_ERR(dmov_conf[adm].clk)) {
 		printk(KERN_ERR "%s: Error getting adm_clk\n", __func__);
@@ -679,6 +701,16 @@ static int msm_dmov_init_clocks(struct platform_device *pdev)
 	if (IS_ERR(dmov_conf[adm].pclk)) {
 		dmov_conf[adm].pclk = NULL;
 		/* pclk not present on all SoCs, don't bail on failure */
+	}
+
+	dmov_conf[adm].ebiclk = clk_get(&pdev->dev, "ebi1_adm_clk");
+	if (IS_ERR(dmov_conf[adm].ebiclk)) {
+		dmov_conf[adm].ebiclk = NULL;
+		/* ebiclk not present on all SoCs, don't bail on failure */
+	} else {
+		ret = clk_set_rate(dmov_conf[adm].ebiclk, 27000000);
+		if (ret)
+			return -ENOENT;
 	}
 
 	return 0;
@@ -694,10 +726,10 @@ static void config_datamover(int adm)
 		unsigned conf;
 		/* Only configure scorpion channels */
 		if (chan_conf[i].sd <= 1) {
-			conf = readl(DMOV_REG(DMOV_CONF(i), adm));
+			conf = readl_relaxed(DMOV_REG(DMOV_CONF(i), adm));
 			conf &= ~DMOV_CONF_SD(7);
 			conf |= DMOV_CONF_SD(chan_conf[i].sd);
-			writel(conf | DMOV_CONF_SHADOW_EN,
+			writel_relaxed(conf | DMOV_CONF_SHADOW_EN,
 			       DMOV_REG(DMOV_CONF(i), adm));
 		}
 	}
@@ -705,7 +737,7 @@ static void config_datamover(int adm)
 		struct msm_dmov_crci_conf *crci_conf =
 			dmov_conf[adm].crci_conf;
 
-		writel(DMOV_CRCI_CTL_BLK_SZ(crci_conf[i].blk_size),
+		writel_relaxed(DMOV_CRCI_CTL_BLK_SZ(crci_conf[i].blk_size),
 		       DMOV_REG(DMOV_CRCI_CTL(i), adm));
 	}
 #endif
@@ -735,18 +767,27 @@ static int msm_dmov_probe(struct platform_device *pdev)
 	}
 	disable_irq(dmov_conf[adm].irq);
 	ret = msm_dmov_init_clocks(pdev);
-	if (ret)
+	if (ret) {
+		PRINT_ERROR("Requesting ADM%d clocks failed\n", adm);
 		return -ENOENT;
+	}
+	ret = msm_dmov_clk_toggle(adm, 1);
+	if (ret) {
+		PRINT_ERROR("Enabling ADM%d clocks failed\n", adm);
+		return -ENOENT;
+	}
 
 	config_datamover(adm);
 	for (i = 0; i < MSM_DMOV_CHANNEL_COUNT; i++) {
 		INIT_LIST_HEAD(&dmov_conf[adm].ready_commands[i]);
 		INIT_LIST_HEAD(&dmov_conf[adm].active_commands[i]);
 
-		writel(DMOV_RSLT_CONF_IRQ_EN
+		writel_relaxed(DMOV_RSLT_CONF_IRQ_EN
 		     | DMOV_RSLT_CONF_FORCE_FLUSH_RSLT,
 		     DMOV_REG(DMOV_RSLT_CONF(i), adm));
 	}
+	wmb();
+	msm_dmov_clk_toggle(adm, 0);
 	return ret;
 }
 

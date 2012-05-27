@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2007 Google, Inc.
- * Copyright (c) 2008-2010, Code Aurora Forum. All rights reserved.
+ * Copyright (c) 2008-2011, Code Aurora Forum. All rights reserved.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -1039,12 +1039,20 @@ static int msm_nand_read_oob(struct mtd_info *mtd, loff_t from,
 
 			}
 			if (ops->oobbuf) {
+				dma_sync_single_for_cpu(chip->dev,
+				oob_dma_addr_curr - (ops->ooblen - oob_len),
+				ops->ooblen - oob_len, DMA_BIDIRECTIONAL);
+
 				for (n = 0; n < ops->ooblen; n++) {
 					if (ops->oobbuf[n] != 0xff) {
 						pageerr = rawerr;
 						break;
 					}
 				}
+
+				dma_sync_single_for_device(chip->dev,
+				oob_dma_addr_curr - (ops->ooblen - oob_len),
+				ops->ooblen - oob_len, DMA_BIDIRECTIONAL);
 			}
 		}
 		if (pageerr) {
@@ -1800,12 +1808,20 @@ static int msm_nand_read_oob_dualnandc(struct mtd_info *mtd, loff_t from,
 
 			}
 			if (ops->oobbuf) {
+				dma_sync_single_for_cpu(chip->dev,
+				oob_dma_addr_curr - (ops->ooblen - oob_len),
+				ops->ooblen - oob_len, DMA_BIDIRECTIONAL);
+
 				for (n = 0; n < ops->ooblen; n++) {
 					if (ops->oobbuf[n] != 0xff) {
 						pageerr = rawerr;
 						break;
 					}
 				}
+
+				dma_sync_single_for_device(chip->dev,
+				oob_dma_addr_curr - (ops->ooblen - oob_len),
+				ops->ooblen - oob_len, DMA_BIDIRECTIONAL);
 			}
 		}
 		if (pageerr) {

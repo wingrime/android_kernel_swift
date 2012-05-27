@@ -947,7 +947,7 @@ static int bma150_init_chip(struct i2c_client *client)
 #define BMA_ANY_MOTION_THRES	5
 	int ret;
 	u8 v;
-	printk("%s()\n",__FUNCTION__);
+	printk("%s\n",__FUNCTION__);
 
 	/* set range as +/- 2g and bandwidth as 190 Hz */
 	ret = i2c_smbus_read_byte_data(client, 0x14);
@@ -955,7 +955,6 @@ static int bma150_init_chip(struct i2c_client *client)
 		dev_err(&client->dev, "i2c_smbus_read_byte_data failed\n");
 		return -EIO;
 	}
-	printk("%s()1\n",__FUNCTION__);
 
 	v = ret & 0xff;
 	v &= ~(0x1f); 	
@@ -965,7 +964,6 @@ static int bma150_init_chip(struct i2c_client *client)
 		dev_err(&client->dev, "i2c_smbus_write_byte_data failed\n");
 		return -EIO;
 	}
-	printk("%s()2\n",__FUNCTION__);
 
 	/* set any_motion threshold */
 	v = BMA_ANY_MOTION_THRES;
@@ -981,7 +979,6 @@ static int bma150_init_chip(struct i2c_client *client)
 		dev_err(&client->dev, "i2c_smbus_read_byte_data failed\n");
 		return -EIO;
 	}
-	printk("%s()3\n",__FUNCTION__);
 
 	v = ret & 0xff;
 	v &= ~(0x3 << 6);
@@ -999,7 +996,6 @@ static int bma150_init_chip(struct i2c_client *client)
 		dev_err(&client->dev, "i2c_smbus_read_byte_data failed\n");
 		return -EIO;
 	}
-	printk("%s()4\n",__FUNCTION__);
 
 	v = ret & 0xff;
 	v |= (1 << 6); /* set adv_INIT bit */
@@ -1010,7 +1006,6 @@ static int bma150_init_chip(struct i2c_client *client)
 		return -EIO;
 	}
 
-	printk("%s()5\n",__FUNCTION__);
 
 	/* enable any_motion */
 	ret = i2c_smbus_read_byte_data(client, 0x0B);
@@ -1028,7 +1023,6 @@ static int bma150_init_chip(struct i2c_client *client)
 		dev_err(&client->dev, "i2c_smbus_write_byte_data failed\n");
 		return -EIO;
 	}
-	printk("%s()7\n",__FUNCTION__);
 
 	return 0;
 

@@ -2160,7 +2160,7 @@ static int msm_pp_release(struct msm_sync *sync, void __user *arg)
 		}
 		CDBG("%s: delivering pp_snap\n", __func__);
 		msm_enqueue(&sync->pict_q, &sync->pp_snap->list_pict);
-		msm_enqueue(&sync->pict_q, &sync->pp_thumb->list_pict);
+		//msm_enqueue(&sync->pict_q, &sync->pp_thumb->list_pict); //wingrime camera dirty fix
 		sync->pp_snap = NULL;
 		sync->pp_thumb = NULL;
 		spin_unlock_irqrestore(&pp_snap_spinlock, flags);
@@ -2537,8 +2537,10 @@ static int msm_release_frame(struct inode *node, struct file *filep)
 	rc = __msm_release(pmsm->sync);
 	if (!rc) {
 		msm_queue_drain(&pmsm->sync->frame_q, list_frame);
+		msm_queue_drain(&pmsm->sync->pict_q, list_pict); //wingrime dirty camera fix
 		atomic_set(&pmsm->opened, 0);
 	}
+	
 	return rc;
 }
 

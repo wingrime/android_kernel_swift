@@ -79,7 +79,7 @@
 #endif
 
 #ifdef CONFIG_ARCH_MSM7X27
-#define MSM_PMEM_MDP_SIZE	(1024*1024*18)//0x1400000
+#define MSM_PMEM_MDP_SIZE	0x1700000
 #define MSM_PMEM_ADSP_SIZE	0xAE4000
 #define MSM_PMEM_AUDIO_SIZE	0x5B000
 #define MSM_FB_SIZE		0x96000
@@ -1585,7 +1585,7 @@ struct platform_device mddi_ss_driveric_device = {
 	}
 };
 #define MSM7X27_EBI1_CS0_BASE      0x00200000
-#define SWIFT_RAM_CONSOLE_BASE (MSM7X27_EBI1_CS0_BASE + 217 * SZ_1M)
+#define SWIFT_RAM_CONSOLE_BASE (MSM7X27_EBI1_CS0_BASE + 214 * SZ_1M)
 #define SWIFT_RAM_CONSOLE_SIZE (128 * SZ_1K)
 static struct resource ram_console_resource[] = {
    {
@@ -2474,11 +2474,10 @@ static void __init swift_fixup(struct machine_desc *desc, struct tag *tags,
 	mi->nr_banks = 1;
 	mi->bank[0].start = PHYS_OFFSET;
 	mi->bank[0].node = PHYS_TO_NID(PHYS_OFFSET);
-	//getting more ram from modem  space 214+
 #ifdef CONFIG_ANDROID_RAM_CONSOLE
-	mi->bank[0].size = (216*1024*1024);
+	mi->bank[0].size = (214*1024*1024);
 #else
-        mi->bank[0].size = (217*1024*1024);
+	mi->bank[0].size = (215*1024*1024);
 #endif
 }
 

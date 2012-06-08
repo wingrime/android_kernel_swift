@@ -39,6 +39,9 @@ int current_scene = 0;
 int previous_mode = 0;
 
 int focus_mode = 0;
+/* 0 - auto 1 - macro 2 normal*/
+int antibanding_mode = 0; 
+/* 0 - auto 1 - 50hz 2 - 60 hz*/ 
 static int debug_mask = 1; 
 
 module_param_named(debug_mask, debug_mask, int, S_IRUGO|S_IWUSR|S_IWGRP);
@@ -391,6 +394,7 @@ static int32_t isx005_cancel_focus(int mode)
 		printk("[isx005.c]%s: mode = %d\n",__func__,mode);
 
 	switch(mode){
+	case NORMAL_FOCUS:
 	case AUTO_FOCUS:
 		if(debug_mask)
 	   		printk("[isx005.c] return to the infinity\n");
@@ -714,14 +718,14 @@ static int32_t isx005_focus_config(int mode)
 			}else{
 				if(af_driver_status != 255){				
 
-					/*
+					
 					rc = isx005_i2c_write(isx005_client->addr,
 							0x000A, 0x01, BYTE_LEN);
 					if (rc < 0){
 						printk("[isx005.c]%s: fail in writing for AF driver\n",__func__);
 						return rc;
 					}
-					*/
+					
 					mdelay(70); // 1 frame skip
 				}else{
 					
@@ -753,6 +757,7 @@ static int32_t isx005_focus_config(int mode)
 		mdelay(70); // 1 frame skip
 	}
 	switch(mode){
+	case NORMAL_FOCUS: //wingrime, same but not do af on shot
 	case AUTO_FOCUS:
 		rc = isx005_set_auto_focus();
 		break;
@@ -1339,7 +1344,11 @@ static int32_t isx005_set_iso(int8_t iso)
 	int32_t rc;
 	
 	unsigned short outdoor_f, d_flicker, d_hz;
-	
+	printk(KERN_ERR "[isx005.c] antibandig_mode=%d\n",antibanding_mode);
+
+	  if (!antibanding_mode)
+	    {
+	      //AUTO antibanding
 	rc = isx005_i2c_read(isx005_client->addr,
         	0x6C21, &outdoor_f, BYTE_LEN);
 	if (rc < 0){
@@ -1359,7 +1368,7 @@ static int32_t isx005_set_iso(int8_t iso)
 			return rc;
 		}
 		if (d_flicker == 0){
-			
+	
 			rc = isx005_set_iso_indoor_50hz(iso);
 			if (rc < 0){
 				printk("[isx005.c]%s: fail in setting 50Hz\n",__func__);
@@ -1436,6 +1445,15 @@ static int32_t isx005_set_iso(int8_t iso)
 			rc = -EINVAL;
 		}
 	}
+	    }else
+	    {
+	      //manual antibanding mode
+	      if (antibanding_mode == 1)
+		 isx005_set_iso_indoor_50hz(iso);
+	      else
+		 isx005_set_iso_indoor_60hz(iso);
+	    }
+	  
 		
 	return rc;
 }
@@ -1756,8 +1774,10 @@ int isx005_sensor_config(void __user *argp)
 	int32_t  rc=0;
 	 
 	if (copy_from_user(&cfg_data,(void *)argp,sizeof(struct sensor_cfg_data)))
+	  {
+	    printk("[isx005.c] isx005_ioctl copy from user failed");
 		return -EFAULT;
-
+	  }
 	if(debug_mask)
 		printk("[isx005.c] isx005_ioctl, cfgtype = %d, mode = %d width = %d height = %d \n",
 		       cfg_data.cfgtype, cfg_data.mode,cfg_data.width,cfg_data.height);
@@ -1797,8 +1817,11 @@ int isx005_sensor_config(void __user *argp)
 	case CFG_SET_DEFAULT_FOCUS:
 		if(debug_mask)
 			printk("[isx005.c]%s: command is CFG_SET_DEFAULT_FOCUS\n",__func__);
-		   
-		rc = isx005_set_focus();
+		//wingrime - try avoid bugs in non manual modes -- not check focus on snapshot when not in normal mode
+		if (!focus_mode)
+		  rc = isx005_set_focus();
+		else 
+		  rc = 0;
 		break;
 
 	case CFG_MOVE_FOCUS:
@@ -1848,6 +1871,11 @@ int isx005_sensor_config(void __user *argp)
  
 		rc = isx005_set_brightness(cfg_data.cfg.ev);
 		break;
+	case CFG_SET_ANTIBANDING_MODE:
+		if(debug_mask)
+			printk("[isx005.c]%s: command is CFG_SET_ANTIBANDING_MODE\n",__func__);
+	  antibanding_mode = cfg_data.cfg.scene_mode; //any way same union
+	  break;
 	default:
 		rc = -EFAULT;
 	}

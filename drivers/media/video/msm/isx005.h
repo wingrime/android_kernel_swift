@@ -105,6 +105,7 @@ struct isx005_reg {
 /*Auto focus mode */
 #define AUTO_FOCUS  0
 #define MACRO_FOCUS 1
+#define NORMAL_FOCUS 2 // wingrime, adding normal focus
 /*Special effects */
 #define	 CAMERA_EFFECT_PASTEL 10
 #define	 CAMERA_EFFECT_NEGATIVE_SEPIA 11
@@ -151,6 +152,8 @@ struct isx005_reg {
 #define CFG_SET_ISO 28
 #define CFG_SET_SCENE_MODE 29
 #define CFG_SET_CANCEL_FOCUS 35
+//wingrime antibanding
+#define CFG_SET_ANTIBANDING_MODE 131
 
 };
 #endif 

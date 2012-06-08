@@ -192,7 +192,8 @@ static struct android_usb_product usb_products[] = {
 		.functions	= usb_functions_default,
 	},
 	{
-		.product_id	= 0x9025,
+	  //wingrime - adb on windows fix
+	        .product_id	= 0x618E,
 		.num_functions	= ARRAY_SIZE(usb_functions_default_adb),
 		.functions	= usb_functions_default_adb,
 	},

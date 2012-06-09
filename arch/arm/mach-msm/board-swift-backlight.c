@@ -24,7 +24,7 @@
 #include <linux/delay.h>
 //#include <linux/fs.h>
 
-if defined(CONFIG_RT9393_MSG_DEBUG)
+#if defined(CONFIG_RT9393_MSG_DEBUG)
 enum {
 	BL_DEBUG_DATA = 1U << 6,
 	BL_DEBUG_FUNC = 1U << 7, /* function debug*/

@@ -2379,7 +2379,7 @@ static long msm_ioctl_pic(struct file *filep, unsigned int cmd,
 
 	switch (cmd) {
 	case MSM_CAM_IOCTL_GET_PICTURE:
-	  pr_err("Get piccture ioctl");
+	  pr_err("Get picture ioctl\n");
 		rc = msm_get_pic(pmsm->sync, argp);
 		break;
 	case MSM_CAM_IOCTL_RELEASE_PIC_BUFFER:
@@ -2433,7 +2433,7 @@ static long msm_ioctl_control(struct file *filep, unsigned int cmd,
 		rc = pmsm->sync->sctrl.s_config(argp);
 		break;	
 	case MSM_CAM_IOCTL_GET_PICTURE:
-	  pr_err("Get piccture ioctl");
+	  pr_err("Get picture ioctl\n");
 		rc = msm_get_pic(pmsm->sync, argp);
 		break;
 	default:

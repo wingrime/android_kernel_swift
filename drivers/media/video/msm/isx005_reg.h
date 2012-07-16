@@ -21,7 +21,8 @@
 
 #include "isx005.h"
 
-#if defined(CONFIG_MACH_MSM7X27_THUNDERG) || defined(CONFIG_MACH_MSM7X27_THUNDERA)
+//#if defined(CONFIG_MACH_MSM7X27_THUNDERG) || defined(CONFIG_MACH_MSM7X27_THUNDERA)
+#if 1
 static struct isx005_register_address_value_pair const
 init_reg_settings_array[] = {
 
@@ -2125,7 +2126,7 @@ tuning_reg_settings_array[] = {	//091214
 	{0x4C85,0x00  ,BYTE_LEN},
 	{0x484E,0x08  ,BYTE_LEN},
 
-#if defined (CONFIG_MACH_MSM7X27_THUNDERG)
+#if 1 //defined (CONFIG_MACH_MSM7X27_THUNDERG)
 	{0x4808,0x9600,WORD_LEN},
 	{0x480A,0xFA00,WORD_LEN},
 	{0x480C,0xE803,WORD_LEN},
@@ -3413,7 +3414,8 @@ struct isx005_reg isx005_regs = {
 	.init_reg_settings = init_reg_settings_array,
 	.init_reg_settings_size = ARRAY_SIZE(
 		init_reg_settings_array),
-#if !defined(CONFIG_MACH_MSM7X27_THUNDERG) && !defined(CONFIG_MACH_MSM7X27_THUNDERA)	
+#if 0
+//!defined(CONFIG_MACH_MSM7X27_THUNDERG) && !defined(CONFIG_MACH_MSM7X27_THUNDERA)	
 	.init_reg32_settings = init_reg32_settings_array,
 	.init_reg32_settings_size = ARRAY_SIZE(
 		init_reg32_settings_array),

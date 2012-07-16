@@ -34,6 +34,7 @@
 
 #include <mach/vreg.h>
 
+
 /*
 * AF Total steps parameters
 */
@@ -41,6 +42,12 @@
 
 DEFINE_MUTEX(isx005_tuning_mutex);
 static int tuning_thread_run;
+#ifdef CAM_DBG
+#define CAMD printk
+#else
+#define CAMD(a,...) 
+#endif 
+
 
 #define CFG_WQ_SIZE		64
 
@@ -213,8 +220,9 @@ static int32_t isx005_i2c_read(unsigned short   saddr,
 	return rc;
 }
 
-#if defined(CONFIG_MACH_MSM7X27_THUNDERG) || \
-	defined(CONFIG_MACH_MSM7X27_THUNDERA)
+#if 1 
+//defined(CONFIG_MACH_MSM7X27_THUNDERG) ||	
+  //	defined(CONFIG_MACH_MSM7X27_THUNDERA)
 static int isx005_reg_init(void)
 {
 	int rc = 0;
@@ -418,7 +426,7 @@ static int isx005_set_sensor_mode(int mode)
 {
 	int rc = 0;
 	int retry = 0;
-
+	CAMD("isx005 - sensor new mode = %d\n",mode);
 	switch (mode) {
 	case SENSOR_PREVIEW_MODE:
 		for (retry = 0; retry < 3; ++retry) {
@@ -456,7 +464,7 @@ static int isx005_cancel_focus(int mode)
 {
 	int rc;
 	int lense_po_back = 0;
-
+	CAMD("Cancel focus! mode = %d\n",mode);
 	switch (mode) {
 	case 0:
 		lense_po_back = 0x3200;
@@ -550,14 +558,16 @@ static int isx005_check_focus(int *lock)
 	unsigned short af_status;
 	unsigned short af_result;
 
-	CDBG("isx005_check_focus\n");
+	CAMD("isx005_check_focus\n");
 
 	/*af status check  0:load, 1: init,  8: af_lock */
 	rc = isx005_i2c_read(isx005_client->addr,
 		0x6D76, &af_status, BYTE_LEN);
 
-	if (af_status != 0x8)
-		return -ETIME;
+	if (af_status != 0x8){
+	  CAMD("Focus fail - ivalid status 0 - load 1 - init 8 - ad_lock current=%d\n",af_status);
+	  return -ETIME;
+	}
 
 	isx005_check_af_lock();
 
@@ -580,45 +590,51 @@ static int isx005_check_focus(int *lock)
 		return rc;
 
 	if (af_result == 1) {
+	  	CAMD("Focus locked!\n");
 		*lock = CFG_AF_LOCKED;		/* success */
 		return rc;
 	} else {
+	  	CAMD("Focus not locked!\n");
 		*lock = CFG_AF_UNLOCKED;	/* fail */
 		return rc;
 	}
-
+	CAMD("Focus fail1\n");
 	return -ETIME;
 }
-
+static int isx005_move_focus(int32_t steps);
 static int isx005_set_af_start(int mode)
 {
 	int rc = 0;
-
-	if (prev_af_mode == mode) {
-		rc = isx005_i2c_write_table(
-			isx005_regs.af_start_reg_settings,
-			isx005_regs.af_start_reg_settings_size);
+		if (prev_af_mode == mode) {
+		  CAMD("isx005 - sensor same af_mode\n");
+		  		rc = isx005_i2c_write_table(
+		  	isx005_regs.af_start_reg_settings,
+		  	isx005_regs.af_start_reg_settings_size);
 	} else {
 		switch (mode) {
 		case FOCUS_NORMAL:
+		  CAMD("isx005 - sensor new af mode = NORMAL\n");
 			rc = isx005_i2c_write_table(
 				isx005_regs.af_normal_reg_settings,
 				isx005_regs.af_normal_reg_settings_size);
 			break;
 
 		case FOCUS_MACRO:
+		  CAMD("isx005 - sensor new af mode = MACRO\n");
 			rc = isx005_i2c_write_table(
 				isx005_regs.af_macro_reg_settings,
 				isx005_regs.af_macro_reg_settings_size);
 			break;
 
 		case FOCUS_AUTO:
+		  CAMD("isx005 - sensor new af mode = AUTO\n");
 			rc = isx005_i2c_write_table(
 				isx005_regs.af_normal_reg_settings,
 				isx005_regs.af_normal_reg_settings_size);
 			break;
 
 		case FOCUS_MANUAL:
+		  CAMD("isx005 - sensor new af mode = MANUAL\n");
 			rc = isx005_i2c_write_table(
 				isx005_regs.af_manual_reg_settings,
 				isx005_regs.af_manual_reg_settings_size);
@@ -629,21 +645,23 @@ static int isx005_set_af_start(int mode)
 			break;
 		}
 		/*af start*/
-		rc = isx005_i2c_write_table(isx005_regs.af_start_reg_settings,
-			isx005_regs.af_start_reg_settings_size);
+			rc = isx005_i2c_write_table(isx005_regs.af_start_reg_settings,
+				isx005_regs.af_start_reg_settings_size);
 	}
-
 	prev_af_mode = mode;
-
+	if (mode == FOCUS_MACRO)
+	  isx005_move_focus(10);
+	
 	return rc;
 }
 
 static int isx005_move_focus(int32_t steps)
 {
+
 	int32_t rc;
 	unsigned short cm_changed_sts, cm_changed_clr, af_pos, manual_pos;
 	int i;
-
+	CAMD("sensor move focus\n");
 	rc = isx005_i2c_write_table(isx005_regs.af_manual_reg_settings,
 			isx005_regs.af_manual_reg_settings_size);
 
@@ -733,7 +751,7 @@ static int isx005_move_focus(int32_t steps)
 static int isx005_set_default_focus(void)
 {
 	int rc;
-
+	CAMD("Sensor default focus\n");
 	rc = isx005_cancel_focus(prev_af_mode);
 	if (rc < 0) {
 		printk(KERN_ERR "[ERROR]%s:fail in cancel_focus\n", __func__);
@@ -761,7 +779,7 @@ static int isx005_set_default_focus(void)
 static int isx005_set_effect(int effect)
 {
 	int rc = 0;
-
+	CAMD("isx005 - sensor new effect  = %d\n",effect);
 	switch (effect) {
 	case CAMERA_EFFECT_OFF:
 		rc = isx005_i2c_write(isx005_client->addr, 0x005F, 0x00,
@@ -905,7 +923,7 @@ static int isx005_set_effect(int effect)
 static int isx005_set_wb(int mode)
 {
 	int rc;
-
+	CAMD("isx005 - sensor new wb = %d\n",mode);
 	switch (mode) {
 	case CAMERA_WB_AUTO:
 		rc = isx005_i2c_write(isx005_client->addr, 0x4453, 0x7B,
@@ -1020,7 +1038,7 @@ static int isx005_set_wb(int mode)
 static int isx005_set_antibanding(int mode)
 {
 	int rc;
-
+	CAMD("isx005 - sensor new antibanding = %d\n",mode);
 	switch (mode) {
 	case CAMERA_ANTIBANDING_OFF:
 		rc = isx005_i2c_write(isx005_client->addr, 0x4001, 0x00,
@@ -1072,7 +1090,7 @@ static int isx005_set_antibanding(int mode)
 static int isx005_set_iso(int iso)
 {
 	int32_t rc;
-
+	CAMD("isx005 - sensor new iso = %d\n",iso);
 	switch (iso) {
 	case CAMERA_ISO_AUTO:
 		rc = isx005_i2c_write(isx005_client->addr,
@@ -1110,10 +1128,9 @@ static int isx005_set_iso(int iso)
 static int32_t isx005_set_scene_mode(int8_t mode)
 {
 	int32_t rc = 0;
-
+	CAMD("isx005 - sensor new scene mode = %d\n",mode);
 	if (prev_scene_mode == mode)
 		return rc;
-
 	switch (mode) {
 	case CAMERA_SCENE_AUTO:
 		rc = isx005_i2c_write_table(
@@ -1164,7 +1181,7 @@ static int32_t isx005_set_scene_mode(int8_t mode)
 static int32_t isx005_set_brightness(int8_t brightness)
 {
 	int32_t rc = 0;
-
+	CAMD("isx005 - sensor new brightness = %d\n",brightness);
 	switch (brightness) {
 	case 0:
 		rc = isx005_i2c_write(isx005_client->addr,
@@ -1319,78 +1336,78 @@ static int32_t isx005_set_brightness(int8_t brightness)
 //wingrime: TODO move this to board file
 void isx005_sensor_power_disable(void)
 {
-int32_t rc = 0;
-struct vreg* vreg_rftx;
-struct vreg* vreg_rfrx2;
-struct vreg* vreg_msme2;
-struct vreg* vreg_wlan;
+  int32_t rc = 0;
+  struct vreg* vreg_rftx;
+  struct vreg* vreg_rfrx2;
+  struct vreg* vreg_msme2;
+  struct vreg* vreg_wlan;
 
-printk("%s \n",__func__);
-
-vreg_wlan = vreg_get(NULL,"wlan");
-    rc= vreg_disable(vreg_wlan);
-if(rc < 0)
-printk("isx005: VREG_CAM_AF: vreg_disabel() fail\n");
+  printk("%s \n",__func__);
+  
+  vreg_wlan = vreg_get(NULL,"wlan");
+  rc= vreg_disable(vreg_wlan);
+  if(rc < 0)
+    printk("isx005: VREG_CAM_AF: vreg_disabel() fail\n");
     mdelay(5);
-
-vreg_rftx = vreg_get(NULL,"rftx");
+    
+    vreg_rftx = vreg_get(NULL,"rftx");
     rc= vreg_disable(vreg_rftx);
-if(rc < 0)
-printk("isx005: VREG_CAM_AVDD: vreg_disabel() fail\n");
-mdelay(5);
-
-vreg_rfrx2 = vreg_get(NULL,"rfrx2");
-rc= vreg_disable(vreg_rfrx2);
-if(rc < 0)
-printk("isx005: VREG_CAM_IOVDD: vreg_disabel() fail\n");
-mdelay(5);
-
-vreg_msme2 = vreg_get(NULL,"msme2");
-rc= vreg_disable(vreg_msme2);
-if(rc < 0)
-printk("isx005: VREG_CAM_DVDD: vreg_disabel() fail\n");
+    if(rc < 0)
+      printk("isx005: VREG_CAM_AVDD: vreg_disabel() fail\n");
+    mdelay(5);
+    
+    vreg_rfrx2 = vreg_get(NULL,"rfrx2");
+    rc= vreg_disable(vreg_rfrx2);
+    if(rc < 0)
+      printk("isx005: VREG_CAM_IOVDD: vreg_disabel() fail\n");
+    mdelay(5);
+    
+    vreg_msme2 = vreg_get(NULL,"msme2");
+    rc= vreg_disable(vreg_msme2);
+    if(rc < 0)
+      printk("isx005: VREG_CAM_DVDD: vreg_disabel() fail\n");
 }
 
 void isx005_sensor_power_enable(void)
 {
-int32_t rc = 0;
-struct vreg* vreg_rftx;
-struct vreg* vreg_rfrx2;
-struct vreg* vreg_msme2;
-struct vreg* vreg_wlan;
-printk("%s \n",__func__);
-
-vreg_msme2 = vreg_get(NULL,"msme2");
-vreg_enable(vreg_msme2);
-rc = vreg_set_level(vreg_msme2,1200);
+  int32_t rc = 0;
+  struct vreg* vreg_rftx;
+  struct vreg* vreg_rfrx2;
+  struct vreg* vreg_msme2;
+  struct vreg* vreg_wlan;
+  printk("%s \n",__func__);
+  
+  vreg_msme2 = vreg_get(NULL,"msme2");
+  vreg_enable(vreg_msme2);
+  rc = vreg_set_level(vreg_msme2,1200);
 if (rc < 0) {
-printk("isx005: camera power enable fail : msme2\n");
-}
-mdelay(5);
-
-vreg_rfrx2 = vreg_get(NULL,"rfrx2");
-vreg_enable(vreg_rfrx2);
-rc = vreg_set_level(vreg_rfrx2,2600);
-if (rc < 0) {
+  printk("isx005: camera power enable fail : msme2\n");
+ }
+ mdelay(5);
+ 
+ vreg_rfrx2 = vreg_get(NULL,"rfrx2");
+ vreg_enable(vreg_rfrx2);
+ rc = vreg_set_level(vreg_rfrx2,2600);
+ if (rc < 0) {
 printk("isx005: camera power enable fail : rfrx2\n");	
+ }
+ mdelay(5);
+ 
+ vreg_rftx = vreg_get(NULL,"rftx");
+ vreg_enable(vreg_rftx);
+ rc = vreg_set_level(vreg_rftx,2700);
+ if (rc < 0) {
+   printk("isx005: camera power enable fail : rftx\n");
 }
-mdelay(5);
-
-vreg_rftx = vreg_get(NULL,"rftx");
-vreg_enable(vreg_rftx);
-rc = vreg_set_level(vreg_rftx,2700);
-if (rc < 0) {
-printk("isx005: camera power enable fail : rftx\n");
-}
-mdelay(5);
-
-vreg_wlan = vreg_get(NULL,"wlan");
-vreg_enable(vreg_wlan);
-rc = vreg_set_level(vreg_wlan,2800);
-if (rc < 0) {
-printk("isx005: camera power enable fail : wlan\n");
-}
-
+ mdelay(5);
+ 
+ vreg_wlan = vreg_get(NULL,"wlan");
+ vreg_enable(vreg_wlan);
+ rc = vreg_set_level(vreg_wlan,2800);
+ if (rc < 0) {
+   printk("isx005: camera power enable fail : wlan\n");
+ }
+ 
 }
 
 
@@ -1442,23 +1459,26 @@ static int isx005_init_sensor(const struct msm_camera_sensor_info *data)
 	*/
 
 	//wingrime swift default init
+
+	//wingrime reset sensor
 		/* Input MCLK = 24MHz */
 	isx005_sensor_power_enable();
- msm_camio_clk_rate_set(24000000);
- msm_camio_camif_pad_reg_reset();
- mdelay(5);
+	isx005_reset(data,0);
+	msm_camio_clk_rate_set(24000000);
+	msm_camio_camif_pad_reg_reset();
+	mdelay(5); 
 
- 
- rc = isx005_reset(data,1);
- if (rc < 0) {
-  printk("[isx005.c]%s: reset fail\n",__func__);
- return rc;
- }
- mdelay(5);
-    rc = isx005_pwdn(data,1);
-    if (rc < 0) {
-  printk("[isx005.c]%s: pwdn fail\n",__func__);
- return rc;
+
+	rc = isx005_reset(data,1);
+	if (rc < 0) {
+	  printk("[isx005.c]%s: reset fail\n",__func__);
+	  return rc;
+	}
+	mdelay(5);
+	rc = isx005_pwdn(data,1);
+	if (rc < 0) {
+	  printk("[isx005.c]%s: pwdn fail\n",__func__);
+	  return rc;
     }
 
     mdelay(8); // T2
@@ -1466,7 +1486,7 @@ static int isx005_init_sensor(const struct msm_camera_sensor_info *data)
 	/*pll register write*/
 	rc = isx005_reg_init();
 	if (rc < 0) {
-		for (num = 0; num < 5; num++) {
+		for (num = 0; num < 3; num++) {
 			msleep(2);
 			printk(KERN_ERR
 				"[ERROR]%s:Set initial register error! retry~! \n", __func__);
@@ -1510,12 +1530,6 @@ static int isx005_sensor_init_probe(const struct msm_camera_sensor_info *data)
 		return -1;
 	}
 
-#if defined(CONFIG_MACH_MSM7X27_THUNDERG) || \
-	defined(CONFIG_MACH_MSM7X27_THUNDERC)
-	/* LGE_CHANGE_S. Change code to apply new LUT for display quality.
-	 * 2010-08-13. minjong.gong@lge.com */
-	mdp_load_thunder_lut(2);	/* Camera LUT */
-#endif
 
 	mutex_lock(&isx005_mutex);
 	rc = isx005_init_sensor(data);
@@ -1582,20 +1596,13 @@ int isx005_sensor_release(void)
 
 	mutex_unlock(&isx005_mutex);
 
-#if defined(CONFIG_MACH_MSM7X27_THUNDERG) || \
-	defined(CONFIG_MACH_MSM7X27_THUNDERC)
-	/* LGE_CHANGE_S. Change code to apply new LUT for display quality.
-	 * 2010-08-13. minjong.gong@lge.com */
-	mdp_load_thunder_lut(1);	/* Normal LUT */
-#endif
-
 	return rc;
 }
 
 static int dequeue_sensor_config(int cfgtype, int mode)
 {
 	int rc;
-
+	CDBG("isx005 - sensor config, type = %d\n",cfgtype);
 	switch (cfgtype) {
 	case CFG_SET_MODE:
 		rc = isx005_set_sensor_mode(mode);
@@ -1674,7 +1681,7 @@ int isx005_sensor_config(void __user *argp)
 		break;
 
 	case CFG_SET_EFFECT:
-		rc = isx005_set_effect(cfg_data.mode);
+		rc = isx005_set_effect(cfg_data.cfg.effect);
 		break;
 
 	case CFG_MOVE_FOCUS:
@@ -1694,7 +1701,7 @@ int isx005_sensor_config(void __user *argp)
 		break;
 
 	case CFG_START_AF_FOCUS:
-		rc = isx005_set_af_start(cfg_data.mode);
+		rc = isx005_set_af_start(cfg_data.cfg.focus.mode);
 		break;
 
 	case CFG_CHECK_AF_DONE:
@@ -1710,19 +1717,19 @@ int isx005_sensor_config(void __user *argp)
 		break;
 
 	case CFG_SET_WB:
-		rc = isx005_set_wb(cfg_data.mode);
+		rc = isx005_set_wb(cfg_data.cfg.wb);
 		break;
 
 	case CFG_SET_ANTIBANDING:
-		rc = isx005_set_antibanding(cfg_data.mode);
+		rc = isx005_set_antibanding(cfg_data.cfg.scene_mode);
 		break;
 
 	case CFG_SET_ISO:
-		rc = isx005_set_iso(cfg_data.mode);
+		rc = isx005_set_iso(cfg_data.cfg.iso);
 		break;
 
 	case CFG_SET_SCENE:
-		rc = isx005_set_scene_mode(cfg_data.mode);
+	       rc = isx005_set_scene_mode(cfg_data.cfg.scene_mode);
 		break;
 
 	case CFG_SET_BRIGHTNESS:
@@ -1731,6 +1738,7 @@ int isx005_sensor_config(void __user *argp)
 
 	default:
 		rc = -EINVAL;
+		printk("Unknown sensor cfg  - mode = %d\n",cfg_data.cfgtype);
 		break;
 	}
 

@@ -1,6 +1,6 @@
 /* linux/arch/arm/mach-msm/swift/board-swift-bl-rt9393.c
  *
- * Copyright (C) 2009-2011 LGE Inc. , wingrime 2011 (c)
+ * Copyright (C) 2009-2011 LGE Inc. , wingrime 2011-2012 (c)
  * Author : MoonCheol Kang <knight0708@lge.com>
  *
  * This software is licensed under the term of the GNU General Public
@@ -30,17 +30,8 @@ enum {
 	BL_DEBUG_FUNC = 1U << 7, /* function debug*/
 };
 
-static unsigned int lge_bl_debug_mask;
 
-module_param_named(debug_mask, lge_bl_debug_mask, int,
-		S_IRUGO | S_IWUSR | S_IWGRP);
-
-#define KNIGHT_DBG(mask, fmt, args...) \
-	do {\
-		if ((mask) & lge_bl_debug_mask) \
-				printk(KERN_INFO "[MC] [%-18s:%5d] " \
-					fmt, __func__, __LINE__, ## args);\
-		} while (0)
+#define KNIGHT_DBG(mask, fmt, args...)	printk(KERN_INFO "[MC] [%-18s:%5d] " fmt, __func__, __LINE__, ## args);	
 #else
 #define KNIGHT_DBG(mask, fmt, args...)
 #endif
@@ -230,7 +221,6 @@ static int rt9393_probe(struct platform_device *pdev)
 {
 	int err;
 	struct backlight_properties props;
-	printk("PROBING BACKLIGHT\n");
 	err = gpio_request(GPIO_BL_EN, 0);
 
 	if (err < 0 ) {
@@ -264,6 +254,7 @@ static int rt9393_probe(struct platform_device *pdev)
 	setup_timer(&timerblbl, bl_timer, (unsigned long)pdev);
 #if 1
 	bd->props.brightness = MAX_BRIGHTNESS/2;
+	rt9393_power_down();
 	rt9393_set_intensity(bd);
 #endif
 

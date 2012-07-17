@@ -2181,6 +2181,7 @@ static long msm_ioctl_common(struct msm_cam_device *pmsm,
 	case MSM_CAM_IOCTL_UNREGISTER_PMEM:
 		return msm_pmem_table_del(pmsm->sync, argp);
 	default:
+	  printk(KERN_ERR "msm cam control iocrl - UNKNOWN CODE %d\n",cmd);
 		return -EINVAL;
 	}
 }
@@ -2378,7 +2379,7 @@ static long msm_ioctl_pic(struct file *filep, unsigned int cmd,
 
 	switch (cmd) {
 	case MSM_CAM_IOCTL_GET_PICTURE:
-	  pr_err("Get piccture ioctl");
+	  pr_err("Get picture ioctl\n");
 		rc = msm_get_pic(pmsm->sync, argp);
 		break;
 	case MSM_CAM_IOCTL_RELEASE_PIC_BUFFER:
@@ -2428,8 +2429,11 @@ static long msm_ioctl_control(struct file *filep, unsigned int cmd,
 	case MSM_CAM_IOCTL_GET_CAMERA_INFO:
 		rc = msm_get_camera_info(argp);
 		break;
+	case MSM_CAM_IOCTL_SENSOR_IO_CFG:
+		rc = pmsm->sync->sctrl.s_config(argp);
+		break;	
 	case MSM_CAM_IOCTL_GET_PICTURE:
-	  pr_err("Get piccture ioctl");
+	  pr_err("Get picture ioctl\n");
 		rc = msm_get_pic(pmsm->sync, argp);
 		break;
 	default:

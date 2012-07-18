@@ -1,279 +1,481 @@
-/* Copyright (c) 2002,2007-2010, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2002,2007-2011, Code Aurora Forum. All rights reserved.
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *     * Redistributions of source code must retain the above copyright
- *       notice, this list of conditions and the following disclaimer.
- *     * Redistributions in binary form must reproduce the above copyright
- *       notice, this list of conditions and the following disclaimer in the
- *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of Code Aurora Forum nor
- *       the names of its contributors may be used to endorse or promote
- *       products derived from this software without specific prior written
- *       permission.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
  *
- * Alternatively, provided that this notice is retained in full, this software
- * may be relicensed by the recipient under the terms of the GNU General Public
- * License version 2 ("GPL") and only version 2, in which case the provisions of
- * the GPL apply INSTEAD OF those given above.  If the recipient relicenses the
- * software under the GPL, then the identification text in the MODULE_LICENSE
- * macro must be changed to reflect "GPLv2" instead of "Dual BSD/GPL".  Once a
- * recipient changes the license terms to the GPL, subsequent recipients shall
- * not relicense under alternate licensing terms, including the BSD or dual
- * BSD/GPL terms.  In addition, the following license statement immediately
- * below and between the words START and END shall also then apply when this
- * software is relicensed under the GPL:
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
  *
- * START
- *
- * This program is free software; you can redistribute it and/or modify it under
- * the terms of the GNU General Public License version 2 and only version 2 as
- * published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful, but WITHOUT
- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
- * FOR A PARTICULAR PURPOSE.  See the GNU General Public License for more
- * details.
- *
- * You should have received a copy of the GNU General Public License along with
- * this program; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * END
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+ * 02110-1301, USA.
  *
  */
 #include <linux/io.h>
 #include <linux/spinlock.h>
 #include <linux/genalloc.h>
+#include <linux/dma-mapping.h>
+#include <linux/slab.h>
+#include <linux/vmalloc.h>
+#include <asm/cacheflush.h>
 
 #include "kgsl_sharedmem.h"
 #include "kgsl_device.h"
 #include "kgsl.h"
 #include "kgsl_log.h"
+#include "kgsl_cffdump.h"
 
-/*  block alignment shift count */
-static inline unsigned int
-kgsl_memarena_get_order(uint32_t flags)
+static struct kgsl_process_private *
+_get_priv_from_kobj(struct kobject *kobj)
 {
-	unsigned int alignshift;
-	alignshift = ((flags & KGSL_MEMFLAGS_ALIGN_MASK)
-		      >> KGSL_MEMFLAGS_ALIGN_SHIFT);
-	return alignshift;
-}
+	struct kgsl_process_private *private;
+	unsigned long name;
 
-/*  block alignment shift count */
-static inline unsigned int
-kgsl_memarena_align(unsigned int address, unsigned int shift)
-{
-	unsigned int alignedbaseaddr = ((address) >> shift) << shift;
-	if (alignedbaseaddr < address)
-		alignedbaseaddr += (1 << shift);
-
-	return alignedbaseaddr;
-}
-
-int
-kgsl_sharedmem_init(struct kgsl_sharedmem *shmem)
-{
-	int result = -EINVAL;
-
-	shmem->baseptr = ioremap(shmem->physbase, shmem->size);
-	KGSL_MEM_INFO("ioremap(shm) = %p\n", shmem->baseptr);
-
-	if (shmem->baseptr == NULL) {
-		KGSL_MEM_ERR("ioremap failed for address %08x size %d\n",
-				shmem->physbase, shmem->size);
-		result = -ENODEV;
-		goto error;
-	}
-
-	shmem->pool = gen_pool_create(KGSL_PAGESIZE_SHIFT, -1);
-	if (shmem->pool == NULL) {
-		KGSL_MEM_ERR("gen_pool_create failed\n");
-		result = -ENOMEM;
-		goto error_iounmap;
-	}
-
-	if (gen_pool_add(shmem->pool, shmem->physbase, shmem->size, -1)) {
-		KGSL_MEM_ERR("gen_pool_create failed\n");
-		result = -ENOMEM;
-		goto error_pool_destroy;
-	}
-	result = 0;
-	KGSL_MEM_INFO("physbase 0x%08x size 0x%08x baseptr 0x%p\n",
-			shmem->physbase, shmem->size, shmem->baseptr);
-	return 0;
-
-error_pool_destroy:
-	gen_pool_destroy(shmem->pool);
-error_iounmap:
-	iounmap(shmem->baseptr);
-	shmem->baseptr = NULL;
-error:
-	return result;
-}
-
-int
-kgsl_sharedmem_close(struct kgsl_sharedmem *shmem)
-{
-	if (shmem->pool) {
-		gen_pool_destroy(shmem->pool);
-		shmem->pool = NULL;
-	}
-
-	if (shmem->baseptr != NULL) {
-		KGSL_MEM_INFO("iounmap(shm) = %p\n", shmem->baseptr);
-		iounmap(shmem->baseptr);
-		shmem->baseptr = NULL;
-	}
-
-	return 0;
-}
-/*
-* get the host mapped address for a hardware device address
-*/
-static void *kgsl_memarena_gethostptr(struct kgsl_sharedmem *shmem,
-					uint32_t physaddr)
-{
-	void *result;
-
-	KGSL_MEM_VDBG("enter (memarena=%p, physaddr=0x%08x)\n",
-			shmem, physaddr);
-
-	BUG_ON(shmem == NULL);
-
-	/* check address range */
-	if (physaddr < shmem->physbase)
+	if (!kobj)
 		return NULL;
 
-	if (physaddr >= shmem->physbase + shmem->size)
+	if (sscanf(kobj->name, "%ld", &name) != 1)
 		return NULL;
 
-	if (shmem->baseptr == NULL) {
-		KGSL_MEM_VDBG("return: %p\n", NULL);
-		return NULL;
+	list_for_each_entry(private, &kgsl_driver.process_list, list) {
+		if (private->pid == name)
+			return private;
 	}
 
-	result = ((physaddr - shmem->physbase) + shmem->baseptr);
-
-	KGSL_MEM_VDBG("return: %p\n", result);
-
-	return result;
+	return NULL;
 }
 
+/* sharedmem / memory sysfs files */
 
-int
-kgsl_sharedmem_alloc(uint32_t flags, int size,
-			struct kgsl_memdesc *memdesc)
+static ssize_t
+process_show_vmalloc(struct kobject *kobj,
+		   struct kobj_attribute *attr,
+		   char *buf)
 {
-	struct kgsl_sharedmem *shmem;
-	int result = -ENOMEM;
-	unsigned int blksize;
-	unsigned int baseaddr;
-	unsigned int alignshift;
-	unsigned int alignedbaseaddr;
 
-	KGSL_MEM_VDBG("enter (flags=0x%08x, size=%d, memdesc=%p)\n",
-					flags, size, memdesc);
+	struct kgsl_process_private *priv;
+	int ret = 0;
 
-	shmem = &kgsl_driver.shmem;
-	BUG_ON(memdesc == NULL);
-	BUG_ON(size <= 0);
+	mutex_lock(&kgsl_driver.process_mutex);
+	priv = _get_priv_from_kobj(kobj);
 
-	alignshift = kgsl_memarena_get_order(flags);
+	if (priv)
+		ret += sprintf(buf, "%d\n", priv->stats.vmalloc);
 
-	size = ALIGN(size, KGSL_PAGESIZE);
-	blksize = size;
-	if (alignshift > KGSL_PAGESIZE_SHIFT)
-		blksize += (1 << alignshift) - KGSL_PAGESIZE;
+	mutex_unlock(&kgsl_driver.process_mutex);
+	return ret;
+}
 
-	baseaddr = gen_pool_alloc(shmem->pool, blksize);
-	if (baseaddr == 0) {
-		KGSL_MEM_ERR("gen_pool_alloc failed\n");
-		result = -ENOMEM;
-		goto done;
+static ssize_t
+process_show_vmalloc_max(struct kobject *kobj,
+		       struct kobj_attribute *attr,
+		       char *buf)
+{
+
+	struct kgsl_process_private *priv;
+	int ret = 0;
+
+	mutex_lock(&kgsl_driver.process_mutex);
+	priv = _get_priv_from_kobj(kobj);
+
+	if (priv)
+		ret += sprintf(buf, "%d\n", priv->stats.vmalloc_max);
+
+	mutex_unlock(&kgsl_driver.process_mutex);
+	return ret;
+}
+
+static ssize_t
+process_show_exmem(struct kobject *kobj,
+		 struct kobj_attribute *attr,
+		 char *buf)
+{
+
+	struct kgsl_process_private *priv;
+	int ret = 0;
+
+	mutex_lock(&kgsl_driver.process_mutex);
+	priv = _get_priv_from_kobj(kobj);
+
+	if (priv)
+		ret += sprintf(buf, "%d\n", priv->stats.exmem);
+
+	mutex_unlock(&kgsl_driver.process_mutex);
+	return ret;
+}
+
+static ssize_t
+process_show_exmem_max(struct kobject *kobj,
+		     struct kobj_attribute *attr,
+		     char *buf)
+{
+
+	struct kgsl_process_private *priv;
+	int ret = 0;
+
+	mutex_lock(&kgsl_driver.process_mutex);
+	priv = _get_priv_from_kobj(kobj);
+
+	if (priv)
+		ret += sprintf(buf, "%d\n", priv->stats.exmem_max);
+
+	mutex_unlock(&kgsl_driver.process_mutex);
+	return ret;
+}
+
+static ssize_t
+process_show_flushes(struct kobject *kobj,
+		   struct kobj_attribute *attr,
+		   char *buf)
+{
+	struct kgsl_process_private *priv;
+	int ret = 0;
+
+	mutex_lock(&kgsl_driver.process_mutex);
+	priv = _get_priv_from_kobj(kobj);
+
+	if (priv)
+		ret += sprintf(buf, "%d\n", priv->stats.flushes);
+
+	mutex_unlock(&kgsl_driver.process_mutex);
+	return ret;
+}
+
+static struct kobj_attribute attr_vmalloc = {
+	.attr = { .name = "vmalloc", .mode = 0444 },
+	.show = process_show_vmalloc,
+	.store = NULL,
+};
+
+static struct kobj_attribute attr_vmalloc_max = {
+	.attr = { .name = "vmalloc_max", .mode = 0444 },
+	.show = process_show_vmalloc_max,
+	.store = NULL,
+};
+
+static struct kobj_attribute attr_exmem = {
+	.attr = { .name = "exmem", .mode = 0444 },
+	.show = process_show_exmem,
+	.store = NULL,
+};
+
+static struct kobj_attribute attr_exmem_max = {
+	.attr = { .name = "exmem_max", .mode = 0444 },
+	.show = process_show_exmem_max,
+	.store = NULL,
+};
+
+static struct kobj_attribute attr_flushes = {
+	.attr = { .name = "flushes", .mode = 0444 },
+	.show = process_show_flushes,
+	.store = NULL,
+};
+
+static struct attribute *process_attrs[] = {
+	&attr_vmalloc.attr,
+	&attr_vmalloc_max.attr,
+	&attr_exmem.attr,
+	&attr_exmem_max.attr,
+	&attr_flushes.attr,
+	NULL
+};
+
+static struct attribute_group process_attr_group = {
+	.attrs = process_attrs,
+};
+
+void
+kgsl_process_uninit_sysfs(struct kgsl_process_private *private)
+{
+	/* Remove the sysfs entry */
+	if (private->kobj) {
+		sysfs_remove_group(private->kobj, &process_attr_group);
+		kobject_put(private->kobj);
 	}
-	result = 0;
+}
 
-	if (alignshift > KGSL_PAGESIZE_SHIFT) {
-		alignedbaseaddr = ALIGN(baseaddr, (1 << alignshift));
+void
+kgsl_process_init_sysfs(struct kgsl_process_private *private)
+{
+	unsigned char name[16];
 
-		KGSL_MEM_VDBG("ba %x al %x as %d m->as %d bs %x s %x\n",
-				baseaddr, alignedbaseaddr, alignshift,
-				KGSL_PAGESIZE_SHIFT, blksize, size);
-		if (alignedbaseaddr > baseaddr) {
-			KGSL_MEM_VDBG("physaddr %x free before %x size %x\n",
-					alignedbaseaddr,
-					baseaddr, alignedbaseaddr - baseaddr);
-			gen_pool_free(shmem->pool, baseaddr,
-					alignedbaseaddr - baseaddr);
-			blksize -= alignedbaseaddr - baseaddr;
+	/* Add a entry to the sysfs device */
+	snprintf(name, sizeof(name), "%d", private->pid);
+	private->kobj = kobject_create_and_add(name, kgsl_driver.prockobj);
+
+	/* sysfs failure isn't fatal, just annoying */
+	if (private->kobj != NULL) {
+		if (sysfs_create_group(private->kobj, &process_attr_group)) {
+			kobject_put(private->kobj);
+			private->kobj = NULL;
 		}
-		if (blksize > size) {
-			KGSL_MEM_VDBG("physaddr %x free after %x size %x\n",
-					alignedbaseaddr,
-					alignedbaseaddr + size,
-					blksize - size);
-			gen_pool_free(shmem->pool,
-					alignedbaseaddr + size,
-					blksize - size);
+	}
+}
+
+static int kgsl_drv_vmalloc_show(struct device *dev,
+				 struct device_attribute *attr,
+				 char *buf)
+{
+	return sprintf(buf, "%d\n", kgsl_driver.stats.vmalloc);
+}
+
+static int kgsl_drv_vmalloc_max_show(struct device *dev,
+				     struct device_attribute *attr,
+				     char *buf)
+{
+	return sprintf(buf, "%d\n", kgsl_driver.stats.vmalloc_max);
+}
+
+static int kgsl_drv_coherent_show(struct device *dev,
+				  struct device_attribute *attr,
+				  char *buf)
+{
+	return sprintf(buf, "%d\n", kgsl_driver.stats.coherent);
+}
+
+static int kgsl_drv_coherent_max_show(struct device *dev,
+				      struct device_attribute *attr,
+				      char *buf)
+{
+	return sprintf(buf, "%d\n", kgsl_driver.stats.coherent_max);
+}
+
+static int kgsl_drv_histogram_show(struct device *dev,
+				   struct device_attribute *attr,
+				   char *buf)
+{
+	int len = 0;
+	int i;
+
+	for (i = 0; i < 16; i++)
+		len += sprintf(buf + len, "%d ",
+			kgsl_driver.stats.histogram[i]);
+
+	len += sprintf(buf + len, "\n");
+	return len;
+}
+
+static struct device_attribute drv_vmalloc_attr = {
+	.attr = { .name = "vmalloc", .mode = 0444, },
+	.show = kgsl_drv_vmalloc_show,
+	.store = NULL,
+};
+
+static struct device_attribute drv_vmalloc_max_attr = {
+	.attr = { .name = "vmalloc_max", .mode = 0444, },
+	.show = kgsl_drv_vmalloc_max_show,
+	.store = NULL,
+};
+
+static struct device_attribute drv_coherent_attr = {
+	.attr = { .name = "coherent", .mode = 0444, },
+	.show = kgsl_drv_coherent_show,
+	.store = NULL,
+};
+
+static struct device_attribute drv_coherent_max_attr = {
+	.attr = { .name = "coherent_max", .mode = 0444, },
+	.show = kgsl_drv_coherent_max_show,
+	.store = NULL,
+};
+
+static struct device_attribute drv_histogram_attr = {
+	.attr = { .name = "histogram", .mode = 0444, },
+	.show = kgsl_drv_histogram_show,
+	.store = NULL,
+};
+
+void
+kgsl_sharedmem_uninit_sysfs(void)
+{
+	device_remove_file(&kgsl_driver.pdev->dev, &drv_vmalloc_attr);
+	device_remove_file(&kgsl_driver.pdev->dev, &drv_vmalloc_max_attr);
+	device_remove_file(&kgsl_driver.pdev->dev, &drv_coherent_attr);
+	device_remove_file(&kgsl_driver.pdev->dev, &drv_coherent_max_attr);
+	device_remove_file(&kgsl_driver.pdev->dev, &drv_histogram_attr);
+}
+
+int
+kgsl_sharedmem_init_sysfs(void)
+{
+	int ret;
+
+	ret  = device_create_file(&kgsl_driver.pdev->dev,
+				  &drv_vmalloc_attr);
+	ret |= device_create_file(&kgsl_driver.pdev->dev,
+				  &drv_vmalloc_max_attr);
+	ret |= device_create_file(&kgsl_driver.pdev->dev,
+				  &drv_coherent_attr);
+	ret |= device_create_file(&kgsl_driver.pdev->dev,
+				  &drv_coherent_max_attr);
+	ret |= device_create_file(&kgsl_driver.pdev->dev,
+				  &drv_histogram_attr);
+
+	return ret;
+}
+
+#ifdef CONFIG_OUTER_CACHE
+static void _outer_cache_range_op(unsigned long addr, int size,
+				  unsigned int flags)
+{
+	unsigned long end;
+
+	for (end = addr; end < (addr + size); end += KGSL_PAGESIZE) {
+		unsigned long physaddr = 0;
+
+		if (flags & KGSL_MEMFLAGS_VMALLOC_MEM)
+			physaddr = page_to_phys(vmalloc_to_page((void *) end));
+		else if (flags & KGSL_MEMFLAGS_HOSTADDR)
+			physaddr = kgsl_virtaddr_to_physaddr(end);
+		else if (flags & KGSL_MEMFLAGS_CONPHYS)
+			physaddr = __pa(end);
+
+		if (physaddr == 0) {
+			KGSL_MEM_ERR("Unable to find physaddr for "
+				     "address: %x\n", (unsigned int)end);
+			return;
 		}
-	} else {
-		alignedbaseaddr = baseaddr;
+
+		if (flags & KGSL_MEMFLAGS_CACHE_FLUSH)
+			outer_flush_range(physaddr, physaddr + KGSL_PAGESIZE);
+		else if (flags & KGSL_MEMFLAGS_CACHE_CLEAN)
+			outer_clean_range(physaddr, physaddr + KGSL_PAGESIZE);
+		else if (flags & KGSL_MEMFLAGS_CACHE_INV)
+			outer_inv_range(physaddr, physaddr + KGSL_PAGESIZE);
+	}
+	mb();
+}
+#else
+static void _outer_cache_range_op(unsigned long addr, int size,
+				  unsigned int flags)
+{
+}
+#endif
+
+void kgsl_cache_range_op(unsigned long addr, int size,
+			 unsigned int flags)
+{
+	BUG_ON(addr & (KGSL_PAGESIZE - 1));
+	BUG_ON(size & (KGSL_PAGESIZE - 1));
+
+	if (flags & KGSL_MEMFLAGS_CACHE_FLUSH)
+		dmac_flush_range((const void *)addr,
+				 (const void *)(addr + size));
+	else if (flags & KGSL_MEMFLAGS_CACHE_CLEAN)
+		dmac_clean_range((const void *)addr,
+				 (const void *)(addr + size));
+	else if (flags & KGSL_MEMFLAGS_CACHE_INV)
+		dmac_inv_range((const void *)addr,
+			       (const void *)(addr + size));
+
+	_outer_cache_range_op(addr, size, flags);
+
+}
+
+int
+kgsl_sharedmem_vmalloc(struct kgsl_memdesc *memdesc,
+		       struct kgsl_pagetable *pagetable, size_t size)
+{
+	int result;
+
+	size = ALIGN(size, KGSL_PAGESIZE * 2);
+
+	memdesc->hostptr = vmalloc(size);
+	if (memdesc->hostptr == NULL) {
+		KGSL_MEM_ERR("vmalloc failed: %x\n", size);
+		return -ENOMEM;
 	}
 
-	memdesc->physaddr = alignedbaseaddr;
-	memdesc->hostptr = kgsl_memarena_gethostptr(shmem, memdesc->physaddr);
 	memdesc->size = size;
+	memdesc->pagetable = pagetable;
+	memdesc->priv = KGSL_MEMFLAGS_VMALLOC_MEM | KGSL_MEMFLAGS_CACHE_CLEAN;
 
-	KGSL_MEM_VDBG("ashift %d m->ashift %d blksize %d base %x abase %x\n",
-			alignshift, KGSL_PAGESIZE_SHIFT, blksize, baseaddr,
-			alignedbaseaddr);
+	kgsl_cache_range_op((unsigned int) memdesc->hostptr,
+			    size, KGSL_MEMFLAGS_CACHE_INV |
+			    KGSL_MEMFLAGS_VMALLOC_MEM);
 
-done:
-	if (result)
+	result = kgsl_mmu_map(pagetable, (unsigned long) memdesc->hostptr,
+			      memdesc->size,
+			      GSL_PT_PAGE_RV | GSL_PT_PAGE_WV,
+			      &memdesc->gpuaddr,
+			      KGSL_MEMFLAGS_ALIGN8K |
+			      KGSL_MEMFLAGS_VMALLOC_MEM);
+
+	if (result) {
+		vfree(memdesc->hostptr);
 		memset(memdesc, 0, sizeof(*memdesc));
+	} else {
+		/* Add the allocation to the driver statistics */
+		KGSL_STATS_ADD(size, kgsl_driver.stats.vmalloc,
+			       kgsl_driver.stats.vmalloc_max);
+	}
 
-
-	KGSL_MEM_VDBG("return: %d\n", result);
 	return result;
+}
+
+int
+kgsl_sharedmem_alloc_coherent(struct kgsl_memdesc *memdesc, size_t size)
+{
+	size = ALIGN(size, KGSL_PAGESIZE);
+
+	memdesc->hostptr = dma_alloc_coherent(NULL, size, &memdesc->physaddr,
+					      GFP_KERNEL);
+	if (!memdesc->hostptr)
+		return -ENOMEM;
+	memdesc->size = size;
+	memdesc->priv = KGSL_MEMFLAGS_CONPHYS;
+
+	/* Record statistics */
+
+	KGSL_STATS_ADD(size, kgsl_driver.stats.coherent,
+		       kgsl_driver.stats.coherent_max);
+
+	return 0;
 }
 
 void
 kgsl_sharedmem_free(struct kgsl_memdesc *memdesc)
 {
-	struct kgsl_sharedmem  *shmem =  &kgsl_driver.shmem;
-
-	KGSL_MEM_VDBG("enter (shmem=%p, memdesc=%p, physaddr=%08x, size=%d)\n",
-			shmem, memdesc, memdesc->physaddr, memdesc->size);
+	KGSL_MEM_VDBG("enter (memdesc=%p, physaddr=%08x, size=%d)\n",
+			memdesc, memdesc->physaddr, memdesc->size);
 
 	BUG_ON(memdesc == NULL);
-	BUG_ON(memdesc->size <= 0);
-	BUG_ON(shmem->physbase > memdesc->physaddr);
-	BUG_ON((shmem->physbase + shmem->size)
-	       < (memdesc->physaddr + memdesc->size));
 
-	gen_pool_free(shmem->pool, memdesc->physaddr, memdesc->size);
+	if (memdesc->size > 0) {
+		if (memdesc->priv & KGSL_MEMFLAGS_VMALLOC_MEM) {
+			if (memdesc->gpuaddr)
+				kgsl_mmu_unmap(memdesc->pagetable,
+					       memdesc->gpuaddr,
+					       memdesc->size);
+
+			if (memdesc->hostptr)
+				vfree(memdesc->hostptr);
+
+			kgsl_driver.stats.vmalloc -= memdesc->size;
+
+		} else if (memdesc->priv & KGSL_MEMFLAGS_CONPHYS) {
+			dma_free_coherent(NULL, memdesc->size,
+					  memdesc->hostptr,
+					  memdesc->physaddr);
+
+			kgsl_driver.stats.coherent -= memdesc->size;
+		}
+		else
+			BUG();
+	}
 
 	memset(memdesc, 0, sizeof(struct kgsl_memdesc));
 	KGSL_MEM_VDBG("return\n");
 }
 
 int
-kgsl_sharedmem_read(const struct kgsl_memdesc *memdesc, void *dst,
-			unsigned int offsetbytes, unsigned int sizebytes)
+kgsl_sharedmem_readl(const struct kgsl_memdesc *memdesc,
+			uint32_t *dst,
+			unsigned int offsetbytes)
 {
 	if (memdesc == NULL || memdesc->hostptr == NULL || dst == NULL) {
 		KGSL_MEM_ERR("bad ptr memdesc %p hostptr %p dst %p\n",
@@ -282,32 +484,56 @@ kgsl_sharedmem_read(const struct kgsl_memdesc *memdesc, void *dst,
 				dst);
 		return -EINVAL;
 	}
-	if (offsetbytes + sizebytes > memdesc->size) {
-		KGSL_MEM_ERR("bad range: offset %d size %d memdesc %d\n",
-				offsetbytes, sizebytes, memdesc->size);
+	if (offsetbytes + sizeof(unsigned int) > memdesc->size) {
+		KGSL_MEM_ERR("bad range: offset %d memdesc %d\n",
+				offsetbytes, memdesc->size);
 		return -ERANGE;
 	}
-	memcpy(dst, memdesc->hostptr + offsetbytes, sizebytes);
+	*dst = readl(memdesc->hostptr + offsetbytes);
+	return 0;
+}
+
+uint kgsl_get_physaddr(const struct kgsl_memdesc *memdesc)
+{
+	BUG_ON(memdesc == NULL);
+	BUG_ON(memdesc->size == 0);
+
+	if ((memdesc->priv & KGSL_MEMFLAGS_CONPHYS) || memdesc->physaddr) {
+		BUG_ON(memdesc->physaddr == 0);
+		return memdesc->physaddr;
+	}
+#ifdef CONFIG_MSM_KGSL_MMU
+	if ((memdesc->priv & KGSL_MEMFLAGS_HOSTADDR) || memdesc->hostptr) {
+		uint addr;
+		BUG_ON(memdesc->hostptr == NULL);
+		addr = kgsl_virtaddr_to_physaddr((uint)memdesc->hostptr);
+		BUG_ON(addr == 0);
+		return addr;
+	}
+#endif
+	pr_err("kgsl: memdesc ![VMALLOC|CONPHYS|HOSTADDR]: %d", memdesc->priv);
+	BUG();
 	return 0;
 }
 
 int
-kgsl_sharedmem_write(const struct kgsl_memdesc *memdesc,
+kgsl_sharedmem_writel(const struct kgsl_memdesc *memdesc,
 			unsigned int offsetbytes,
-			void *src, unsigned int sizebytes)
+			uint32_t src)
 {
 	if (memdesc == NULL || memdesc->hostptr == NULL) {
 		KGSL_MEM_ERR("bad ptr memdesc %p hostptr %p\n", memdesc,
 				(memdesc ? memdesc->hostptr : NULL));
 		return -EINVAL;
 	}
-	if (offsetbytes + sizebytes > memdesc->size) {
-		KGSL_MEM_ERR("bad range: offset %d size %d memdesc %d\n",
-				offsetbytes, sizebytes, memdesc->size);
+	if (offsetbytes + sizeof(unsigned int) > memdesc->size) {
+		KGSL_MEM_ERR("bad range: offset %d memdesc %d\n",
+				offsetbytes, memdesc->size);
 		return -ERANGE;
 	}
-	memcpy((void *)(((char *)memdesc->hostptr) + offsetbytes),
-		src, sizebytes);
+	kgsl_cffdump_setmem(kgsl_get_physaddr(memdesc) + offsetbytes,
+		src, sizeof(uint));
+	writel(src, memdesc->hostptr + offsetbytes);
 	return 0;
 }
 
@@ -325,6 +551,9 @@ kgsl_sharedmem_set(const struct kgsl_memdesc *memdesc, unsigned int offsetbytes,
 				offsetbytes, sizebytes, memdesc->size);
 		return -ERANGE;
 	}
+
+	kgsl_cffdump_setmem(kgsl_get_physaddr(memdesc) + offsetbytes, value,
+		sizebytes);
 	memset(memdesc->hostptr + offsetbytes, value, sizebytes);
 	return 0;
 }

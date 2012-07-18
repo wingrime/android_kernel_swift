@@ -18,11 +18,6 @@
 #include <mach/gpio.h>
 #include <mach/vreg.h>
 #include <linux/rfkill.h>
-//#include <mach/board_swift.h>
-//#include <mach/board_lge.h>
-
-// #include "board-alohag.h"
-//remove when wifi   ported
 
 
 
@@ -55,11 +50,7 @@ enum {
 	BT_PCM_SYNC 	= 70,
 	BT_PCM_CLK		= 71,
 	BT_HOST_WAKE	= 83,
-#if 1
 	BT_RESET_N			= 96,
-#else
-	BT_RESET_N			= 123,
-#endif
 };
 
 
@@ -91,23 +82,21 @@ static unsigned bt_config_power_off[] = {
 	GPIO_CFG(BT_RESET_N, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),	/* RESET_N */	
 };
 
-static int alohag_bluetooth_toggle_radio(void *data, bool blocked)
+static int swift_bluetooth_toggle_radio(void *data, bool blocked)
 {
 	int ret;
 	int (*power_control)(int enable);
 
-  printk(KERN_DEBUG "%s\n", __func__);
 
   power_control = ((struct bluetooth_platform_data *)data)->bluetooth_power;
 	ret = (*power_control)((blocked ==  0) ? 1 : 0);
 	return ret;
 }
 
-static int alohag_bluetooth_power(int on)
+static int swift_bluetooth_power(int on)
 {
 	int pin, rc;
 
-	printk(KERN_DEBUG "%s\n turn %d", __func__,on);
 
 	if (on) {
 		for (pin = 0; pin < ARRAY_SIZE(bt_config_power_on); pin++) {
@@ -157,24 +146,24 @@ static int alohag_bluetooth_power(int on)
 	return 0;
 }
 
-static struct bluetooth_platform_data alohag_bluetooth_data = {
-	.bluetooth_power = alohag_bluetooth_power,
-	.bluetooth_toggle_radio = alohag_bluetooth_toggle_radio,
+static struct bluetooth_platform_data swift_bluetooth_data = {
+	.bluetooth_power = swift_bluetooth_power,
+	.bluetooth_toggle_radio = swift_bluetooth_toggle_radio,
 };
 
 static struct platform_device msm_bt_power_device = {
 	.name = "bt_power",
 	.dev = {
-		.platform_data = &alohag_bluetooth_data,
+		.platform_data = &swift_bluetooth_data,
 	},		
 };
 
 
 static void __init bt_power_init(void)
 {
-       alohag_bluetooth_power(1);
+       swift_bluetooth_power(1);
        msleep (100);
-       alohag_bluetooth_power(0);       
+       swift_bluetooth_power(0);       
 }
 #else
 #define bt_power_init(x) do {} while (0)

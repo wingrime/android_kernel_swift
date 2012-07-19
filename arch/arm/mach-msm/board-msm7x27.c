@@ -2245,7 +2245,7 @@ static void __init msm7x2x_init(void)
 	/* The appropriate maximum replacement for 160000 is: */
 	/* msm7x2x_clock_data.max_axi_khz */
 	kgsl_pdata.dev_3d0->pwr_data.pwrlevel[0].gpu_freq = 0;
-	kgsl_pdata.dev_3d0->pwr_data.pwrlevel[0].bus_freq = 160000000;
+	kgsl_pdata.dev_3d0->pwr_data.pwrlevel[0].bus_freq = 200000000;
 	kgsl_pdata.dev_3d0->pwr_data.init_level = 0;
 	kgsl_pdata.dev_3d0->pwr_data.num_levels = 1;
 	/* 7x27 doesn't allow graphics clocks to be run asynchronously to */

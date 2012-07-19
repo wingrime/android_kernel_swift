@@ -1130,12 +1130,6 @@ static struct resource kgsl_resources[] = {
 		.flags = IORESOURCE_MEM,
 	},
 	{
-		 .name   = "kgsl_phys_memory",
-		.start = 0,
-		.end = 0,
-		.flags = IORESOURCE_MEM,
-	},
-	{
 		.name = "kgsl_yamato_irq",
 		.start = INT_GRAPHICS,
 		.end = INT_GRAPHICS,
@@ -2393,12 +2387,6 @@ static int __init fb_size_setup(char *p)
 	return 0;
 }
 early_param("fb_size", fb_size_setup);
-static unsigned gpu_phys_size = MSM_GPU_PHYS_SIZE;
-static void __init gpu_phys_size_setup(char **p)
-{
-	gpu_phys_size = memparse(*p, p);
-}
-__early_param("gpu_phys_size=", gpu_phys_size_setup);
 static void __init msm_msm7x2x_allocate_memory_regions(void)
 {
 	void *addr;
@@ -2446,12 +2434,6 @@ static void __init msm_msm7x2x_allocate_memory_regions(void)
 		pr_info("allocating %lu bytes at %p (%lx physical) for kernel"
 			" ebi1 pmem arena\n", size, addr, __pa(addr));
 	}
-	size = gpu_phys_size ? : MSM_GPU_PHYS_SIZE;
-	addr = alloc_bootmem(size);
-	kgsl_resources[1].start = __pa(addr);
-	kgsl_resources[1].end = kgsl_resources[1].start + size - 1;
-	pr_info("allocating %lu bytes at %p (%lx physical) for KGSL\n",
-		size, addr, __pa(addr));
 
 }
 

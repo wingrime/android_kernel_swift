@@ -46,6 +46,7 @@
 #include "kgsl_cffdump.h"
 
 static struct dentry *kgsl_debugfs_dir;
+int first_idr = 0 ; 
 
 static void kgsl_put_phys_file(struct file *file);
 
@@ -56,7 +57,12 @@ kgsl_create_context(struct kgsl_device_private *dev_priv)
 {
 	struct kgsl_context *context;
 	int ret, id;
-
+	
+	if (!first_idr)
+	  {
+	    idr_init(&dev_priv->device->context_idr);
+	    first_idr = 1;
+	  }
 	context = kzalloc(sizeof(*context), GFP_KERNEL);
 
 	if (context == NULL)

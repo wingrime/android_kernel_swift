@@ -52,6 +52,8 @@
 #include <mach/msm_tsif.h>
 #include <mach/socinfo.h>
 
+#include "board-swift-battmgmt.h"
+
 #include <linux/mtd/nand.h>
 #include <linux/mtd/partitions.h>
 #include <linux/i2c.h>
@@ -1557,7 +1559,7 @@ static struct msm_psy_batt_pdata msm_psy_batt_data = {
 	.batt_technology        = POWER_SUPPLY_TECHNOLOGY_LION,
 	.calculate_capacity	= &msm_calculate_batt_capacity,
 };
-
+/*
 static u32 msm_calculate_batt_capacity(u32 current_voltage)
 {
 	u32 low_voltage   = msm_psy_batt_data.voltage_min_design;
@@ -1565,6 +1567,11 @@ static u32 msm_calculate_batt_capacity(u32 current_voltage)
 
 	return (current_voltage - low_voltage) * 100
 		/ (high_voltage - low_voltage);
+}
+*/
+static u32 msm_calculate_batt_capacity(u32 cv)
+{
+	return calculate_capacity(cv);
 }
 
 static struct platform_device msm_batt_device = {

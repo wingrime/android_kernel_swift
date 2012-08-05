@@ -180,6 +180,7 @@ obj-$(CONFIG_MACH_MSM7X27_SWIFT) += board-swift-lge-rpc.o
 
 obj-$(CONFIG_MACH_MSM7X27_SWIFT)  += board-swift-vibrator.o
 
+obj-$(CONFIG_MACH_MSM7X27_SWIFT)  += board-swift-battmgmt.o
 #sensors 
 obj-y += board-swift-gpio-i2c.o
 obj-y += board-swift-msensor-bma150.o

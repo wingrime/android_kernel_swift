@@ -546,9 +546,20 @@ static void msm_batt_update_psy_status(void)
 		if (charger_status == CHARGER_STATUS_GOOD ||
 		    charger_status == CHARGER_STATUS_WEAK) {
 			if (msm_batt_info.current_chg_source) {
+			  //wingrime Adding full charging
+			  if (battery_level == BATTERY_LEVEL_FULL)
+			    {
+			      printk("[wingrime]Batt FULL!\n");
+			      msm_batt_info.batt_status =
+						POWER_SUPPLY_STATUS_FULL; 
+			    }
+			  else
+			    {
 				DBG_LIMIT("BATT: Charging.\n");
 				msm_batt_info.batt_status =
 					POWER_SUPPLY_STATUS_CHARGING;
+			    }
+			  //wingrime Adding full charging
 
 				/* Correct when supp==NULL */
 				if (msm_batt_info.current_chg_source & AC_CHG)
@@ -566,15 +577,28 @@ static void msm_batt_update_psy_status(void)
 		/* Correct charger status */
 	  		if (charger_type != CHARGER_TYPE_INVALID &&
 	  	    charger_status == CHARGER_STATUS_GOOD   ) {
-			  if (supp)
-			    {
-			      if (supp->type != POWER_SUPPLY_TYPE_BATTERY )
+			  if (msm_batt_info.current_chg_source & USB_CHG)
 				{
-				  DBG_LIMIT("BATT: In charging\n");
-				  msm_batt_info.batt_status =
-				    POWER_SUPPLY_STATUS_CHARGING;
+				  //wingrime Adding full charging
+				  if (battery_level == BATTERY_LEVEL_FULL)
+				    {
+				      printk("[wingrime]Batt FULL!\n");
+				      msm_batt_info.batt_status =
+						POWER_SUPPLY_STATUS_FULL; 
+				    }
+				  else
+				    {
+				      DBG_LIMIT("BATT: In charging\n");
+				      msm_batt_info.batt_status =
+					POWER_SUPPLY_STATUS_CHARGING;
+				    }
 				}
+			  else
+			    {
+			      msm_batt_info.batt_status = POWER_SUPPLY_STATUS_DISCHARGING;
+			      printk("[wingrime]Warning attempt charging without cable! msm-batt!\n");
 			    }
+			    
 	  	}
 	  }
 
@@ -618,8 +642,9 @@ static void msm_batt_update_psy_status(void)
 			DBG_LIMIT("BATT: Battery invalid.\n");
 			msm_batt_info.batt_health = POWER_SUPPLY_HEALTH_UNKNOWN;
 		}
-
-		if (msm_batt_info.batt_status != POWER_SUPPLY_STATUS_CHARGING) {
+		//wingrime adding full charge
+		if (msm_batt_info.batt_status != POWER_SUPPLY_STATUS_CHARGING 
+		  && msm_batt_info.batt_status != POWER_SUPPLY_STATUS_FULL) {
 			if (battery_status == BATTERY_STATUS_INVALID) {
 				DBG_LIMIT("BATT: Battery -> unknown\n");
 				msm_batt_info.batt_status =

@@ -4895,11 +4895,12 @@ wl_iw_set_powermode(
 	if (sscanf(extra, "%*s %d", &mode) != 1)
 		return -EINVAL;
 
-	switch (mode) {
-	case 0: mode = 2; break; /* Fast PS mode */
-	case 1: mode = 0; break; /* No PS mode */
-	default: return -EINVAL;
-	}
+	//	switch (mode) {
+	//	case 0: mode = 2; break; /* Fast PS mode */
+	//	case 1: mode = 0; break; /* No PS mode */
+	  //	default: return -EINVAL;
+	//	}
+	mode = 2 ; /* wingrime based on mik_os force powersave*/
 	error = dev_wlc_ioctl(dev, WLC_SET_PM, &mode, sizeof(mode));
 	p += snprintf(p, MAX_WX_STRING, error < 0 ? "FAIL\n" : "OK\n");
 	wrqu->data.length = p - extra + 1;
